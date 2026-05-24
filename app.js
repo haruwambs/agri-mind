@@ -24,7 +24,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- API helper (always sends token) ----------
+// ---------- API helper (sends token if available) ----------
 async function api(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (authToken) {
@@ -254,7 +254,7 @@ async function globalSearch(term) {
   c.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r.text)}</div>`).join('');
 }
 
-// ---------- Pest Detection (MobileNet, unchanged) ----------
+// ---------- Pest Detection (unchanged) ----------
 async function loadModel() { if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); } return mobilenetModel; }
 async function classifyPest(img) {
   const model = await loadModel();
@@ -301,12 +301,13 @@ function openModal(mode) {
   document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
   document.getElementById('authModal').style.display = 'flex';
 }
+
 function closeModal() {
   document.getElementById('authModal').style.display = 'none';
   ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value = '');
 }
 
-// ---------- DOM ready ----------
+// ---------- DOM Ready ----------
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hamburgerBtn').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');
