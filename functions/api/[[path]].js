@@ -1,8 +1,10 @@
+// functions/api/[[path]].js
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname.replace('/api/', '').replace(/\/$/, '');
 
+  // -------- Helpers --------
   function json(data, status = 200) {
     return new Response(JSON.stringify(data), {
       status,
@@ -10,7 +12,6 @@ export async function onRequest(context) {
     });
   }
 
-  // JWT helpers
   async function base64UrlEncode(buf) {
     return btoa(String.fromCharCode(...new Uint8Array(buf)))
       .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -55,12 +56,6 @@ export async function onRequest(context) {
     } catch (e) { return null; }
   }
 
-  async function hashPassword(password) {
-    const data = new TextEncoder().encode(password);
-    const hash = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
   async function getUserFromRequest(request, env) {
     const cookie = request.headers.get('Cookie') || '';
     const token = cookie.match(/token=([^;]+)/)?.[1];
@@ -68,7 +63,14 @@ export async function onRequest(context) {
     return await verifyToken(token, env.JWT_SECRET);
   }
 
-  // Auth routes
+  // -------- Password hashing --------
+  async function hashPassword(password) {
+    const data = new TextEncoder().encode(password);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // ── Auth routes (no token needed) ──
   if (path === 'auth/register' && request.method === 'POST') {
     const { email, password, displayName } = await request.json();
     const hash = await hashPassword(password);
@@ -118,7 +120,7 @@ export async function onRequest(context) {
     return json(dbUser);
   }
 
-  // Protected routes
+  // ── Protected routes ──
   const user = await getUserFromRequest(request, env);
   if (!user) return json({ error: 'Unauthorized' }, 401);
   const userId = user.sub;
