@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AgriMind | Smart Farming Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+    <script src="/app.js" defer></script>
+</head>
+<body>
+<div class="app-container">
+    <div class="overlay" id="sidebarOverlay"></div>
+    
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-icon"><i class="fas fa-seedling"></i></div>
+            <span class="logo-text">AgriMind</span>
+        </div>
+        <ul class="nav-links" id="navLinks">
+            <li data-page="dashboard" class="active"><a><i class="fas fa-chart-line"></i> Dashboard</a></li>
+            <li data-page="pestai"><a><i class="fas fa-bug"></i> Pest Detection</a></li>
+            <li data-page="wikichat"><a><i class="fas fa-robot"></i> Farming Assistant</a></li>
+            <li data-page="forum"><a><i class="fas fa-comments"></i> Farmers Forum</a></li>
+            <li data-page="records"><a><i class="fas fa-database"></i> Farm Records</a></li>
+            <li data-page="jobs"><a><i class="fas fa-briefcase"></i> Jobs Listings</a></li>
+            <li data-page="market"><a><i class="fas fa-store"></i> Marketplace</a></li>
+            <li data-page="messages"><a><i class="fas fa-paper-plane"></i> Messages</a></li>
+            <li data-page="search"><a><i class="fas fa-search"></i> Search</a></li>
+            <li data-page="tutorials"><a><i class="fas fa-video"></i> Tutorials & Videos</a></li>
+            <li data-page="docs"><a><i class="fas fa-book"></i> Documentation</a></li>
+            <li data-page="about"><a><i class="fas fa-leaf"></i> About Us</a></li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <div class="hamburger" id="hamburgerBtn"><i class="fas fa-bars"></i></div>
+            <div class="auth-buttons" id="authSection">
+                <button class="btn-outline" id="loginBtn">Log in</button>
+                <button class="btn-outline" id="signupBtn">Sign up</button>
+            </div>
+            <div id="userGreeting" class="user-greeting" style="display: none;"></div>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div id="dashboard" class="page active-page">
+            <div class="card">
+                <h2><i class="fas fa-charging-station"></i> Smart Farming Dashboard</h2>
+                <p style="margin-top: 8px;">Your complete agricultural companion - pest identification, community knowledge, and farm management tools.</p>
+                <div class="grid-2cols" style="margin-top: 28px;">
+                    <div class="card" style="background:#0a0a0a; text-align:center;">
+                        <i class="fas fa-clipboard-list" style="font-size:28px; color:#10B981;"></i> 
+                        <strong>Farm Records</strong><br>
+                        <span id="statRecords">0</span> entries
+                    </div>
+                    <div class="card" style="background:#0a0a0a; text-align:center;">
+                        <i class="fas fa-briefcase" style="font-size:28px; color:#10B981;"></i> 
+                        <strong>Jobs</strong><br>
+                        <span id="statJobs">0</span> active
+                    </div>
+                    <div class="card" style="background:#0a0a0a; text-align:center;">
+                        <i class="fas fa-video" style="font-size:28px; color:#10B981;"></i> 
+                        <strong>Tutorials</strong><br>
+                        <span id="statTuts">0</span> videos
+                    </div>
+                    <div class="card" style="background:#0a0a0a; text-align:center;">
+                        <i class="fas fa-users" style="font-size:28px; color:#10B981;"></i> 
+                        <strong>Forum Posts</strong><br>
+                        <span id="statForum">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PEST DETECTION -->
+        <div id="pestai" class="page">
+            <div class="card">
+                <h2><i class="fas fa-microscope"></i> Smart Pest Detection</h2>
+                <p>Upload a photo of your crop leaves, and our intelligent system will analyze it for potential pest infestations or diseases. Early detection helps protect your harvest.</p>
+                <input type="file" id="pestImageInput" accept="image/*" capture="environment">
+                <div style="margin: 16px 0;">
+                    <img id="pestPreview" style="max-width:100%; border-radius: 32px; display:none; border:1px solid #10B981;">
+                </div>
+                <button id="identifyPestBtn" class="btn-primary">
+                    <i class="fas fa-search"></i> Analyze Crop Image
+                </button>
+                <div id="pestResult" style="margin-top: 24px; background:#111; border-radius: 28px; padding: 18px;"></div>
+                <p style="font-size:12px; margin-top:12px; color:#aaa;">*For best results, use clear images in good lighting. The system works offline and processes everything on your device.</p>
+            </div>
+        </div>
+
+        <!-- FARMING ASSISTANT -->
+        <div id="wikichat" class="page">
+            <div class="card">
+                <h2><i class="fas fa-robot"></i> Smart Farming Assistant</h2>
+                <p>Ask any farming-related question and get instant, helpful information from our agricultural knowledge base.</p>
+                <div id="chatMessages" class="chat-window">
+                    <div class="message-bubble bot-msg">
+                        Hello! I'm your farming assistant. Ask me about crop management, pest control, soil health, or any agricultural topic. How can I help you today?
+                    </div>
+                </div>
+                <div style="display:flex; gap:12px; margin-top:18px;">
+                    <input type="text" id="chatInput" placeholder="e.g., how to control aphids naturally, best maize varieties...">
+                    <button id="sendChatBtn" class="btn-primary">Ask</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FORUM -->
+        <div id="forum" class="page">
+            <div class="card">
+                <h2><i class="fas fa-users"></i> Farmers Community Forum</h2>
+                <p>Connect with fellow farmers, share experiences, ask questions, and learn from each other's knowledge.</p>
+                <textarea id="forumContent" placeholder="Share your farming knowledge or ask a question..."></textarea>
+                <button id="postForumBtn" class="btn-primary">Share with Community</button>
+                <div id="forumList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- RECORDS -->
+        <div id="records" class="page">
+            <div class="card">
+                <h2><i class="fas fa-database"></i> Farm Management Records</h2>
+                <p>Keep track of your crops, activities, yields, and inputs. Good records lead to better farming decisions.</p>
+                <input id="recordTitle" placeholder="Crop or Activity Name">
+                <input id="recordDetail" placeholder="Details - variety, yield, inputs used, observations">
+                <button id="addRecordBtn" class="btn-primary">Save Record</button>
+                <div id="recordsList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- JOBS -->
+        <div id="jobs" class="page">
+            <div class="card">
+                <h2><i class="fas fa-briefcase"></i> Agricultural Job Listings</h2>
+                <p>Find farm workers or post job opportunities in the agricultural sector.</p>
+                <input id="jobTitle" placeholder="Job Title">
+                <input id="jobDesc" placeholder="Description, requirements, and location">
+                <button id="postJobBtn" class="btn-primary">Post Job Opening</button>
+                <div id="jobsList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- MARKETPLACE -->
+        <div id="market" class="page">
+            <div class="card">
+                <h2><i class="fas fa-store"></i> Farmers Marketplace</h2>
+                <p>Buy and sell agricultural products directly with other farmers in your community.</p>
+                <input id="productName" placeholder="Product Name">
+                <input id="productPrice" placeholder="Price (in your local currency)">
+                <button id="addProductBtn" class="btn-primary">List Product</button>
+                <div id="marketList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- MESSAGES -->
+        <div id="messages" class="page">
+            <div class="card">
+                <h2><i class="fas fa-envelope"></i> Private Messages</h2>
+                <p>Communicate directly with other farmers and agricultural professionals.</p>
+                <input id="msgTo" placeholder="Recipient Username (email)">
+                <textarea id="msgText" placeholder="Type your message here..."></textarea>
+                <button id="sendMsgBtn" class="btn-primary">Send Message</button>
+                <div id="messagesList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- SEARCH -->
+        <div id="search" class="page">
+            <div class="card">
+                <h2><i class="fas fa-search"></i> Search Everything</h2>
+                <p>Find information across forums, records, jobs, and tutorials all in one place.</p>
+                <input id="searchInput" placeholder="Search all content...">
+                <button id="doSearchBtn" class="btn-primary">Search</button>
+                <div id="searchResults" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- TUTORIALS -->
+        <div id="tutorials" class="page">
+            <div class="card">
+                <h2><i class="fas fa-video"></i> Farming Tutorials & Educational Videos</h2>
+                <p>Learn new farming techniques, best practices, and innovative methods from video tutorials shared by the community.</p>
+                <input id="videoTitle" placeholder="Tutorial Title">
+                <input id="videoUrl" placeholder="Video Link">
+                <textarea id="videoDesc" placeholder="Brief description of what this tutorial covers"></textarea>
+                <button id="addVideoBtn" class="btn-primary">Share Tutorial</button>
+                <div id="videosList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- DOCUMENTATION -->
+        <div id="docs" class="page">
+            <div class="card">
+                <h2><i class="fas fa-book-open"></i> Agricultural Documentation & Guides</h2>
+                <div class="doc-section">
+                    <h3><i class="fas fa-seedling"></i> Getting Started with AgriMind</h3>
+                    <p>AgriMind is designed to be your complete farming companion. Here's how to make the most of each feature:</p>
+                    <ul>
+                        <li><strong>Dashboard:</strong> View statistics of all your farming activities at a glance</li>
+                        <li><strong>Pest Detection:</strong> Upload crop images to identify potential pest problems</li>
+                        <li><strong>Farming Assistant:</strong> Get instant answers to your agricultural questions</li>
+                        <li><strong>Forum:</strong> Connect with other farmers and share knowledge</li>
+                        <li><strong>Records:</strong> Maintain detailed logs of your farming activities</li>
+                    </ul>
+                </div>
+                <div class="doc-section">
+                    <h3><i class="fas fa-leaf"></i> Organic Farming Best Practices</h3>
+                    <ul>
+                        <li><strong>Crop Rotation:</strong> Rotate crops annually to maintain soil fertility and reduce pest buildup</li>
+                        <li><strong>Composting:</strong> Create rich organic fertilizer from farm waste and kitchen scraps</li>
+                        <li><strong>Natural Pest Control:</strong> Use companion planting, neem oil, and beneficial insects</li>
+                        <li><strong>Water Conservation:</strong> Implement drip irrigation and mulching techniques</li>
+                        <li><strong>Soil Health:</strong> Test soil regularly and maintain proper pH levels</li>
+                    </ul>
+                </div>
+                <div class="doc-section">
+                    <h3><i class="fas fa-bug"></i> Common Pest Management Guide</h3>
+                    <ul>
+                        <li><strong>Aphids:</strong> Use neem oil spray or introduce ladybugs as natural predators</li>
+                        <li><strong>Armyworms:</strong> Apply Bacillus thuringiensis (Bt) for organic control</li>
+                        <li><strong>Whiteflies:</strong> Use yellow sticky traps and reflective mulches</li>
+                        <li><strong>Fungal Diseases:</strong> Ensure proper spacing for air circulation, apply copper-based fungicides</li>
+                        <li><strong>Bacterial Blight:</strong> Remove infected plants, practice crop rotation</li>
+                    </ul>
+                </div>
+                <div class="doc-section">
+                    <h3><i class="fas fa-cloud-sun-rain"></i> Seasonal Farming Calendar</h3>
+                    <ul>
+                        <li><strong>Pre-Planting:</strong> Soil preparation, seed selection, equipment maintenance</li>
+                        <li><strong>Planting Season:</strong> Optimal planting dates, proper spacing, initial fertilization</li>
+                        <li><strong>Growing Season:</strong> Regular monitoring, weeding, pest control, irrigation management</li>
+                        <li><strong>Harvest Time:</strong> Proper harvesting techniques, post-harvest handling, storage preparation</li>
+                        <li><strong>Post-Harvest:</strong> Soil regeneration, cover cropping, planning for next season</li>
+                    </ul>
+                </div>
+                <div class="doc-section">
+                    <h3><i class="fas fa-store-alt"></i> Marketplace Guidelines</h3>
+                    <ul>
+                        <li>List your products with clear descriptions and fair prices</li>
+                        <li>Include harvest dates and organic certification status if applicable</li>
+                        <li>Communicate clearly with buyers about quantities and delivery</li>
+                        <li>Build trust through honest dealings and quality products</li>
+                        <li>Report any fraudulent activities to community moderators</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABOUT US -->
+        <div id="about" class="page">
+            <div class="card">
+                <h2><i class="fas fa-leaf"></i> About AgriMind</h2>
+                <p style="font-size: 1.1rem; line-height: 1.8;">
+                    AgriMind is a comprehensive farming platform built to empower smallholder farmers and agricultural communities. 
+                    Our mission is to make smart farming accessible to everyone, providing tools for pest identification, 
+                    community knowledge sharing, farm management, and marketplace access - all in one place.
+                </p>
+                <p style="margin-top: 16px; line-height: 1.8;">
+                    We believe that every farmer deserves access to technology that can improve their yields, 
+                    protect their crops, and connect them with markets. AgriMind is designed to work offline 
+                    and process data locally on your device, ensuring privacy and accessibility even in areas 
+                    with limited internet connectivity.
+                </p>
+                <div class="contact-card">
+                    <h3 style="color: white;"><i class="fas fa-user-circle"></i> Developer Information</h3>
+                    <div class="contact-info">
+                        <p style="font-size: 1.2rem; margin-bottom: 12px;">
+                            <strong>Developed by:</strong> Wambulawae Daniel
+                        </p>
+                        <p style="margin-bottom: 8px;">
+                            <i class="fas fa-phone"></i> <strong>Contact:</strong> 0573373146
+                        </p>
+                        <p style="margin-bottom: 8px;">
+                            <i class="fas fa-envelope"></i> <strong>Email:</strong> wambsharu0@gmail.com
+                        </p>
+                        <p style="margin-top: 16px; font-size: 0.9rem;">
+                            For technical support, feature requests, or collaboration opportunities, 
+                            please reach out through the contact information above.
+                        </p>
+                    </div>
+                </div>
+                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;">
+                    <h3 style="color: #10B981; margin-bottom: 12px;">
+                        <i class="fas fa-heart"></i> Our Commitment
+                    </h3>
+                    <p style="line-height: 1.8;">
+                        AgriMind is committed to supporting sustainable agriculture and food security. 
+                        We continuously work to improve our platform based on feedback from the farming community. 
+                        Together, we can build a smarter, more sustainable future for agriculture.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <footer>AgriMind - Empowering Farmers Through Innovation | Developed by Wambulawae Daniel</footer>
+    </main>
+</div>
+
+<!-- Auth Modal -->
+<div id="authModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:1500;">
+    <div style="background:#0f0f0f; border-radius:48px; padding:32px; max-width:400px; width:90%; border:1px solid #10B981;">
+        <h3 id="modalTitle">Log in</h3>
+        <input type="email" id="authEmail" placeholder="Email" style="margin-top:16px;">
+        <input type="password" id="authPass" placeholder="Password">
+        <input type="text" id="authDisplayName" placeholder="Display Name" style="display:none; margin-top:12px;">
+        <button id="authSubmitBtn" class="btn-primary" style="width:100%;">Continue</button>
+        <button id="closeModalBtn" class="btn-outline" style="margin-top:12px; width:100%;">Cancel</button>
+    </div>
+</div>
+</body>
+</html>
