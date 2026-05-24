@@ -1,10 +1,8 @@
-// functions/api/[[path]].js
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname.replace('/api/', '').replace(/\/$/, '');
 
-  // -------- Helpers --------
   function json(data, status = 200) {
     return new Response(JSON.stringify(data), {
       status,
@@ -12,6 +10,7 @@ export async function onRequest(context) {
     });
   }
 
+  // JWT helpers
   async function base64UrlEncode(buf) {
     return btoa(String.fromCharCode(...new Uint8Array(buf)))
       .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -69,7 +68,7 @@ export async function onRequest(context) {
     return await verifyToken(token, env.JWT_SECRET);
   }
 
-  // -------- Auth routes (no login required) --------
+  // Auth routes
   if (path === 'auth/register' && request.method === 'POST') {
     const { email, password, displayName } = await request.json();
     const hash = await hashPassword(password);
@@ -119,7 +118,7 @@ export async function onRequest(context) {
     return json(dbUser);
   }
 
-  // -------- Protected routes (token required) --------
+  // Protected routes
   const user = await getUserFromRequest(request, env);
   if (!user) return json({ error: 'Unauthorized' }, 401);
   const userId = user.sub;
