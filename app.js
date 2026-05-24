@@ -24,7 +24,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- API helper (attaches token) ----------
+// ---------- API helper (always sends token) ----------
 async function api(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (authToken) {
@@ -254,7 +254,7 @@ async function globalSearch(term) {
   c.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r.text)}</div>`).join('');
 }
 
-// ---------- Pest Detection (unchanged) ----------
+// ---------- Pest Detection (MobileNet, unchanged) ----------
 async function loadModel() { if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); } return mobilenetModel; }
 async function classifyPest(img) {
   const model = await loadModel();
