@@ -24,7 +24,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- API helper (sends token automatically) ----------
+// ---------- API helper (attaches token) ----------
 async function api(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (authToken) {
@@ -93,37 +93,30 @@ async function loadDashboardStats() {
     api(`${API_BASE}/api/forum`), api(`${API_BASE}/api/records`),
     api(`${API_BASE}/api/jobs`), api(`${API_BASE}/api/tutorials`)
   ]);
-  const forumPosts = await f.json(); const records = await r.json();
-  const jobs = await j.json(); const tutorials = await t.json();
-  document.getElementById('statRecords').textContent = records.length;
-  document.getElementById('statJobs').textContent = jobs.length;
-  document.getElementById('statTuts').textContent = tutorials.length;
-  document.getElementById('statForum').textContent = forumPosts.length;
+  const fp = await f.json(), rc = await r.json(), jb = await j.json(), tu = await t.json();
+  document.getElementById('statRecords').textContent = rc.length;
+  document.getElementById('statJobs').textContent = jb.length;
+  document.getElementById('statTuts').textContent = tu.length;
+  document.getElementById('statForum').textContent = fp.length;
 }
 
 // ---------- Forum ----------
 async function loadForum() {
   const res = await api(`${API_BASE}/api/forum`);
   const posts = await res.json();
-  const container = document.getElementById('forumList');
-  if (!posts.length) {
-    container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
-    return;
-  }
-  container.innerHTML = posts.map(p => `
+  const c = document.getElementById('forumList');
+  if (!posts.length) { c.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>'; return; }
+  c.innerHTML = posts.map(p => `
     <div class="forum-post">
       <strong>${escapeHtml(p.author)}</strong> <small>${new Date(p.created_at).toLocaleString()}</small>
       <p>${escapeHtml(p.content)}</p>
       <button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addForumPost(content) {
   if (!currentUser) return showToast('Please login', true);
-  await api(`${API_BASE}/api/forum`, {
-    method: 'POST', body: JSON.stringify({ content })
-  });
+  await api(`${API_BASE}/api/forum`, { method: 'POST', body: JSON.stringify({ content }) });
   loadForum(); loadDashboardStats();
 }
 
@@ -136,25 +129,19 @@ async function deleteForumPost(id) {
 async function loadRecords() {
   const res = await api(`${API_BASE}/api/records`);
   const records = await res.json();
-  const container = document.getElementById('recordsList');
-  if (!records.length) {
-    container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
-    return;
-  }
-  container.innerHTML = records.map(r => `
+  const c = document.getElementById('recordsList');
+  if (!records.length) { c.innerHTML = '<p style="text-align:center;">No farm records yet.</p>'; return; }
+  c.innerHTML = records.map(r => `
     <div class="record-item">
       <strong>${escapeHtml(r.title)}</strong>
       <p>${escapeHtml(r.detail)}</p>
       <small>${new Date(r.created_at).toLocaleString()}</small>
       <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addRecord(title, detail) {
-  await api(`${API_BASE}/api/records`, {
-    method: 'POST', body: JSON.stringify({ title, detail })
-  });
+  await api(`${API_BASE}/api/records`, { method: 'POST', body: JSON.stringify({ title, detail }) });
   loadRecords(); loadDashboardStats();
 }
 
@@ -167,25 +154,19 @@ async function deleteRecord(id) {
 async function loadJobs() {
   const res = await api(`${API_BASE}/api/jobs`);
   const jobs = await res.json();
-  const container = document.getElementById('jobsList');
-  if (!jobs.length) {
-    container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
-    return;
-  }
-  container.innerHTML = jobs.map(j => `
+  const c = document.getElementById('jobsList');
+  if (!jobs.length) { c.innerHTML = '<p style="text-align:center;">No job listings available.</p>'; return; }
+  c.innerHTML = jobs.map(j => `
     <div class="job-item">
       <strong>${escapeHtml(j.title)}</strong>
       <p>${escapeHtml(j.description)}</p>
       <small>Posted by ${escapeHtml(j.author)}</small>
       <button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addJob(title, description) {
-  await api(`${API_BASE}/api/jobs`, {
-    method: 'POST', body: JSON.stringify({ title, description })
-  });
+  await api(`${API_BASE}/api/jobs`, { method: 'POST', body: JSON.stringify({ title, description }) });
   loadJobs(); loadDashboardStats();
 }
 
@@ -198,24 +179,18 @@ async function deleteJob(id) {
 async function loadMarket() {
   const res = await api(`${API_BASE}/api/market`);
   const products = await res.json();
-  const container = document.getElementById('marketList');
-  if (!products.length) {
-    container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
-    return;
-  }
-  container.innerHTML = products.map(p => `
+  const c = document.getElementById('marketList');
+  if (!products.length) { c.innerHTML = '<p style="text-align:center;">No products listed.</p>'; return; }
+  c.innerHTML = products.map(p => `
     <div class="product-item">
       <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
       <br><small>Seller: ${escapeHtml(p.seller)}</small>
       <button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addProduct(name, price) {
-  await api(`${API_BASE}/api/market`, {
-    method: 'POST', body: JSON.stringify({ name, price })
-  });
+  await api(`${API_BASE}/api/market`, { method: 'POST', body: JSON.stringify({ name, price }) });
   loadMarket();
 }
 
@@ -229,23 +204,17 @@ async function loadMessages() {
   if (!currentUser) return;
   const res = await api(`${API_BASE}/api/messages`);
   const msgs = await res.json();
-  const container = document.getElementById('messagesList');
-  if (!msgs.length) {
-    container.innerHTML = '<p>Your messages will appear here.</p>';
-    return;
-  }
-  container.innerHTML = msgs.map(m => `
+  const c = document.getElementById('messagesList');
+  if (!msgs.length) { c.innerHTML = '<p>Your messages will appear here.</p>'; return; }
+  c.innerHTML = msgs.map(m => `
     <div class="msg-item">
       <strong>${escapeHtml(m.from_name)}</strong> → ${escapeHtml(m.to_name)}: ${escapeHtml(m.text)}
       <br><small>${new Date(m.created_at).toLocaleString()}</small>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function sendMessage(toEmail, text) {
-  await api(`${API_BASE}/api/messages`, {
-    method: 'POST', body: JSON.stringify({ toEmail, text })
-  });
+  await api(`${API_BASE}/api/messages`, { method: 'POST', body: JSON.stringify({ toEmail, text }) });
   loadMessages();
 }
 
@@ -253,12 +222,9 @@ async function sendMessage(toEmail, text) {
 async function loadTutorials() {
   const res = await api(`${API_BASE}/api/tutorials`);
   const tutorials = await res.json();
-  const container = document.getElementById('videosList');
-  if (!tutorials.length) {
-    container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
-    return;
-  }
-  container.innerHTML = tutorials.map(t => `
+  const c = document.getElementById('videosList');
+  if (!tutorials.length) { c.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>'; return; }
+  c.innerHTML = tutorials.map(t => `
     <div class="tutorial-item">
       <i class="fas fa-play-circle" style="color:#10B981;"></i> 
       <strong>${escapeHtml(t.title)}</strong>
@@ -266,14 +232,11 @@ async function loadTutorials() {
       <p>${escapeHtml(t.description)}</p>
       <small>Shared by ${escapeHtml(t.author)}</small>
       <button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addTutorial(title, url, description) {
-  await api(`${API_BASE}/api/tutorials`, {
-    method: 'POST', body: JSON.stringify({ title, url, description })
-  });
+  await api(`${API_BASE}/api/tutorials`, { method: 'POST', body: JSON.stringify({ title, url, description }) });
   loadTutorials(); loadDashboardStats();
 }
 
@@ -286,231 +249,179 @@ async function deleteTutorial(id) {
 async function globalSearch(term) {
   const res = await api(`${API_BASE}/api/search?q=` + encodeURIComponent(term));
   const results = await res.json();
-  const container = document.getElementById('searchResults');
-  if (!results.length) {
-    container.innerHTML = '<p style="padding:20px;">No matches found.</p>';
-    return;
-  }
-  container.innerHTML = results.map(r => `
-    <div style="padding:12px; border-bottom:1px solid #333;">
-      <i class="fas fa-search"></i> ${escapeHtml(r.text)}
-    </div>
-  `).join('');
+  const c = document.getElementById('searchResults');
+  if (!results.length) { c.innerHTML = '<p style="padding:20px;">No matches found.</p>'; return; }
+  c.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r.text)}</div>`).join('');
 }
 
 // ---------- Pest Detection (unchanged) ----------
-async function loadModel() {
-  if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); console.log('MobileNet ready'); }
-  return mobilenetModel;
+async function loadModel() { if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); } return mobilenetModel; }
+async function classifyPest(img) {
+  const model = await loadModel();
+  const preds = await model.classify(img);
+  if (!preds || !preds.length) return 'Analysis failed.';
+  const top = preds[0];
+  let advice = `Analysis: ${top.className} (${(top.probability*100).toFixed(1)}%)`;
+  const name = top.className.toLowerCase();
+  if (name.includes('worm') || name.includes('caterpillar') || name.includes('beetle') || name.includes('aphid')) advice += '<br><br>Pest detected – use neem oil.';
+  else if (name.includes('fungus') || name.includes('mold') || name.includes('blight')) advice += '<br><br>Fungal issue – improve air circulation.';
+  else advice += '<br><br>Monitor crop.';
+  return advice;
 }
 
-async function classifyPest(imageElement) {
+// ---------- Farming Assistant ----------
+async function wikiAnswer(q) {
   try {
-    const model = await loadModel();
-    const predictions = await model.classify(imageElement);
-    if (predictions && predictions.length > 0) {
-      const top = predictions[0];
-      const className = top.className.toLowerCase();
-      let pestAdvice = `Analysis Result: ${top.className} (${(top.probability*100).toFixed(1)}% confidence)`;
-      if (className.includes('caterpillar') || className.includes('worm') || 
-          className.includes('beetle') || className.includes('aphid')) {
-        pestAdvice += `<br><br><i class="fas fa-leaf"></i> <strong>Pest Detected:</strong> Consider applying neem oil or organic pesticide.`;
-      } else if (className.includes('fungus') || className.includes('mold') || className.includes('blight')) {
-        pestAdvice += `<br><br><i class="fas fa-droplet"></i> <strong>Fungal Issue:</strong> Improve air circulation. Apply copper-based fungicide.`;
-      } else {
-        pestAdvice += `<br><br><i class="fas fa-seedling"></i> Monitor your crop closely.`;
-      }
-      return pestAdvice;
-    }
-    return 'Unable to analyze this image. Try a clearer photo.';
-  } catch (err) { return 'Analysis error. Please try again.'; }
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}?redirect=true`);
+    const d = await res.json();
+    return d.extract ? d.extract.substring(0, 550) : 'No info found.';
+  } catch { return 'Connection error.'; }
 }
 
-// ---------- Farming Assistant (unchanged) ----------
-async function wikiAnswer(question) {
-  try {
-    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`;
-    const resp = await fetch(url);
-    const data = await resp.json();
-    return data.extract ? data.extract.substring(0, 550) : "I couldn't find specific information on that topic.";
-  } catch (e) { return "Connection error. Check your internet."; }
-}
-
-// ---------- Page navigation (unchanged) ----------
+// ---------- Page navigation ----------
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
   document.getElementById(pageId).classList.add('active-page');
   document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
-  const link = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
-  if (link) link.classList.add('active');
+  document.querySelector(`.nav-links li[data-page="${pageId}"]`).classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
-  switch (pageId) {
-    case 'forum': loadForum(); break;
-    case 'records': loadRecords(); break;
-    case 'jobs': loadJobs(); break;
-    case 'market': loadMarket(); break;
-    case 'messages': loadMessages(); break;
-    case 'tutorials': loadTutorials(); break;
-    case 'dashboard': loadDashboardStats(); break;
-  }
+  if (pageId === 'forum') loadForum();
+  else if (pageId === 'records') loadRecords();
+  else if (pageId === 'jobs') loadJobs();
+  else if (pageId === 'market') loadMarket();
+  else if (pageId === 'messages') loadMessages();
+  else if (pageId === 'tutorials') loadTutorials();
+  else if (pageId === 'dashboard') loadDashboardStats();
 }
 
-// ---------- Auth modal (unchanged) ----------
+// ---------- Auth modal ----------
 function openModal(mode) {
-  const modal = document.getElementById('authModal');
-  document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
+  document.getElementById('modalTitle').textContent = mode === 'login' ? 'Welcome Back' : 'Create Account';
   document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
-  modal.style.display = 'flex';
+  document.getElementById('authModal').style.display = 'flex';
 }
-
 function closeModal() {
   document.getElementById('authModal').style.display = 'none';
-  document.getElementById('authEmail').value = '';
-  document.getElementById('authPass').value = '';
-  document.getElementById('authDisplayName').value = '';
+  ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value = '');
 }
 
-// ---------- DOM Ready ----------
+// ---------- DOM ready ----------
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('hamburgerBtn').addEventListener('click', () => {
+  document.getElementById('hamburgerBtn').onclick = () => {
     document.getElementById('sidebar').classList.toggle('open');
     document.getElementById('sidebarOverlay').classList.toggle('active');
-  });
-  document.getElementById('sidebarOverlay').addEventListener('click', () => {
+  };
+  document.getElementById('sidebarOverlay').onclick = () => {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('active');
-  });
+  };
 
-  document.querySelectorAll('.nav-links li').forEach(li => {
-    li.addEventListener('click', e => {
-      e.preventDefault();
-      showPage(li.dataset.page);
-    });
-  });
+  document.querySelectorAll('.nav-links li').forEach(li => li.onclick = e => { e.preventDefault(); showPage(li.dataset.page); });
 
-  document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
-  document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
-  document.getElementById('closeModalBtn').addEventListener('click', closeModal);
-  document.getElementById('authModal').addEventListener('click', e => { if (e.target === document.getElementById('authModal')) closeModal(); });
+  document.getElementById('loginBtn').onclick = () => openModal('login');
+  document.getElementById('signupBtn').onclick = () => openModal('signup');
+  document.getElementById('closeModalBtn').onclick = closeModal;
+  document.getElementById('authModal').onclick = e => { if (e.target === document.getElementById('authModal')) closeModal(); };
 
   let authMode = 'login';
-  document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
-  document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
+  document.getElementById('loginBtn').addEventListener('click', () => authMode = 'login');
+  document.getElementById('signupBtn').addEventListener('click', () => authMode = 'signup');
 
-  document.getElementById('authSubmitBtn').addEventListener('click', async () => {
+  document.getElementById('authSubmitBtn').onclick = async () => {
     const email = document.getElementById('authEmail').value.trim();
-    const password = document.getElementById('authPass').value;
-    const displayName = document.getElementById('authDisplayName').value.trim();
+    const pass = document.getElementById('authPass').value;
+    const display = document.getElementById('authDisplayName').value.trim();
     try {
       if (authMode === 'login') {
-        await login(email, password);
+        await login(email, pass);
       } else {
-        if (!displayName) return showToast('Display name is required', true);
-        await register(email, password, displayName);
+        if (!display) return showToast('Display name required', true);
+        await register(email, pass, display);
       }
       closeModal();
-    } catch (err) { showToast(err.message, true); }
-  });
+    } catch (e) { showToast(e.message, true); }
+  };
 
-  document.getElementById('userGreeting').addEventListener('click', logout);
+  document.getElementById('userGreeting').onclick = logout;
 
-  // Forum
-  document.getElementById('postForumBtn').addEventListener('click', () => {
-    const content = document.getElementById('forumContent').value.trim();
-    if (content) { addForumPost(content); document.getElementById('forumContent').value = ''; }
-  });
+  document.getElementById('postForumBtn').onclick = () => {
+    const c = document.getElementById('forumContent').value.trim();
+    if (c) { addForumPost(c); document.getElementById('forumContent').value = ''; }
+  };
+  document.getElementById('addRecordBtn').onclick = () => {
+    const t = document.getElementById('recordTitle').value.trim();
+    const d = document.getElementById('recordDetail').value.trim();
+    if (t) { addRecord(t, d); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
+  };
+  document.getElementById('postJobBtn').onclick = () => {
+    const t = document.getElementById('jobTitle').value.trim();
+    const d = document.getElementById('jobDesc').value.trim();
+    if (t) { addJob(t, d); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
+  };
+  document.getElementById('addProductBtn').onclick = () => {
+    const n = document.getElementById('productName').value.trim();
+    const p = document.getElementById('productPrice').value.trim();
+    if (n && p) { addProduct(n, p); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
+  };
+  document.getElementById('sendMsgBtn').onclick = () => {
+    const to = document.getElementById('msgTo').value.trim();
+    const tx = document.getElementById('msgText').value.trim();
+    if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
+  };
+  document.getElementById('doSearchBtn').onclick = () => {
+    const q = document.getElementById('searchInput').value.trim();
+    if (q) globalSearch(q); else showToast('Enter a search term', true);
+  };
+  document.getElementById('addVideoBtn').onclick = () => {
+    const t = document.getElementById('videoTitle').value.trim();
+    const u = document.getElementById('videoUrl').value.trim();
+    const d = document.getElementById('videoDesc').value.trim();
+    if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
+  };
 
-  // Records
-  document.getElementById('addRecordBtn').addEventListener('click', () => {
-    const title = document.getElementById('recordTitle').value.trim();
-    const detail = document.getElementById('recordDetail').value.trim();
-    if (title) { addRecord(title, detail); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
-  });
-
-  // Jobs
-  document.getElementById('postJobBtn').addEventListener('click', () => {
-    const title = document.getElementById('jobTitle').value.trim();
-    const desc = document.getElementById('jobDesc').value.trim();
-    if (title) { addJob(title, desc); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
-  });
-
-  // Market
-  document.getElementById('addProductBtn').addEventListener('click', () => {
-    const name = document.getElementById('productName').value.trim();
-    const price = document.getElementById('productPrice').value.trim();
-    if (name && price) { addProduct(name, price); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
-  });
-
-  // Messages
-  document.getElementById('sendMsgBtn').addEventListener('click', () => {
-    const toEmail = document.getElementById('msgTo').value.trim();
-    const text = document.getElementById('msgText').value.trim();
-    if (toEmail && text) { sendMessage(toEmail, text); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
-  });
-
-  // Search
-  document.getElementById('doSearchBtn').addEventListener('click', () => {
-    const query = document.getElementById('searchInput').value.trim();
-    if (query) globalSearch(query); else showToast('Please enter a search term', true);
-  });
-
-  // Tutorials
-  document.getElementById('addVideoBtn').addEventListener('click', () => {
-    const title = document.getElementById('videoTitle').value.trim();
-    const url = document.getElementById('videoUrl').value.trim();
-    const desc = document.getElementById('videoDesc').value.trim();
-    if (title && url) { addTutorial(title, url, desc); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
-  });
-
-  // Pest Detection
-  document.getElementById('identifyPestBtn').addEventListener('click', async () => {
-    const fileInput = document.getElementById('pestImageInput');
-    const file = fileInput.files[0];
-    if (!file) return showToast('Please select an image', true);
+  // Pest detection
+  document.getElementById('identifyPestBtn').onclick = async () => {
+    const file = document.getElementById('pestImageInput').files[0];
+    if (!file) return showToast('Select an image', true);
     const reader = new FileReader();
     reader.onload = async e => {
       document.getElementById('pestPreview').src = e.target.result;
       document.getElementById('pestPreview').style.display = 'block';
-      const resultDiv = document.getElementById('pestResult');
-      resultDiv.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
-      const img = new Image();
-      img.src = e.target.result;
-      await new Promise(resolve => { img.onload = resolve; });
-      const result = await classifyPest(img);
-      resultDiv.innerHTML = `<i class="fas fa-microscope"></i> ${result}`;
+      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
+      const img = new Image(); img.src = e.target.result;
+      await new Promise(r => img.onload = r);
+      document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
     };
     reader.readAsDataURL(file);
-  });
+  };
 
   // Chat
-  document.getElementById('sendChatBtn').addEventListener('click', async () => {
+  document.getElementById('sendChatBtn').onclick = async () => {
     const input = document.getElementById('chatInput').value.trim();
     if (!input) return;
-    const chatDiv = document.getElementById('chatMessages');
-    chatDiv.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
+    const chat = document.getElementById('chatMessages');
+    chat.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
     document.getElementById('chatInput').value = '';
     const reply = await wikiAnswer(input);
-    chatDiv.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
-    chatDiv.scrollTop = chatDiv.scrollHeight;
-  });
+    chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
+    chat.scrollTop = chat.scrollHeight;
+  };
 
   // Deletion
   document.addEventListener('click', async e => {
     const btn = e.target.closest('.delete-btn');
     if (!btn) return;
-    if (!currentUser) return showToast('Please login to delete', true);
+    if (!currentUser) return showToast('Login to delete', true);
     const { type, id } = btn.dataset;
-    switch (type) {
-      case 'forum': await deleteForumPost(id); break;
-      case 'record': await deleteRecord(id); break;
-      case 'job': await deleteJob(id); break;
-      case 'product': await deleteProduct(id); break;
-      case 'tutorial': await deleteTutorial(id); break;
-    }
+    if (type === 'forum') await deleteForumPost(id);
+    else if (type === 'record') await deleteRecord(id);
+    else if (type === 'job') await deleteJob(id);
+    else if (type === 'product') await deleteProduct(id);
+    else if (type === 'tutorial') await deleteTutorial(id);
   });
 
-  loadModel().then(() => console.log('MobileNet ready')).catch(console.warn);
+  loadModel().catch(console.warn);
   checkSession();
   showPage('dashboard');
 });
