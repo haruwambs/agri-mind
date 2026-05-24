@@ -1,7 +1,4 @@
-const API_BASE = 'https://agrimind-api.wambsharu0.workers.dev';
-
 let currentUser = null;
-let authToken = localStorage.getItem('agriToken') || null;
 let mobilenetModel = null;
 
 // ---------- Helpers ----------
@@ -24,23 +21,13 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- API helper (sends token if available) ----------
-async function api(url, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-  return fetch(url, { ...options, headers });
-}
-
 // ---------- Auth ----------
 async function checkSession() {
-  if (!authToken) { currentUser = null; updateAuthUI(); return; }
-  const res = await api(`${API_BASE}/api/auth/session`);
+  const res = await fetch('/api/auth/session');
   if (res.ok) {
     currentUser = await res.json();
   } else {
-    authToken = null; localStorage.removeItem('agriToken'); currentUser = null;
+    currentUser = null;
   }
   updateAuthUI();
   if (currentUser) loadDashboardStats();
@@ -60,38 +47,42 @@ function updateAuthUI() {
 }
 
 async function login(email, password) {
-  const res = await api(`${API_BASE}/api/auth/login`, {
-    method: 'POST', body: JSON.stringify({ email, password })
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
   });
   if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-  const data = await res.json();
-  authToken = data.token; localStorage.setItem('agriToken', authToken);
-  currentUser = { id: data.id, email: data.email, displayName: data.displayName };
-  updateAuthUI(); showToast(`Welcome, ${currentUser.displayName}!`); loadDashboardStats();
+  currentUser = await res.json();
+  updateAuthUI();
+  showToast(`Welcome, ${currentUser.displayName}!`);
+  loadDashboardStats();
 }
 
 async function register(email, password, displayName) {
-  const res = await api(`${API_BASE}/api/auth/register`, {
-    method: 'POST', body: JSON.stringify({ email, password, displayName })
+  const res = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, displayName })
   });
   if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-  const data = await res.json();
-  authToken = data.token; localStorage.setItem('agriToken', authToken);
-  currentUser = { id: data.id, email: data.email, displayName: data.displayName };
-  updateAuthUI(); showToast(`Welcome, ${currentUser.displayName}!`); loadDashboardStats();
+  // Auto‑login after register
+  return login(email, password);
 }
 
-function logout() {
-  authToken = null; localStorage.removeItem('agriToken'); currentUser = null;
-  updateAuthUI(); showToast('Logged out');
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  currentUser = null;
+  updateAuthUI();
+  showToast('Logged out');
 }
 
 // ---------- Dashboard ----------
 async function loadDashboardStats() {
   if (!currentUser) return;
-  const [f,r,j,t] = await Promise.all([
-    api(`${API_BASE}/api/forum`), api(`${API_BASE}/api/records`),
-    api(`${API_BASE}/api/jobs`), api(`${API_BASE}/api/tutorials`)
+  const [f, r, j, t] = await Promise.all([
+    fetch('/api/forum'), fetch('/api/records'),
+    fetch('/api/jobs'), fetch('/api/tutorials')
   ]);
   const fp = await f.json(), rc = await r.json(), jb = await j.json(), tu = await t.json();
   document.getElementById('statRecords').textContent = rc.length;
@@ -102,7 +93,7 @@ async function loadDashboardStats() {
 
 // ---------- Forum ----------
 async function loadForum() {
-  const res = await api(`${API_BASE}/api/forum`);
+  const res = await fetch('/api/forum');
   const posts = await res.json();
   const c = document.getElementById('forumList');
   if (!posts.length) { c.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>'; return; }
@@ -116,18 +107,18 @@ async function loadForum() {
 
 async function addForumPost(content) {
   if (!currentUser) return showToast('Please login', true);
-  await api(`${API_BASE}/api/forum`, { method: 'POST', body: JSON.stringify({ content }) });
+  await fetch('/api/forum', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
   loadForum(); loadDashboardStats();
 }
 
 async function deleteForumPost(id) {
-  await api(`${API_BASE}/api/forum?id=${id}`, { method: 'DELETE' });
+  await fetch('/api/forum?id=' + id, { method: 'DELETE' });
   loadForum(); loadDashboardStats();
 }
 
 // ---------- Records ----------
 async function loadRecords() {
-  const res = await api(`${API_BASE}/api/records`);
+  const res = await fetch('/api/records');
   const records = await res.json();
   const c = document.getElementById('recordsList');
   if (!records.length) { c.innerHTML = '<p style="text-align:center;">No farm records yet.</p>'; return; }
@@ -141,18 +132,18 @@ async function loadRecords() {
 }
 
 async function addRecord(title, detail) {
-  await api(`${API_BASE}/api/records`, { method: 'POST', body: JSON.stringify({ title, detail }) });
+  await fetch('/api/records', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, detail }) });
   loadRecords(); loadDashboardStats();
 }
 
 async function deleteRecord(id) {
-  await api(`${API_BASE}/api/records?id=${id}`, { method: 'DELETE' });
+  await fetch('/api/records?id=' + id, { method: 'DELETE' });
   loadRecords(); loadDashboardStats();
 }
 
 // ---------- Jobs ----------
 async function loadJobs() {
-  const res = await api(`${API_BASE}/api/jobs`);
+  const res = await fetch('/api/jobs');
   const jobs = await res.json();
   const c = document.getElementById('jobsList');
   if (!jobs.length) { c.innerHTML = '<p style="text-align:center;">No job listings available.</p>'; return; }
@@ -166,18 +157,18 @@ async function loadJobs() {
 }
 
 async function addJob(title, description) {
-  await api(`${API_BASE}/api/jobs`, { method: 'POST', body: JSON.stringify({ title, description }) });
+  await fetch('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description }) });
   loadJobs(); loadDashboardStats();
 }
 
 async function deleteJob(id) {
-  await api(`${API_BASE}/api/jobs?id=${id}`, { method: 'DELETE' });
+  await fetch('/api/jobs?id=' + id, { method: 'DELETE' });
   loadJobs(); loadDashboardStats();
 }
 
 // ---------- Market ----------
 async function loadMarket() {
-  const res = await api(`${API_BASE}/api/market`);
+  const res = await fetch('/api/market');
   const products = await res.json();
   const c = document.getElementById('marketList');
   if (!products.length) { c.innerHTML = '<p style="text-align:center;">No products listed.</p>'; return; }
@@ -190,19 +181,19 @@ async function loadMarket() {
 }
 
 async function addProduct(name, price) {
-  await api(`${API_BASE}/api/market`, { method: 'POST', body: JSON.stringify({ name, price }) });
+  await fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, price }) });
   loadMarket();
 }
 
 async function deleteProduct(id) {
-  await api(`${API_BASE}/api/market?id=${id}`, { method: 'DELETE' });
+  await fetch('/api/market?id=' + id, { method: 'DELETE' });
   loadMarket();
 }
 
 // ---------- Messages ----------
 async function loadMessages() {
   if (!currentUser) return;
-  const res = await api(`${API_BASE}/api/messages`);
+  const res = await fetch('/api/messages');
   const msgs = await res.json();
   const c = document.getElementById('messagesList');
   if (!msgs.length) { c.innerHTML = '<p>Your messages will appear here.</p>'; return; }
@@ -214,13 +205,13 @@ async function loadMessages() {
 }
 
 async function sendMessage(toEmail, text) {
-  await api(`${API_BASE}/api/messages`, { method: 'POST', body: JSON.stringify({ toEmail, text }) });
+  await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toEmail, text }) });
   loadMessages();
 }
 
 // ---------- Tutorials ----------
 async function loadTutorials() {
-  const res = await api(`${API_BASE}/api/tutorials`);
+  const res = await fetch('/api/tutorials');
   const tutorials = await res.json();
   const c = document.getElementById('videosList');
   if (!tutorials.length) { c.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>'; return; }
@@ -236,18 +227,18 @@ async function loadTutorials() {
 }
 
 async function addTutorial(title, url, description) {
-  await api(`${API_BASE}/api/tutorials`, { method: 'POST', body: JSON.stringify({ title, url, description }) });
+  await fetch('/api/tutorials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, url, description }) });
   loadTutorials(); loadDashboardStats();
 }
 
 async function deleteTutorial(id) {
-  await api(`${API_BASE}/api/tutorials?id=${id}`, { method: 'DELETE' });
+  await fetch('/api/tutorials?id=' + id, { method: 'DELETE' });
   loadTutorials(); loadDashboardStats();
 }
 
 // ---------- Search ----------
 async function globalSearch(term) {
-  const res = await api(`${API_BASE}/api/search?q=` + encodeURIComponent(term));
+  const res = await fetch('/api/search?q=' + encodeURIComponent(term));
   const results = await res.json();
   const c = document.getElementById('searchResults');
   if (!results.length) { c.innerHTML = '<p style="padding:20px;">No matches found.</p>'; return; }
@@ -301,7 +292,6 @@ function openModal(mode) {
   document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
   document.getElementById('authModal').style.display = 'flex';
 }
-
 function closeModal() {
   document.getElementById('authModal').style.display = 'none';
   ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value = '');
