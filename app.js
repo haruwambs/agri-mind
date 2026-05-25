@@ -9,7 +9,7 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Global state
-let currentUser = null;          // { id, email, displayName }
+let currentUser = null;
 let mobilenetModel = null;
 
 // ---------- UI helpers ----------
@@ -32,15 +32,11 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- Auth (Supabase email/password) ----------
+// ---------- Auth ----------
 async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
   if (session && session.user) {
-    const { data: profile } = await db
-      .from('profiles')
-      .select('display_name')
-      .eq('id', session.user.id)
-      .single();
+    const { data: profile } = await db.from('profiles').select('display_name').eq('id', session.user.id).single();
     currentUser = {
       id: session.user.id,
       email: session.user.email,
@@ -90,14 +86,12 @@ async function logout() {
 
 db.auth.onAuthStateChange((event, session) => { checkSession(); });
 
-// ---------- Dashboard stats ----------
+// ---------- Dashboard ----------
 async function loadDashboardStats() {
   if (!currentUser) return;
   const [
-    { count: forumCount },
-    { count: recordsCount },
-    { count: jobsCount },
-    { count: tutsCount }
+    { count: forumCount }, { count: recordsCount },
+    { count: jobsCount }, { count: tutsCount }
   ] = await Promise.all([
     db.from('forum_posts').select('*', { count: 'exact', head: true }),
     db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
@@ -112,11 +106,9 @@ async function loadDashboardStats() {
 
 // ---------- Forum ----------
 async function loadForum() {
-  const { data: posts } = await db
-    .from('forum_posts')
+  const { data: posts } = await db.from('forum_posts')
     .select('id, content, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('forumList');
   if (!posts || posts.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
@@ -127,13 +119,8 @@ async function loadForum() {
       <strong>${escapeHtml(p.profiles.display_name)}</strong>
       <small>${new Date(p.created_at).toLocaleString()}</small>
       <p>${escapeHtml(p.content)}</p>
-      ${currentUser && currentUser.id === p.user_id ? `
-        <button class="delete-btn" data-type="forum" data-id="${p.id}">
-          <i class="fas fa-trash-alt"></i>
-        </button>
-      ` : ''}
-    </div>
-  `).join('');
+      ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+    </div>`).join('');
 }
 
 async function addForumPost(content) {
@@ -149,15 +136,11 @@ async function deleteForumPost(id) {
   loadDashboardStats();
 }
 
-// ---------- Farm Records ----------
+// ---------- Records ----------
 async function loadRecords() {
   if (!currentUser) return;
-  const { data: records } = await db
-    .from('farm_records')
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .order('created_at', { ascending: false });
-
+  const { data: records } = await db.from('farm_records')
+    .select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
   const container = document.getElementById('recordsList');
   if (!records || records.length === 0) {
     container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
@@ -168,11 +151,8 @@ async function loadRecords() {
       <strong>${escapeHtml(r.title)}</strong>
       <p>${escapeHtml(r.detail)}</p>
       <small>${new Date(r.created_at).toLocaleString()}</small>
-      <button class="delete-btn" data-type="record" data-id="${r.id}">
-        <i class="fas fa-trash-alt"></i>
-      </button>
-    </div>
-  `).join('');
+      <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
+    </div>`).join('');
 }
 
 async function addRecord(title, detail) {
@@ -190,11 +170,9 @@ async function deleteRecord(id) {
 
 // ---------- Jobs ----------
 async function loadJobs() {
-  const { data: jobs } = await db
-    .from('job_listings')
+  const { data: jobs } = await db.from('job_listings')
     .select('id, title, description, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('jobsList');
   if (!jobs || jobs.length === 0) {
     container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
@@ -205,13 +183,8 @@ async function loadJobs() {
       <strong>${escapeHtml(j.title)}</strong>
       <p>${escapeHtml(j.description)}</p>
       <small>Posted by ${escapeHtml(j.profiles.display_name)}</small>
-      ${currentUser && currentUser.id === j.user_id ? `
-        <button class="delete-btn" data-type="job" data-id="${j.id}">
-          <i class="fas fa-trash-alt"></i>
-        </button>
-      ` : ''}
-    </div>
-  `).join('');
+      ${currentUser && currentUser.id === j.user_id ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+    </div>`).join('');
 }
 
 async function addJob(title, description) {
@@ -227,13 +200,11 @@ async function deleteJob(id) {
   loadDashboardStats();
 }
 
-// ---------- Marketplace ----------
+// ---------- Market ----------
 async function loadMarket() {
-  const { data: products } = await db
-    .from('products')
+  const { data: products } = await db.from('products')
     .select('id, name, price, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('marketList');
   if (!products || products.length === 0) {
     container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
@@ -243,13 +214,8 @@ async function loadMarket() {
     <div class="product-item">
       <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
       <br><small>Seller: ${escapeHtml(p.profiles.display_name)}</small>
-      ${currentUser && currentUser.id === p.user_id ? `
-        <button class="delete-btn" data-type="product" data-id="${p.id}">
-          <i class="fas fa-trash-alt"></i>
-        </button>
-      ` : ''}
-    </div>
-  `).join('');
+      ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+    </div>`).join('');
 }
 
 async function addProduct(name, price) {
@@ -266,12 +232,10 @@ async function deleteProduct(id) {
 // ---------- Messages ----------
 async function loadMessages() {
   if (!currentUser) return;
-  const { data: msgs } = await db
-    .from('messages')
+  const { data: msgs } = await db.from('messages')
     .select('id, text, created_at, from_user_id, to_user_id, from:from_user_id(display_name), to:to_user_id(display_name)')
     .or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('messagesList');
   if (!msgs || msgs.length === 0) {
     container.innerHTML = '<p>Your messages will appear here.</p>';
@@ -281,8 +245,7 @@ async function loadMessages() {
     <div class="msg-item">
       <strong>${escapeHtml(m.from.display_name)}</strong> → ${escapeHtml(m.to.display_name)}: ${escapeHtml(m.text)}
       <br><small>${new Date(m.created_at).toLocaleString()}</small>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function sendMessage(toEmail, text) {
@@ -295,11 +258,9 @@ async function sendMessage(toEmail, text) {
 
 // ---------- Tutorials ----------
 async function loadTutorials() {
-  const { data: tutorials } = await db
-    .from('tutorials')
+  const { data: tutorials } = await db.from('tutorials')
     .select('id, title, url, description, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('videosList');
   if (!tutorials || tutorials.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
@@ -312,13 +273,8 @@ async function loadTutorials() {
       <br><a href="${escapeHtml(t.url)}" target="_blank" style="color:#10B981;">Watch Tutorial →</a>
       <p>${escapeHtml(t.description)}</p>
       <small>Shared by ${escapeHtml(t.profiles.display_name)}</small>
-      ${currentUser && currentUser.id === t.user_id ? `
-        <button class="delete-btn" data-type="tutorial" data-id="${t.id}">
-          <i class="fas fa-trash-alt"></i>
-        </button>
-      ` : ''}
-    </div>
-  `).join('');
+      ${currentUser && currentUser.id === t.user_id ? `<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+    </div>`).join('');
 }
 
 async function addTutorial(title, url, description) {
@@ -338,23 +294,19 @@ async function deleteTutorial(id) {
 async function globalSearch(term) {
   const t = `%${term}%`;
   const [
-    { data: forumResults },
-    { data: recordResults },
-    { data: jobResults },
-    { data: tutorialResults }
+    { data: forumResults }, { data: recordResults },
+    { data: jobResults }, { data: tutorialResults }
   ] = await Promise.all([
     db.from('forum_posts').select('content').ilike('content', t).limit(5),
     db.from('farm_records').select('title').ilike('title', t).limit(5),
     db.from('job_listings').select('title').ilike('title', t).limit(5),
     db.from('tutorials').select('title').ilike('title', t).limit(5)
   ]);
-
   const results = [];
   (forumResults || []).forEach(r => results.push(`Forum: ${r.content.substring(0, 70)}...`));
   (recordResults || []).forEach(r => results.push(`Record: ${r.title}`));
   (jobResults || []).forEach(r => results.push(`Job: ${r.title}`));
   (tutorialResults || []).forEach(r => results.push(`Tutorial: ${r.title}`));
-
   const container = document.getElementById('searchResults');
   if (!results.length) {
     container.innerHTML = '<p style="padding:20px;">No matches found.</p>';
@@ -364,40 +316,65 @@ async function globalSearch(term) {
 }
 
 // ---------- Profile ----------
+async function uploadAvatar(file) {
+  if (!currentUser) return;
+  const filePath = `${currentUser.id}/profile.jpg`;
+  const { error } = await db.storage.from('avatars').upload(filePath, file, { upsert: true });
+  if (error) {
+    showToast('Upload failed: ' + error.message, true);
+    return;
+  }
+  const { data } = db.storage.from('avatars').getPublicUrl(filePath);
+  if (data) {
+    document.getElementById('profileAvatar').src = data.publicUrl;
+    showToast('Profile picture updated!');
+  }
+}
+
 async function loadProfile() {
   if (!currentUser) {
     document.getElementById('profileContent').innerHTML = '<p>Please log in to see your profile.</p>';
     return;
   }
-  const { data: profile, error } = await db
-    .from('profiles')
-    .select('created_at')
-    .eq('id', currentUser.id)
-    .single();
+  document.getElementById('profileName').textContent = currentUser.displayName;
+  document.getElementById('profileEmail').textContent = currentUser.email;
 
-  if (error || !profile) {
-    document.getElementById('profileContent').innerHTML = '<p>Could not load profile.</p>';
-    return;
+  const { data: profile } = await db.from('profiles').select('created_at').eq('id', currentUser.id).single();
+  if (profile) {
+    document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
   }
 
-  document.getElementById('profileContent').innerHTML = `
-    <div style="background:#111; border-radius:20px; padding:20px; margin-bottom:15px;">
-      <p><strong>Display Name:</strong> ${escapeHtml(currentUser.displayName)}</p>
-      <p><strong>Email:</strong> ${escapeHtml(currentUser.email)}</p>
-      <p><strong>Member since:</strong> ${new Date(profile.created_at).toLocaleDateString()}</p>
-    </div>
-    <button class="btn-outline" onclick="logout()">
-      <i class="fas fa-sign-out-alt"></i> Log out
-    </button>
-  `;
+  const avatarUrl = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
+  document.getElementById('profileAvatar').src = avatarUrl;
+
+  const [
+    { count: forumCount }, { count: recordsCount }, { count: jobsCount },
+    { count: productsCount }, { count: tutorialsCount }, { count: messagesCount }
+  ] = await Promise.all([
+    db.from('forum_posts').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+    db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+    db.from('job_listings').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+    db.from('products').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+    db.from('tutorials').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+    db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
+  ]);
+
+  document.getElementById('profileForumCount').textContent = forumCount;
+  document.getElementById('profileRecordsCount').textContent = recordsCount;
+  document.getElementById('profileJobsCount').textContent = jobsCount;
+  document.getElementById('profileProductsCount').textContent = productsCount;
+  document.getElementById('profileTutorialsCount').textContent = tutorialsCount;
+  document.getElementById('profileMessagesCount').textContent = messagesCount;
+
+  document.getElementById('avatarUpload').onchange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      uploadAvatar(e.target.files[0]);
+    }
+  };
 }
 
 // ---------- Pest Detection (unchanged) ----------
-async function loadModel() {
-  if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); }
-  return mobilenetModel;
-}
-
+async function loadModel() { if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); } return mobilenetModel; }
 async function classifyPest(imageElement) {
   try {
     const model = await loadModel();
@@ -432,11 +409,9 @@ async function wikiAnswer(question) {
 // ---------- Page navigation ----------
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-  const pageElement = document.getElementById(pageId);
-  if (pageElement) pageElement.classList.add('active-page');
+  document.getElementById(pageId).classList.add('active-page');
   document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
-  const activeLink = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
-  if (activeLink) activeLink.classList.add('active');
+  document.querySelector(`.nav-links li[data-page="${pageId}"]`).classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
   switch (pageId) {
