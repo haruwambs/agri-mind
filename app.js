@@ -1,18 +1,16 @@
 // ═══════════════════════════════════════════
-//  YOUR SUPABASE CREDENTIALS (already filled)
+//  SUPABASE CREDENTIALS (yours already filled)
 // ═══════════════════════════════════════════
 const SUPABASE_URL = 'https://injbsydeejivijbeatep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluamJzeWRlZWppdmlqYmVhdGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4MzEsImV4cCI6MjA5NTMxMDgzMX0.pc-QfLVYUHk5Ky3DClI0b4ThXjLHsUsDcT8qlUOSuKA';
 
-// Initialize Supabase client
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Global state
 let currentUser = null;
 let mobilenetModel = null;
 
-// ---------- UI helpers ----------
+// ---------- Helpers ----------
 function showToast(msg, isError = false) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
@@ -32,6 +30,14 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ---------- Dark/Light mode ----------
+const themeToggle = document.getElementById('themeToggle');
+if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+themeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('light');
+  localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
+});
+
 // ---------- Auth ----------
 async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
@@ -46,7 +52,10 @@ async function checkSession() {
     currentUser = null;
   }
   updateAuthUI();
-  if (currentUser) loadDashboardStats();
+  if (currentUser) {
+    loadDashboardStats();
+    checkNotifications();
+  }
 }
 
 function updateAuthUI() {
@@ -86,12 +95,30 @@ async function logout() {
 
 db.auth.onAuthStateChange((event, session) => { checkSession(); });
 
-// ---------- Dashboard ----------
+// ---------- Weather ----------
+async function loadWeather() {
+  try {
+    const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-1.28&longitude=36.82&current_weather=true');
+    const data = await res.json();
+    if (data.current_weather) {
+      document.getElementById('weatherWidget').innerHTML = `
+        <p>🌡️ Temp: ${data.current_weather.temperature}°C</p>
+        <p>💨 Wind: ${data.current_weather.windspeed} km/h</p>
+      `;
+    }
+  } catch {
+    document.getElementById('weatherWidget').textContent = 'Weather unavailable';
+  }
+}
+
+// ---------- Dashboard stats ----------
 async function loadDashboardStats() {
   if (!currentUser) return;
   const [
-    { count: forumCount }, { count: recordsCount },
-    { count: jobsCount }, { count: tutsCount }
+    { count: forumCount },
+    { count: recordsCount },
+    { count: jobsCount },
+    { count: tutsCount }
   ] = await Promise.all([
     db.from('forum_posts').select('*', { count: 'exact', head: true }),
     db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
@@ -102,25 +129,67 @@ async function loadDashboardStats() {
   document.getElementById('statJobs').textContent = jobsCount;
   document.getElementById('statTuts').textContent = tutsCount;
   document.getElementById('statForum').textContent = forumCount;
+  loadWeather();
 }
 
-// ---------- Forum ----------
+// ---------- Forum (with replies & likes) ----------
 async function loadForum() {
-  const { data: posts } = await db.from('forum_posts')
+  const { data: posts } = await db
+    .from('forum_posts')
     .select('id, content, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
+
   const container = document.getElementById('forumList');
   if (!posts || posts.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
     return;
   }
-  container.innerHTML = posts.map(p => `
-    <div class="forum-post">
+
+  container.innerHTML = '';
+  for (const p of posts) {
+    const { count: likeCount } = await db
+      .from('likes')
+      .select('*', { count: 'exact', head: true })
+      .match({ target_type: 'forum', target_id: p.id });
+
+    const postDiv = document.createElement('div');
+    postDiv.className = 'forum-post';
+    postDiv.innerHTML = `
       <strong>${escapeHtml(p.profiles.display_name)}</strong>
       <small>${new Date(p.created_at).toLocaleString()}</small>
       <p>${escapeHtml(p.content)}</p>
+      <span class="like-btn" data-type="forum" data-id="${p.id}">❤️ ${likeCount}</span>
       ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-    </div>`).join('');
+      <button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>
+    `;
+
+    const replyDiv = document.createElement('div');
+    replyDiv.className = 'reply-section';
+    replyDiv.style.display = 'none';  // hidden by default
+
+    container.appendChild(postDiv);
+    container.appendChild(replyDiv);
+  }
+}
+
+async function loadReplies(postId, container) {
+  const { data: replies } = await db
+    .from('forum_replies')
+    .select('*, profiles!inner(display_name)')
+    .eq('post_id', postId)
+    .order('created_at');
+
+  container.innerHTML = '';
+  if (replies) {
+    replies.forEach(r => {
+      container.innerHTML += `<div style="padding:4px 0;"><strong>${escapeHtml(r.profiles.display_name)}:</strong> ${escapeHtml(r.content)}</div>`;
+    });
+  }
+
+  container.innerHTML += `
+    <input type="text" class="reply-input" placeholder="Write a reply..." style="width:70%; display:inline;">
+    <button class="btn-outline send-reply" data-post="${postId}">Send</button>
+  `;
 }
 
 async function addForumPost(content) {
@@ -136,11 +205,35 @@ async function deleteForumPost(id) {
   loadDashboardStats();
 }
 
+async function toggleLike(type, id) {
+  if (!currentUser) return showToast('Login first', true);
+  const { data: existing } = await db
+    .from('likes')
+    .select('*')
+    .match({ user_id: currentUser.id, target_type: type, target_id: id });
+
+  if (existing && existing.length) {
+    await db.from('likes').delete().eq('id', existing[0].id);
+  } else {
+    await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
+  }
+
+  // Refresh the relevant list
+  if (type === 'forum') loadForum();
+  else if (type === 'job') loadJobs();
+  else if (type === 'product') loadMarket();
+  else if (type === 'tutorial') loadTutorials();
+}
+
 // ---------- Records ----------
 async function loadRecords() {
   if (!currentUser) return;
-  const { data: records } = await db.from('farm_records')
-    .select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  const { data: records } = await db
+    .from('farm_records')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
+
   const container = document.getElementById('recordsList');
   if (!records || records.length === 0) {
     container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
@@ -152,7 +245,8 @@ async function loadRecords() {
       <p>${escapeHtml(r.detail)}</p>
       <small>${new Date(r.created_at).toLocaleString()}</small>
       <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>`).join('');
+    </div>
+  `).join('');
 }
 
 async function addRecord(title, detail) {
@@ -170,21 +264,42 @@ async function deleteRecord(id) {
 
 // ---------- Jobs ----------
 async function loadJobs() {
-  const { data: jobs } = await db.from('job_listings')
+  const { data: jobs } = await db
+    .from('job_listings')
     .select('id, title, description, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
+
   const container = document.getElementById('jobsList');
   if (!jobs || jobs.length === 0) {
     container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
     return;
   }
-  container.innerHTML = jobs.map(j => `
-    <div class="job-item">
-      <strong>${escapeHtml(j.title)}</strong>
-      <p>${escapeHtml(j.description)}</p>
-      <small>Posted by ${escapeHtml(j.profiles.display_name)}</small>
-      ${currentUser && currentUser.id === j.user_id ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-    </div>`).join('');
+  container.innerHTML = '';
+  for (const j of jobs) {
+    const { count: likeCount } = await db
+      .from('likes')
+      .select('*', { count: 'exact', head: true })
+      .match({ target_type: 'job', target_id: j.id });
+
+    const { data: applications } = await db
+      .from('job_applications')
+      .select('id')
+      .eq('job_id', j.id);
+
+    const appCount = applications ? applications.length : 0;
+
+    container.innerHTML += `
+      <div class="job-item">
+        <strong>${escapeHtml(j.title)}</strong>
+        <p>${escapeHtml(j.description)}</p>
+        <small>Posted by ${escapeHtml(j.profiles.display_name)}</small>
+        <span class="like-btn" data-type="job" data-id="${j.id}">❤️ ${likeCount}</span>
+        <span>👤 ${appCount} applicants</span>
+        ${currentUser && currentUser.id === j.user_id ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+        ${currentUser && currentUser.id !== j.user_id ? `<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>` : ''}
+      </div>
+    `;
+  }
 }
 
 async function addJob(title, description) {
@@ -200,11 +315,27 @@ async function deleteJob(id) {
   loadDashboardStats();
 }
 
-// ---------- Market ----------
+async function applyToJob(jobId) {
+  if (!currentUser) return showToast('Please login', true);
+  const { data: existing } = await db.from('job_applications').select('*').match({ job_id: jobId, applicant_id: currentUser.id });
+  if (existing && existing.length) return showToast('You already applied', true);
+  await db.from('job_applications').insert({ job_id: jobId, applicant_id: currentUser.id, message: 'I am interested in this position.' });
+  showToast('Application submitted!');
+  loadJobs();
+}
+
+// ---------- Marketplace ----------
 async function loadMarket() {
-  const { data: products } = await db.from('products')
-    .select('id, name, price, created_at, user_id, profiles!inner(display_name)')
+  const category = document.getElementById('marketCategoryFilter')?.value || 'All';
+  let query = db
+    .from('products')
+    .select('id, name, price, category, image_url, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
+
+  if (category !== 'All') query = query.eq('category', category);
+
+  const { data: products } = await query;
+
   const container = document.getElementById('marketList');
   if (!products || products.length === 0) {
     container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
@@ -212,15 +343,27 @@ async function loadMarket() {
   }
   container.innerHTML = products.map(p => `
     <div class="product-item">
+      ${p.image_url ? `<img src="${p.image_url}" style="max-width:100px; border-radius:10px; margin-right:10px;">` : ''}
       <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
-      <br><small>Seller: ${escapeHtml(p.profiles.display_name)}</small>
+      <br><small>Category: ${escapeHtml(p.category)} | Seller: ${escapeHtml(p.profiles.display_name)}</small>
+      <span class="like-btn" data-type="product" data-id="${p.id}">❤️ ${0}</span>
       ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-    </div>`).join('');
+    </div>
+  `).join('');
 }
 
-async function addProduct(name, price) {
+async function addProduct(name, price, category, imageFile) {
   if (!currentUser) return showToast('Please login', true);
-  await db.from('products').insert({ user_id: currentUser.id, name, price });
+  let imageUrl = null;
+  if (imageFile) {
+    const filePath = `products/${Date.now()}_${imageFile.name}`;
+    const { error } = await db.storage.from('avatars').upload(filePath, imageFile);
+    if (!error) {
+      const { data } = db.storage.from('avatars').getPublicUrl(filePath);
+      if (data) imageUrl = data.publicUrl;
+    }
+  }
+  await db.from('products').insert({ user_id: currentUser.id, name, price, category, image_url: imageUrl });
   loadMarket();
 }
 
@@ -232,10 +375,12 @@ async function deleteProduct(id) {
 // ---------- Messages ----------
 async function loadMessages() {
   if (!currentUser) return;
-  const { data: msgs } = await db.from('messages')
+  const { data: msgs } = await db
+    .from('messages')
     .select('id, text, created_at, from_user_id, to_user_id, from:from_user_id(display_name), to:to_user_id(display_name)')
     .or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
     .order('created_at', { ascending: false });
+
   const container = document.getElementById('messagesList');
   if (!msgs || msgs.length === 0) {
     container.innerHTML = '<p>Your messages will appear here.</p>';
@@ -245,7 +390,8 @@ async function loadMessages() {
     <div class="msg-item">
       <strong>${escapeHtml(m.from.display_name)}</strong> → ${escapeHtml(m.to.display_name)}: ${escapeHtml(m.text)}
       <br><small>${new Date(m.created_at).toLocaleString()}</small>
-    </div>`).join('');
+    </div>
+  `).join('');
 }
 
 async function sendMessage(toEmail, text) {
@@ -258,9 +404,11 @@ async function sendMessage(toEmail, text) {
 
 // ---------- Tutorials ----------
 async function loadTutorials() {
-  const { data: tutorials } = await db.from('tutorials')
+  const { data: tutorials } = await db
+    .from('tutorials')
     .select('id, title, url, description, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
+
   const container = document.getElementById('videosList');
   if (!tutorials || tutorials.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
@@ -273,8 +421,10 @@ async function loadTutorials() {
       <br><a href="${escapeHtml(t.url)}" target="_blank" style="color:#10B981;">Watch Tutorial →</a>
       <p>${escapeHtml(t.description)}</p>
       <small>Shared by ${escapeHtml(t.profiles.display_name)}</small>
+      <span class="like-btn" data-type="tutorial" data-id="${t.id}">❤️ ${0}</span>
       ${currentUser && currentUser.id === t.user_id ? `<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-    </div>`).join('');
+    </div>
+  `).join('');
 }
 
 async function addTutorial(title, url, description) {
@@ -290,52 +440,94 @@ async function deleteTutorial(id) {
   loadDashboardStats();
 }
 
-// ---------- Search ----------
-async function globalSearch(term) {
-  const t = `%${term}%`;
-  const [
-    { data: forumResults }, { data: recordResults },
-    { data: jobResults }, { data: tutorialResults }
-  ] = await Promise.all([
-    db.from('forum_posts').select('content').ilike('content', t).limit(5),
-    db.from('farm_records').select('title').ilike('title', t).limit(5),
-    db.from('job_listings').select('title').ilike('title', t).limit(5),
-    db.from('tutorials').select('title').ilike('title', t).limit(5)
-  ]);
-  const results = [];
-  (forumResults || []).forEach(r => results.push(`Forum: ${r.content.substring(0, 70)}...`));
-  (recordResults || []).forEach(r => results.push(`Record: ${r.title}`));
-  (jobResults || []).forEach(r => results.push(`Job: ${r.title}`));
-  (tutorialResults || []).forEach(r => results.push(`Tutorial: ${r.title}`));
-  const container = document.getElementById('searchResults');
-  if (!results.length) {
-    container.innerHTML = '<p style="padding:20px;">No matches found.</p>';
+// ---------- Crop Calendar ----------
+async function loadCalendar() {
+  if (!currentUser) return;
+  const { data: events } = await db
+    .from('calendar_events')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('event_date');
+
+  const container = document.getElementById('calendarList');
+  if (!events || events.length === 0) {
+    container.innerHTML = '<p>No events yet.</p>';
     return;
   }
-  container.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r)}</div>`).join('');
+  container.innerHTML = events.map(e => `
+    <div class="record-item">
+      <strong>${escapeHtml(e.title)}</strong> - ${e.event_date}
+      <br><small>${escapeHtml(e.notes || '')}</small>
+      <button class="delete-btn" data-type="calendar" data-id="${e.id}"><i class="fas fa-trash-alt"></i></button>
+    </div>
+  `).join('');
+}
+
+async function addEvent() {
+  if (!currentUser) return showToast('Please login', true);
+  const title = document.getElementById('eventTitle').value.trim();
+  const date = document.getElementById('eventDate').value;
+  const notes = document.getElementById('eventNotes').value.trim();
+  if (!title || !date) return showToast('Title and date required', true);
+  await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes });
+  document.getElementById('eventTitle').value = '';
+  document.getElementById('eventDate').value = '';
+  document.getElementById('eventNotes').value = '';
+  loadCalendar();
+}
+
+async function deleteCalendarEvent(id) {
+  await db.from('calendar_events').delete().eq('id', id);
+  loadCalendar();
+}
+
+// ---------- Yield Calculator ----------
+function calculateYield() {
+  const crop = document.getElementById('cropType').value;
+  const area = parseFloat(document.getElementById('areaInput').value);
+  const yields = { maize: 3.5, rice: 4.2, wheat: 2.8, beans: 1.2 };
+  if (area > 0) {
+    document.getElementById('yieldResult').textContent = `Estimated yield: ${(area * yields[crop]).toFixed(1)} tons`;
+  } else {
+    document.getElementById('yieldResult').textContent = 'Please enter a valid area.';
+  }
+}
+
+// ---------- Notifications ----------
+async function checkNotifications() {
+  if (!currentUser) return;
+  const { count } = await db
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', currentUser.id)
+    .eq('read', false);
+
+  if (count > 0) showToast(`You have ${count} new notifications`);
+}
+
+// ---------- Follows ----------
+async function toggleFollow(userId) {
+  if (!currentUser) return showToast('Login first', true);
+  const { data } = await db
+    .from('follows')
+    .select('*')
+    .match({ follower_id: currentUser.id, following_id: userId });
+
+  if (data && data.length) {
+    await db.from('follows').delete().eq('id', data[0].id);
+  } else {
+    await db.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
+  }
+  loadProfile();  // refresh profile to update follow button
 }
 
 // ---------- Profile ----------
-async function uploadAvatar(file) {
-  if (!currentUser) return;
-  const filePath = `${currentUser.id}/profile.jpg`;
-  const { error } = await db.storage.from('avatars').upload(filePath, file, { upsert: true });
-  if (error) {
-    showToast('Upload failed: ' + error.message, true);
-    return;
-  }
-  const { data } = db.storage.from('avatars').getPublicUrl(filePath);
-  if (data) {
-    document.getElementById('profileAvatar').src = data.publicUrl;
-    showToast('Profile picture updated!');
-  }
-}
-
 async function loadProfile() {
   if (!currentUser) {
     document.getElementById('profileContent').innerHTML = '<p>Please log in to see your profile.</p>';
     return;
   }
+
   document.getElementById('profileName').textContent = currentUser.displayName;
   document.getElementById('profileEmail').textContent = currentUser.email;
 
@@ -348,15 +540,23 @@ async function loadProfile() {
   document.getElementById('profileAvatar').src = avatarUrl;
 
   const [
-    { count: forumCount }, { count: recordsCount }, { count: jobsCount },
-    { count: productsCount }, { count: tutorialsCount }, { count: messagesCount }
+    { count: forumCount },
+    { count: recordsCount },
+    { count: jobsCount },
+    { count: productsCount },
+    { count: tutorialsCount },
+    { count: messagesCount },
+    { count: followers },
+    { data: isFollowing }
   ] = await Promise.all([
     db.from('forum_posts').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('job_listings').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('products').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('tutorials').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
-    db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
+    db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`),
+    db.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', currentUser.id),
+    db.from('follows').select('*').eq('follower_id', currentUser.id).eq('following_id', currentUser.id)
   ]);
 
   document.getElementById('profileForumCount').textContent = forumCount;
@@ -365,16 +565,63 @@ async function loadProfile() {
   document.getElementById('profileProductsCount').textContent = productsCount;
   document.getElementById('profileTutorialsCount').textContent = tutorialsCount;
   document.getElementById('profileMessagesCount').textContent = messagesCount;
+  document.getElementById('followerCount').textContent = `${followers} followers`;
 
-  document.getElementById('avatarUpload').onchange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      uploadAvatar(e.target.files[0]);
+  const followBtn = document.getElementById('followBtn');
+  followBtn.textContent = (isFollowing && isFollowing.length) ? 'Unfollow' : 'Follow';
+  followBtn.onclick = () => toggleFollow(currentUser.id);
+
+  // Avatar upload
+  document.getElementById('avatarUpload').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const filePath = `${currentUser.id}/profile.jpg`;
+    const { error } = await db.storage.from('avatars').upload(filePath, file, { upsert: true });
+    if (!error) {
+      const newUrl = db.storage.from('avatars').getPublicUrl(filePath).data.publicUrl;
+      document.getElementById('profileAvatar').src = newUrl;
+      showToast('Profile picture updated!');
+    } else {
+      showToast('Upload failed', true);
     }
   };
 }
 
-// ---------- Pest Detection (unchanged) ----------
-async function loadModel() { if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); } return mobilenetModel; }
+// ---------- Search ----------
+async function globalSearch(term, category, dateFrom, dateTo) {
+  const q = `%${term}%`;
+  let queries = [];
+  if (category === 'all' || category === 'forum') queries.push(db.from('forum_posts').select('content, created_at').ilike('content', q).limit(5));
+  if (category === 'all' || category === 'records') queries.push(db.from('farm_records').select('title, created_at').ilike('title', q).limit(5));
+  if (category === 'all' || category === 'jobs') queries.push(db.from('job_listings').select('title, created_at').ilike('title', q).limit(5));
+  if (category === 'all' || category === 'tutorials') queries.push(db.from('tutorials').select('title, created_at').ilike('title', q).limit(5));
+
+  const resultsArr = await Promise.all(queries);
+  const results = [];
+  resultsArr.forEach(res => {
+    if (res.data) res.data.forEach(r => {
+      const dateOk = (!dateFrom || new Date(r.created_at) >= new Date(dateFrom)) &&
+                     (!dateTo || new Date(r.created_at) <= new Date(dateTo + 'T23:59:59'));
+      if (dateOk) results.push(r.content || r.title);
+    });
+  });
+
+  const container = document.getElementById('searchResults');
+  if (!results.length) {
+    container.innerHTML = '<p style="padding:20px;">No matches found.</p>';
+  } else {
+    container.innerHTML = results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('');
+  }
+}
+
+// ---------- Pest Detection ----------
+async function loadModel() {
+  if (!mobilenetModel) {
+    mobilenetModel = await mobilenet.load();
+  }
+  return mobilenetModel;
+}
+
 async function classifyPest(imageElement) {
   try {
     const model = await loadModel();
@@ -382,7 +629,7 @@ async function classifyPest(imageElement) {
     if (predictions && predictions.length > 0) {
       const top = predictions[0];
       const className = top.className.toLowerCase();
-      let advice = `Analysis: ${top.className} (${(top.probability*100).toFixed(1)}% confidence)`;
+      let advice = `Analysis: ${top.className} (${(top.probability * 100).toFixed(1)}% confidence)`;
       if (className.includes('caterpillar') || className.includes('worm') || className.includes('beetle') || className.includes('aphid')) {
         advice += '<br><br><i class="fas fa-leaf"></i> <strong>Pest Detected:</strong> Consider applying neem oil.';
       } else if (className.includes('fungus') || className.includes('mold') || className.includes('blight')) {
@@ -393,17 +640,21 @@ async function classifyPest(imageElement) {
       return advice;
     }
     return 'Unable to analyze. Try a clearer photo.';
-  } catch (err) { return 'Analysis error.'; }
+  } catch (err) {
+    return 'Analysis error.';
+  }
 }
 
-// ---------- Farming Assistant (unchanged) ----------
+// ---------- Farming Assistant ----------
 async function wikiAnswer(question) {
   try {
     const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`;
     const resp = await fetch(url);
     const data = await resp.json();
     return data.extract ? data.extract.substring(0, 550) : 'No info found.';
-  } catch (e) { return 'Connection error.'; }
+  } catch (e) {
+    return 'Connection error.';
+  }
 }
 
 // ---------- Page navigation ----------
@@ -414,6 +665,7 @@ function showPage(pageId) {
   document.querySelector(`.nav-links li[data-page="${pageId}"]`).classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
+
   switch (pageId) {
     case 'forum': loadForum(); break;
     case 'records': loadRecords(); break;
@@ -422,6 +674,7 @@ function showPage(pageId) {
     case 'messages': loadMessages(); break;
     case 'tutorials': loadTutorials(); break;
     case 'profile': loadProfile(); break;
+    case 'calendar': loadCalendar(); break;
     case 'dashboard': loadDashboardStats(); break;
   }
 }
@@ -441,7 +694,8 @@ function closeModal() {
 }
 
 // ---------- DOM Ready ----------
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
+  // Sidebar toggle
   document.getElementById('hamburgerBtn').addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('open');
     document.getElementById('sidebarOverlay').classList.toggle('active');
@@ -451,10 +705,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('sidebarOverlay').classList.remove('active');
   });
 
+  // Navigation
   document.querySelectorAll('.nav-links li').forEach(li => {
     li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); });
   });
 
+  // Auth modal
   document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
   document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
   document.getElementById('closeModalBtn').addEventListener('click', closeModal);
@@ -481,40 +737,66 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.getElementById('userGreeting').addEventListener('click', logout);
 
+  // Forum
   document.getElementById('postForumBtn').addEventListener('click', () => {
     const c = document.getElementById('forumContent').value.trim();
     if (c) { addForumPost(c); document.getElementById('forumContent').value = ''; }
   });
+
+  // Records
   document.getElementById('addRecordBtn').addEventListener('click', () => {
     const t = document.getElementById('recordTitle').value.trim();
     const d = document.getElementById('recordDetail').value.trim();
     if (t) { addRecord(t, d); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
   });
+
+  // Jobs
   document.getElementById('postJobBtn').addEventListener('click', () => {
     const t = document.getElementById('jobTitle').value.trim();
     const d = document.getElementById('jobDesc').value.trim();
     if (t) { addJob(t, d); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
   });
+
+  // Marketplace
   document.getElementById('addProductBtn').addEventListener('click', () => {
     const n = document.getElementById('productName').value.trim();
     const p = document.getElementById('productPrice').value.trim();
-    if (n && p) { addProduct(n, p); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
+    const cat = document.getElementById('productCategory').value;
+    const img = document.getElementById('productImage').files[0];
+    if (n && p) { addProduct(n, p, cat, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
   });
+
+  document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
+
+  // Messages
   document.getElementById('sendMsgBtn').addEventListener('click', () => {
     const to = document.getElementById('msgTo').value.trim();
     const tx = document.getElementById('msgText').value.trim();
     if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
   });
+
+  // Search
   document.getElementById('doSearchBtn').addEventListener('click', () => {
-    const q = document.getElementById('searchInput').value.trim();
-    if (q) globalSearch(q); else showToast('Enter a search term', true);
+    const term = document.getElementById('searchInput').value.trim();
+    const cat = document.getElementById('searchCategory').value;
+    const from = document.getElementById('searchDateFrom').value;
+    const to = document.getElementById('searchDateTo').value;
+    if (term) globalSearch(term, cat, from, to);
   });
+
+  // Tutorials
   document.getElementById('addVideoBtn').addEventListener('click', () => {
     const t = document.getElementById('videoTitle').value.trim();
     const u = document.getElementById('videoUrl').value.trim();
     const d = document.getElementById('videoDesc').value.trim();
     if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
   });
+
+  // Calendar
+  document.getElementById('addEventBtn').addEventListener('click', addEvent);
+
+  // Yield Calculator
+  document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
 
   // Pest Detection
   document.getElementById('identifyPestBtn').addEventListener('click', async () => {
@@ -544,17 +826,61 @@ document.addEventListener('DOMContentLoaded', function() {
     chat.scrollTop = chat.scrollHeight;
   });
 
-  // Deletion
+  // Global click delegation for dynamic elements
   document.addEventListener('click', async e => {
-    const btn = e.target.closest('.delete-btn');
-    if (!btn) return;
-    if (!currentUser) return showToast('Login to delete', true);
-    const { type, id } = btn.dataset;
-    if (type === 'forum') await deleteForumPost(id);
-    else if (type === 'record') await deleteRecord(id);
-    else if (type === 'job') await deleteJob(id);
-    else if (type === 'product') await deleteProduct(id);
-    else if (type === 'tutorial') await deleteTutorial(id);
+    // Delete buttons
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+      if (!currentUser) return showToast('Login to delete', true);
+      const { type, id } = deleteBtn.dataset;
+      if (type === 'forum') await deleteForumPost(id);
+      else if (type === 'record') await deleteRecord(id);
+      else if (type === 'job') await deleteJob(id);
+      else if (type === 'product') await deleteProduct(id);
+      else if (type === 'tutorial') await deleteTutorial(id);
+      else if (type === 'calendar') await deleteCalendarEvent(id);
+      return;
+    }
+
+    // Like toggle
+    const likeBtn = e.target.closest('.like-btn');
+    if (likeBtn) {
+      const { type, id } = likeBtn.dataset;
+      await toggleLike(type, id);
+      return;
+    }
+
+    // Reply toggle
+    const replyToggle = e.target.closest('.reply-toggle');
+    if (replyToggle) {
+      const postId = replyToggle.dataset.post;
+      const replyDiv = replyToggle.closest('.forum-post').nextElementSibling;
+      replyDiv.style.display = replyDiv.style.display === 'none' ? 'block' : 'none';
+      loadReplies(postId, replyDiv);
+      return;
+    }
+
+    // Send reply
+    const sendReply = e.target.closest('.send-reply');
+    if (sendReply) {
+      const postId = sendReply.dataset.post;
+      const input = sendReply.previousElementSibling;
+      const content = input.value.trim();
+      if (content) {
+        await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content });
+        const replyDiv = sendReply.closest('.reply-section');
+        loadReplies(postId, replyDiv);
+      }
+      return;
+    }
+
+    // Apply to job
+    const applyBtn = e.target.closest('.apply-btn');
+    if (applyBtn) {
+      const jobId = applyBtn.dataset.job;
+      await applyToJob(jobId);
+      return;
+    }
   });
 
   // Init
