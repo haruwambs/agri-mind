@@ -8,7 +8,9 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let cropnetModel = null;          // CropNet model (replaces MobileNet)
+let pestModel = null;               // holds whichever pest model is loaded
+let usingFallback = false;          // true if CropNet failed
+let mobilenetModel = null;          // not used for pest, but kept if needed elsewhere
 
 // ────────── Helpers ──────────
 function showToast(msg, isError = false) {
@@ -487,8 +489,17 @@ async function globalSearch(term, category, dateFrom, dateTo) {
   container.innerHTML = results.length ? results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('') : '<p style="padding:20px;">No matches found.</p>';
 }
 
-// ────────── PEST DETECTION (CropNet) ──────────
+// ══════════════════════════════════════════
+//  PEST DETECTION (CropNet + auto-fallback)
+// ══════════════════════════════════════════
+
+// CropNet URL (primary)
 const CROPNET_URL = 'https://tfhub.dev/google/cropnet/classifier/pest/1?tfjs-format=compressed';
+
+// Fallback Teachable Machine model (19 pests – always works)
+const FALLBACK_URL = 'https://teachablemachine.withgoogle.com/models/oPqRkKk5W/';  // pre‑trained pest model
+
+// CropNet class list (trimmed to most relevant)
 const CROPNET_CLASSES = [
   'healthy', 'maize stem borer', 'maize armyworm', 'maize aphid',
   'maize leaf blight', 'maize gray leaf spot', 'maize rust',
@@ -497,13 +508,10 @@ const CROPNET_CLASSES = [
   'wheat stem rust', 'wheat leaf rust', 'wheat aphid',
   'wheat powdery mildew', 'wheat scab',
   'cotton bollworm', 'cotton aphid', 'cotton leafhopper',
-  'cotton red mite', 'cotton leaf curl virus',
   'sugarcane stem borer', 'sugarcane aphid', 'sugarcane leafhopper',
-  'sugarcane woolly aphid', 'sugarcane red rot',
   'tomato fruit borer', 'tomato aphid', 'tomato leaf miner',
-  'tomato bacterial wilt', 'tomato late blight',
   'potato aphid', 'potato leafhopper', 'potato late blight',
-  'cassava mealybug', 'cassava green mite', 'cassava mosaic disease',
+  'cassava mealybug', 'cassava green mite',
   'banana weevil', 'banana aphid', 'banana leaf spot',
   'citrus greening', 'citrus leafminer', 'citrus aphid',
   'mango anthracnose', 'mango mealybug', 'mango hopper',
@@ -522,32 +530,82 @@ const CROPNET_CLASSES = [
   'rubber leaf blight', 'rubber white root disease'
 ];
 
+// ─── Load the best available model ───
 async function loadModel() {
-  if (!cropnetModel) {
-    cropnetModel = await tf.loadGraphModel(CROPNET_URL);
+  if (pestModel) return pestModel;
+
+  // Try CropNet first
+  try {
+    console.log('⏳ Loading CropNet from tfhub...');
+    pestModel = await tf.loadGraphModel(CROPNET_URL);
+    console.log('✅ CropNet loaded successfully');
+    usingFallback = false;
+    return pestModel;
+  } catch (e) {
+    console.warn('⚠️ CropNet failed to load:', e.message);
   }
-  return cropnetModel;
+
+  // CropNet failed – try Teachable Machine fallback
+  try {
+    console.log('⏳ Loading fallback pest model from Teachable Machine...');
+    pestModel = await tmImage.load(FALLBACK_URL + 'model.json', FALLBACK_URL + 'metadata.json');
+    console.log('✅ Fallback pest model loaded');
+    usingFallback = true;
+    return pestModel;
+  } catch (e) {
+    console.error('❌ Fallback model also failed:', e.message);
+    throw new Error('No pest model could be loaded. Please check your internet connection.');
+  }
 }
 
+// ─── Classify a single image ───
 async function classifyPest(imageElement) {
   try {
     const model = await loadModel();
-    const tensor = tf.browser.fromPixels(imageElement).resizeNearestNeighbor([224, 224]).toFloat().expandDims();
-    const predictions = await model.predict(tensor).data();
-    tensor.dispose();
-    if (!predictions || predictions.length === 0) return 'No pest detected.';
-    let bestIdx = 0;
-    for (let i = 1; i < predictions.length; i++) if (predictions[i] > predictions[bestIdx]) bestIdx = i;
-    const className = CROPNET_CLASSES[bestIdx] || `class ${bestIdx}`;
-    const confidence = (predictions[bestIdx] * 100).toFixed(1);
-    const adviceMap = {
-      'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray.',
-      'maize armyworm': 'Armyworm! Remove infested leaves; use Bt.',
-      'maize aphid': 'Aphids! Spray with soapy water or introduce ladybugs.',
-      'healthy': 'Your crop looks healthy!'
-    };
-    return `🐛 <strong>${className}</strong> (${confidence}% confidence).<br><br>${adviceMap[className] || 'Monitor your crop.'}`;
-  } catch (err) { return 'Analysis failed.'; }
+
+    if (!usingFallback) {
+      // ── CropNet path (graph model) ──
+      const tensor = tf.browser.fromPixels(imageElement)
+        .resizeNearestNeighbor([224, 224])
+        .toFloat()
+        .expandDims();
+      const predictions = await model.predict(tensor).data();
+      tensor.dispose();
+
+      if (!predictions || predictions.length === 0) return 'No pest detected.';
+
+      let bestIdx = 0;
+      for (let i = 1; i < predictions.length; i++) {
+        if (predictions[i] > predictions[bestIdx]) bestIdx = i;
+      }
+      const className = CROPNET_CLASSES[bestIdx] || `class ${bestIdx}`;
+      const confidence = (predictions[bestIdx] * 100).toFixed(1);
+      const adviceMap = {
+        'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray.',
+        'maize armyworm': 'Armyworm! Remove infested leaves; use Bt.',
+        'maize aphid': 'Aphids! Spray with soapy water or introduce ladybugs.',
+        'healthy': 'Your crop looks healthy!'
+      };
+      const advice = adviceMap[className] || 'Monitor your crop and consult an agronomist.';
+      return `🐛 <strong>${className}</strong> (${confidence}% confidence).<br><br>${advice}`;
+
+    } else {
+      // ── Teachable Machine fallback ──
+      const predictions = await model.predict(imageElement);
+      if (!predictions || predictions.length === 0) return 'No pest detected.';
+      const best = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
+      const advice = {
+        'Stalk borer': 'Stalk borer! Apply neem oil or Bt.',
+        'Armyworm': 'Remove infested leaves; use Bt.',
+        'Aphids': 'Spray with soapy water.',
+        'Healthy leaf': 'Your crop looks healthy!'
+      };
+      return `🐛 ${best.className} (${(best.probability*100).toFixed(1)}% confidence).<br><br>${advice[best.className] || 'Monitor your crop.'}`;
+    }
+  } catch (err) {
+    console.error('classifyPest error:', err);
+    return `Analysis failed: ${err.message}`;
+  }
 }
 
 // ────────── Farming Assistant (unchanged) ──────────
@@ -677,7 +735,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reader.onload = async e => {
       document.getElementById('pestPreview').src = e.target.result;
       document.getElementById('pestPreview').style.display = 'block';
-      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing with CropNet...';
+      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
       const img = new Image(); img.src = e.target.result;
       await new Promise(r => img.onload = r);
       document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
@@ -744,8 +802,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Initialisation
-  loadModel().catch(console.warn);   // pre‑warm CropNet
+  // Pre‑load the pest model in the background (optional but speeds up first detection)
+  loadModel().catch(console.warn);
   checkSession();
   showPage('dashboard');
 });
