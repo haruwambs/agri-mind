@@ -33,6 +33,7 @@
             <li data-page="messages"><a><i class="fas fa-paper-plane"></i> Messages</a></li>
             <li data-page="search"><a><i class="fas fa-search"></i> Search</a></li>
             <li data-page="tutorials"><a><i class="fas fa-video"></i> Tutorials & Videos</a></li>
+            <li data-page="profile"><a><i class="fas fa-user-circle"></i> Profile</a></li>
             <li data-page="docs"><a><i class="fas fa-book"></i> Documentation</a></li>
             <li data-page="about"><a><i class="fas fa-leaf"></i> About Us</a></li>
         </ul>
@@ -195,6 +196,16 @@
             </div>
         </div>
 
+        <!-- PROFILE -->
+        <div id="profile" class="page">
+            <div class="card">
+                <h2><i class="fas fa-user-circle"></i> Your Profile</h2>
+                <div id="profileContent" style="margin-top: 20px;">
+                    <p>Please log in to see your profile.</p>
+                </div>
+            </div>
+        </div>
+
         <!-- DOCUMENTATION -->
         <div id="docs" class="page">
             <div class="card">
@@ -310,7 +321,7 @@
     </main>
 </div>
 
-<!-- Login Modal (updated for Supabase) -->
+<!-- Login Modal (email/password/display name) -->
 <div id="authModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:1500;">
     <div style="background:#0f0f0f; border-radius:48px; padding:32px; max-width:400px; width:90%; border:1px solid #10B981;">
         <h3 id="modalTitle">Log in</h3>
