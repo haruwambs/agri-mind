@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//  SUPABASE CREDENTIALS (already filled in)
+//  YOUR SUPABASE CREDENTIALS (already filled)
 // ═══════════════════════════════════════════
 const SUPABASE_URL = 'https://injbsydeejivijbeatep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluamJzeWRlZWppdmlqYmVhdGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4MzEsImV4cCI6MjA5NTMxMDgzMX0.pc-QfLVYUHk5Ky3DClI0b4ThXjLHsUsDcT8qlUOSuKA';
@@ -363,6 +363,35 @@ async function globalSearch(term) {
   container.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r)}</div>`).join('');
 }
 
+// ---------- Profile ----------
+async function loadProfile() {
+  if (!currentUser) {
+    document.getElementById('profileContent').innerHTML = '<p>Please log in to see your profile.</p>';
+    return;
+  }
+  const { data: profile, error } = await db
+    .from('profiles')
+    .select('created_at')
+    .eq('id', currentUser.id)
+    .single();
+
+  if (error || !profile) {
+    document.getElementById('profileContent').innerHTML = '<p>Could not load profile.</p>';
+    return;
+  }
+
+  document.getElementById('profileContent').innerHTML = `
+    <div style="background:#111; border-radius:20px; padding:20px; margin-bottom:15px;">
+      <p><strong>Display Name:</strong> ${escapeHtml(currentUser.displayName)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(currentUser.email)}</p>
+      <p><strong>Member since:</strong> ${new Date(profile.created_at).toLocaleDateString()}</p>
+    </div>
+    <button class="btn-outline" onclick="logout()">
+      <i class="fas fa-sign-out-alt"></i> Log out
+    </button>
+  `;
+}
+
 // ---------- Pest Detection (unchanged) ----------
 async function loadModel() {
   if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); }
@@ -403,18 +432,23 @@ async function wikiAnswer(question) {
 // ---------- Page navigation ----------
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-  document.getElementById(pageId).classList.add('active-page');
+  const pageElement = document.getElementById(pageId);
+  if (pageElement) pageElement.classList.add('active-page');
   document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
-  document.querySelector(`.nav-links li[data-page="${pageId}"]`).classList.add('active');
+  const activeLink = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
+  if (activeLink) activeLink.classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
-  if (pageId === 'forum') loadForum();
-  else if (pageId === 'records') loadRecords();
-  else if (pageId === 'jobs') loadJobs();
-  else if (pageId === 'market') loadMarket();
-  else if (pageId === 'messages') loadMessages();
-  else if (pageId === 'tutorials') loadTutorials();
-  else if (pageId === 'dashboard') loadDashboardStats();
+  switch (pageId) {
+    case 'forum': loadForum(); break;
+    case 'records': loadRecords(); break;
+    case 'jobs': loadJobs(); break;
+    case 'market': loadMarket(); break;
+    case 'messages': loadMessages(); break;
+    case 'tutorials': loadTutorials(); break;
+    case 'profile': loadProfile(); break;
+    case 'dashboard': loadDashboardStats(); break;
+  }
 }
 
 // ---------- Auth modal ----------
