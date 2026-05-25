@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
-    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js" defer></script>
 </head>
@@ -31,6 +30,8 @@
             <li data-page="jobs"><a><i class="fas fa-briefcase"></i> Jobs Listings</a></li>
             <li data-page="market"><a><i class="fas fa-store"></i> Marketplace</a></li>
             <li data-page="messages"><a><i class="fas fa-paper-plane"></i> Messages</a></li>
+            <li data-page="calendar"><a><i class="fas fa-calendar-alt"></i> Crop Calendar</a></li>
+            <li data-page="calculator"><a><i class="fas fa-calculator"></i> Yield Calculator</a></li>
             <li data-page="search"><a><i class="fas fa-search"></i> Search</a></li>
             <li data-page="tutorials"><a><i class="fas fa-video"></i> Tutorials & Videos</a></li>
             <li data-page="profile"><a><i class="fas fa-user-circle"></i> Profile</a></li>
@@ -47,6 +48,7 @@
                 <button class="btn-outline" id="signupBtn">Sign up</button>
             </div>
             <div id="userGreeting" class="user-greeting" style="display: none;"></div>
+            <div class="theme-toggle" id="themeToggle"><i class="fas fa-adjust"></i></div>
         </div>
 
         <!-- DASHBOARD -->
@@ -54,6 +56,10 @@
             <div class="card">
                 <h2><i class="fas fa-charging-station"></i> Smart Farming Dashboard</h2>
                 <p style="margin-top: 8px;">Your complete agricultural companion - pest identification, community knowledge, and farm management tools.</p>
+                <div class="card" style="background:#0a0a0a; margin-top:20px;">
+                    <h4><i class="fas fa-cloud-sun"></i> Weather</h4>
+                    <div id="weatherWidget">Loading weather...</div>
+                </div>
                 <div class="grid-2cols" style="margin-top: 28px;">
                     <div class="card" style="background:#0a0a0a; text-align:center;">
                         <i class="fas fa-clipboard-list" style="font-size:28px; color:#10B981;"></i> 
@@ -155,7 +161,27 @@
                 <p>Buy and sell agricultural products directly with other farmers in your community.</p>
                 <input id="productName" placeholder="Product Name">
                 <input id="productPrice" placeholder="Price (in your local currency)">
+                <select id="productCategory" style="background:var(--input-bg); border:1px solid var(--border); padding:12px 18px; border-radius:34px; color:var(--text-color); width:100%; margin:8px 0 16px; font-family:'Inter',sans-serif;">
+                    <option value="General">General</option>
+                    <option value="Seeds">Seeds</option>
+                    <option value="Tools">Tools</option>
+                    <option value="Produce">Produce</option>
+                    <option value="Livestock">Livestock</option>
+                    <option value="Other">Other</option>
+                </select>
+                <input type="file" id="productImage" accept="image/*" style="margin-bottom:16px;">
                 <button id="addProductBtn" class="btn-primary">List Product</button>
+                <div>
+                    <label>Filter by category:</label>
+                    <select id="marketCategoryFilter" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:auto; margin:8px 0;">
+                        <option value="All">All</option>
+                        <option value="Seeds">Seeds</option>
+                        <option value="Tools">Tools</option>
+                        <option value="Produce">Produce</option>
+                        <option value="Livestock">Livestock</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
                 <div id="marketList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -172,12 +198,55 @@
             </div>
         </div>
 
+        <!-- CROP CALENDAR -->
+        <div id="calendar" class="page">
+            <div class="card">
+                <h2><i class="fas fa-calendar-alt"></i> Crop Calendar</h2>
+                <p>Plan your planting, harvesting, and other important farm events.</p>
+                <input type="text" id="eventTitle" placeholder="Event title">
+                <input type="date" id="eventDate">
+                <textarea id="eventNotes" placeholder="Notes (optional)"></textarea>
+                <button id="addEventBtn" class="btn-primary">Add Event</button>
+                <div id="calendarList" style="margin-top:24px;"></div>
+            </div>
+        </div>
+
+        <!-- YIELD CALCULATOR -->
+        <div id="calculator" class="page">
+            <div class="card">
+                <h2><i class="fas fa-calculator"></i> Yield Calculator</h2>
+                <p>Estimate your crop yield based on area and crop type.</p>
+                <label>Crop: 
+                    <select id="cropType" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:100%; margin:8px 0;">
+                        <option value="maize">Maize</option>
+                        <option value="rice">Rice</option>
+                        <option value="wheat">Wheat</option>
+                        <option value="beans">Beans</option>
+                    </select>
+                </label>
+                <label>Area (hectares): 
+                    <input type="number" id="areaInput" placeholder="e.g. 2.5" step="0.1" min="0">
+                </label>
+                <button id="calcYieldBtn" class="btn-primary">Calculate Yield</button>
+                <div id="yieldResult" style="margin-top:12px; font-weight:bold;"></div>
+            </div>
+        </div>
+
         <!-- SEARCH -->
         <div id="search" class="page">
             <div class="card">
                 <h2><i class="fas fa-search"></i> Search Everything</h2>
                 <p>Find information across forums, records, jobs, and tutorials all in one place.</p>
                 <input id="searchInput" placeholder="Search all content...">
+                <select id="searchCategory" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:auto; margin:8px 0;">
+                    <option value="all">All Categories</option>
+                    <option value="forum">Forum</option>
+                    <option value="records">Records</option>
+                    <option value="jobs">Jobs</option>
+                    <option value="tutorials">Tutorials</option>
+                </select>
+                <input type="date" id="searchDateFrom" style="width:auto; display:inline; margin:0 8px;"> to
+                <input type="date" id="searchDateTo" style="width:auto; display:inline; margin:0 8px;">
                 <button id="doSearchBtn" class="btn-primary">Search</button>
                 <div id="searchResults" style="margin-top:24px;"></div>
             </div>
@@ -216,6 +285,8 @@
                             <h3 id="profileName" style="margin:0;">...</h3>
                             <p id="profileEmail" style="color:#aaa; margin:5px 0;">...</p>
                             <p id="profileSince" style="color:#aaa; margin:5px 0;">Member since: ...</p>
+                            <button id="followBtn" class="btn-outline">Follow</button>
+                            <span id="followerCount">0 followers</span>
                         </div>
                     </div>
                     <hr style="border-color:#2c2c2c; margin:20px 0;">
@@ -365,7 +436,7 @@
     </main>
 </div>
 
-<!-- Login Modal (email/password/display name) -->
+<!-- Auth Modal -->
 <div id="authModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:1500;">
     <div style="background:#0f0f0f; border-radius:48px; padding:32px; max-width:400px; width:90%; border:1px solid #10B981;">
         <h3 id="modalTitle">Log in</h3>
