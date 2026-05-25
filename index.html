@@ -6,10 +6,12 @@
     <title>AgriMind | Smart Farming Platform</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
-    <script src="/app.js" defer></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js" defer></script>
 </head>
 <body>
 <div class="app-container">
@@ -197,6 +199,7 @@
         <div id="docs" class="page">
             <div class="card">
                 <h2><i class="fas fa-book-open"></i> Agricultural Documentation & Guides</h2>
+                
                 <div class="doc-section">
                     <h3><i class="fas fa-seedling"></i> Getting Started with AgriMind</h3>
                     <p>AgriMind is designed to be your complete farming companion. Here's how to make the most of each feature:</p>
@@ -208,6 +211,7 @@
                         <li><strong>Records:</strong> Maintain detailed logs of your farming activities</li>
                     </ul>
                 </div>
+
                 <div class="doc-section">
                     <h3><i class="fas fa-leaf"></i> Organic Farming Best Practices</h3>
                     <ul>
@@ -218,6 +222,7 @@
                         <li><strong>Soil Health:</strong> Test soil regularly and maintain proper pH levels</li>
                     </ul>
                 </div>
+
                 <div class="doc-section">
                     <h3><i class="fas fa-bug"></i> Common Pest Management Guide</h3>
                     <ul>
@@ -228,6 +233,7 @@
                         <li><strong>Bacterial Blight:</strong> Remove infected plants, practice crop rotation</li>
                     </ul>
                 </div>
+
                 <div class="doc-section">
                     <h3><i class="fas fa-cloud-sun-rain"></i> Seasonal Farming Calendar</h3>
                     <ul>
@@ -238,6 +244,7 @@
                         <li><strong>Post-Harvest:</strong> Soil regeneration, cover cropping, planning for next season</li>
                     </ul>
                 </div>
+
                 <div class="doc-section">
                     <h3><i class="fas fa-store-alt"></i> Marketplace Guidelines</h3>
                     <ul>
@@ -266,6 +273,7 @@
                     and process data locally on your device, ensuring privacy and accessibility even in areas 
                     with limited internet connectivity.
                 </p>
+                
                 <div class="contact-card">
                     <h3 style="color: white;"><i class="fas fa-user-circle"></i> Developer Information</h3>
                     <div class="contact-info">
@@ -284,6 +292,7 @@
                         </p>
                     </div>
                 </div>
+
                 <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;">
                     <h3 style="color: #10B981; margin-bottom: 12px;">
                         <i class="fas fa-heart"></i> Our Commitment
@@ -301,7 +310,7 @@
     </main>
 </div>
 
-<!-- Auth Modal -->
+<!-- Login Modal (updated for Supabase) -->
 <div id="authModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:1500;">
     <div style="background:#0f0f0f; border-radius:48px; padding:32px; max-width:400px; width:90%; border:1px solid #10B981;">
         <h3 id="modalTitle">Log in</h3>
