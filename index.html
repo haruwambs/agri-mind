@@ -201,7 +201,51 @@
             <div class="card">
                 <h2><i class="fas fa-user-circle"></i> Your Profile</h2>
                 <div id="profileContent" style="margin-top: 20px;">
-                    <p>Please log in to see your profile.</p>
+                    <div style="display:flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                        <div style="position: relative;">
+                            <img id="profileAvatar" src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" 
+                                 style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981;">
+                            <label for="avatarUpload" style="position: absolute; bottom: 0; right: 0; background: #10B981; color: black; 
+                                   border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; 
+                                   cursor: pointer; font-size: 16px;">
+                                <i class="fas fa-camera"></i>
+                            </label>
+                            <input type="file" id="avatarUpload" accept="image/*" style="display: none;">
+                        </div>
+                        <div>
+                            <h3 id="profileName" style="margin:0;">...</h3>
+                            <p id="profileEmail" style="color:#aaa; margin:5px 0;">...</p>
+                            <p id="profileSince" style="color:#aaa; margin:5px 0;">Member since: ...</p>
+                        </div>
+                    </div>
+                    <hr style="border-color:#2c2c2c; margin:20px 0;">
+                    <h4>Your Contributions</h4>
+                    <div class="grid-2cols" style="margin-top: 10px;">
+                        <div class="card" style="background:#0a0a0a; text-align:center;">
+                            <i class="fas fa-comments" style="color:#10B981;"></i> <strong>Forum Posts</strong><br>
+                            <span id="profileForumCount">0</span>
+                        </div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;">
+                            <i class="fas fa-database" style="color:#10B981;"></i> <strong>Farm Records</strong><br>
+                            <span id="profileRecordsCount">0</span>
+                        </div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;">
+                            <i class="fas fa-briefcase" style="color:#10B981;"></i> <strong>Jobs Posted</strong><br>
+                            <span id="profileJobsCount">0</span>
+                        </div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;">
+                            <i class="fas fa-store" style="color:#10B981;"></i> <strong>Products Listed</strong><br>
+                            <span id="profileProductsCount">0</span>
+                        </div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;">
+                            <i class="fas fa-video" style="color:#10B981;"></i> <strong>Tutorials Shared</strong><br>
+                            <span id="profileTutorialsCount">0</span>
+                        </div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;">
+                            <i class="fas fa-paper-plane" style="color:#10B981;"></i> <strong>Messages</strong><br>
+                            <span id="profileMessagesCount">0</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
