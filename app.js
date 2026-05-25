@@ -1,7 +1,18 @@
-let currentUser = null;
+// ═══════════════════════════════════════════
+//  SUPABASE CREDENTIALS (already filled in)
+// ═══════════════════════════════════════════
+const SUPABASE_URL = 'https://injbsydeejivijbeatep.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluamJzeWRlZWppdmlqYmVhdGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4MzEsImV4cCI6MjA5NTMxMDgzMX0.pc-QfLVYUHk5Ky3DClI0b4ThXjLHsUsDcT8qlUOSuKA';
+
+// Initialize Supabase client
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Global state
+let currentUser = null;          // { id, email, displayName }
 let mobilenetModel = null;
 
-// ---------- Helpers ----------
+// ---------- UI helpers ----------
 function showToast(msg, isError = false) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
@@ -21,11 +32,20 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- Auth ----------
+// ---------- Auth (Supabase email/password) ----------
 async function checkSession() {
-  const res = await fetch('/api/auth/session');
-  if (res.ok) {
-    currentUser = await res.json();
+  const { data: { session } } = await db.auth.getSession();
+  if (session && session.user) {
+    const { data: profile } = await db
+      .from('profiles')
+      .select('display_name')
+      .eq('id', session.user.id)
+      .single();
+    currentUser = {
+      id: session.user.id,
+      email: session.user.email,
+      displayName: profile?.display_name || session.user.email
+    };
   } else {
     currentUser = null;
   }
@@ -46,227 +66,338 @@ function updateAuthUI() {
   }
 }
 
-async function login(email, password) {
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password })
-  });
-  if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-  currentUser = await res.json();
-  updateAuthUI();
-  showToast(`Welcome, ${currentUser.displayName}!`);
-  loadDashboardStats();
+async function signUp(email, password, displayName) {
+  const { data, error } = await db.auth.signUp({ email, password });
+  if (error) throw new Error(error.message);
+  await db.from('profiles').insert({ id: data.user.id, display_name: displayName });
+  await checkSession();
+  showToast(`Welcome, ${displayName}!`);
 }
 
-async function register(email, password, displayName) {
-  const res = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName })
-  });
-  if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-  // Auto‑login after register
-  return login(email, password);
+async function login(email, password) {
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+  await checkSession();
+  showToast(`Welcome back, ${currentUser.displayName}!`);
 }
 
 async function logout() {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  await db.auth.signOut();
   currentUser = null;
   updateAuthUI();
   showToast('Logged out');
 }
 
-// ---------- Dashboard ----------
+db.auth.onAuthStateChange((event, session) => { checkSession(); });
+
+// ---------- Dashboard stats ----------
 async function loadDashboardStats() {
   if (!currentUser) return;
-  const [f, r, j, t] = await Promise.all([
-    fetch('/api/forum'), fetch('/api/records'),
-    fetch('/api/jobs'), fetch('/api/tutorials')
+  const [
+    { count: forumCount },
+    { count: recordsCount },
+    { count: jobsCount },
+    { count: tutsCount }
+  ] = await Promise.all([
+    db.from('forum_posts').select('*', { count: 'exact', head: true }),
+    db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+    db.from('job_listings').select('*', { count: 'exact', head: true }),
+    db.from('tutorials').select('*', { count: 'exact', head: true })
   ]);
-  const fp = await f.json(), rc = await r.json(), jb = await j.json(), tu = await t.json();
-  document.getElementById('statRecords').textContent = rc.length;
-  document.getElementById('statJobs').textContent = jb.length;
-  document.getElementById('statTuts').textContent = tu.length;
-  document.getElementById('statForum').textContent = fp.length;
+  document.getElementById('statRecords').textContent = recordsCount;
+  document.getElementById('statJobs').textContent = jobsCount;
+  document.getElementById('statTuts').textContent = tutsCount;
+  document.getElementById('statForum').textContent = forumCount;
 }
 
 // ---------- Forum ----------
 async function loadForum() {
-  const res = await fetch('/api/forum');
-  const posts = await res.json();
-  const c = document.getElementById('forumList');
-  if (!posts.length) { c.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>'; return; }
-  c.innerHTML = posts.map(p => `
+  const { data: posts } = await db
+    .from('forum_posts')
+    .select('id, content, created_at, user_id, profiles!inner(display_name)')
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('forumList');
+  if (!posts || posts.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
+    return;
+  }
+  container.innerHTML = posts.map(p => `
     <div class="forum-post">
-      <strong>${escapeHtml(p.author)}</strong> <small>${new Date(p.created_at).toLocaleString()}</small>
+      <strong>${escapeHtml(p.profiles.display_name)}</strong>
+      <small>${new Date(p.created_at).toLocaleString()}</small>
       <p>${escapeHtml(p.content)}</p>
-      <button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>`).join('');
+      ${currentUser && currentUser.id === p.user_id ? `
+        <button class="delete-btn" data-type="forum" data-id="${p.id}">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      ` : ''}
+    </div>
+  `).join('');
 }
 
 async function addForumPost(content) {
   if (!currentUser) return showToast('Please login', true);
-  await fetch('/api/forum', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
-  loadForum(); loadDashboardStats();
+  await db.from('forum_posts').insert({ user_id: currentUser.id, content });
+  loadForum();
+  loadDashboardStats();
 }
 
 async function deleteForumPost(id) {
-  await fetch('/api/forum?id=' + id, { method: 'DELETE' });
-  loadForum(); loadDashboardStats();
+  await db.from('forum_posts').delete().eq('id', id);
+  loadForum();
+  loadDashboardStats();
 }
 
-// ---------- Records ----------
+// ---------- Farm Records ----------
 async function loadRecords() {
-  const res = await fetch('/api/records');
-  const records = await res.json();
-  const c = document.getElementById('recordsList');
-  if (!records.length) { c.innerHTML = '<p style="text-align:center;">No farm records yet.</p>'; return; }
-  c.innerHTML = records.map(r => `
+  if (!currentUser) return;
+  const { data: records } = await db
+    .from('farm_records')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('recordsList');
+  if (!records || records.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
+    return;
+  }
+  container.innerHTML = records.map(r => `
     <div class="record-item">
       <strong>${escapeHtml(r.title)}</strong>
       <p>${escapeHtml(r.detail)}</p>
       <small>${new Date(r.created_at).toLocaleString()}</small>
-      <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>`).join('');
+      <button class="delete-btn" data-type="record" data-id="${r.id}">
+        <i class="fas fa-trash-alt"></i>
+      </button>
+    </div>
+  `).join('');
 }
 
 async function addRecord(title, detail) {
-  await fetch('/api/records', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, detail }) });
-  loadRecords(); loadDashboardStats();
+  if (!currentUser) return showToast('Please login', true);
+  await db.from('farm_records').insert({ user_id: currentUser.id, title, detail });
+  loadRecords();
+  loadDashboardStats();
 }
 
 async function deleteRecord(id) {
-  await fetch('/api/records?id=' + id, { method: 'DELETE' });
-  loadRecords(); loadDashboardStats();
+  await db.from('farm_records').delete().eq('id', id);
+  loadRecords();
+  loadDashboardStats();
 }
 
 // ---------- Jobs ----------
 async function loadJobs() {
-  const res = await fetch('/api/jobs');
-  const jobs = await res.json();
-  const c = document.getElementById('jobsList');
-  if (!jobs.length) { c.innerHTML = '<p style="text-align:center;">No job listings available.</p>'; return; }
-  c.innerHTML = jobs.map(j => `
+  const { data: jobs } = await db
+    .from('job_listings')
+    .select('id, title, description, created_at, user_id, profiles!inner(display_name)')
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('jobsList');
+  if (!jobs || jobs.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
+    return;
+  }
+  container.innerHTML = jobs.map(j => `
     <div class="job-item">
       <strong>${escapeHtml(j.title)}</strong>
       <p>${escapeHtml(j.description)}</p>
-      <small>Posted by ${escapeHtml(j.author)}</small>
-      <button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>`).join('');
+      <small>Posted by ${escapeHtml(j.profiles.display_name)}</small>
+      ${currentUser && currentUser.id === j.user_id ? `
+        <button class="delete-btn" data-type="job" data-id="${j.id}">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      ` : ''}
+    </div>
+  `).join('');
 }
 
 async function addJob(title, description) {
-  await fetch('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description }) });
-  loadJobs(); loadDashboardStats();
+  if (!currentUser) return showToast('Please login', true);
+  await db.from('job_listings').insert({ user_id: currentUser.id, title, description });
+  loadJobs();
+  loadDashboardStats();
 }
 
 async function deleteJob(id) {
-  await fetch('/api/jobs?id=' + id, { method: 'DELETE' });
-  loadJobs(); loadDashboardStats();
+  await db.from('job_listings').delete().eq('id', id);
+  loadJobs();
+  loadDashboardStats();
 }
 
-// ---------- Market ----------
+// ---------- Marketplace ----------
 async function loadMarket() {
-  const res = await fetch('/api/market');
-  const products = await res.json();
-  const c = document.getElementById('marketList');
-  if (!products.length) { c.innerHTML = '<p style="text-align:center;">No products listed.</p>'; return; }
-  c.innerHTML = products.map(p => `
+  const { data: products } = await db
+    .from('products')
+    .select('id, name, price, created_at, user_id, profiles!inner(display_name)')
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('marketList');
+  if (!products || products.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
+    return;
+  }
+  container.innerHTML = products.map(p => `
     <div class="product-item">
       <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
-      <br><small>Seller: ${escapeHtml(p.seller)}</small>
-      <button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>`).join('');
+      <br><small>Seller: ${escapeHtml(p.profiles.display_name)}</small>
+      ${currentUser && currentUser.id === p.user_id ? `
+        <button class="delete-btn" data-type="product" data-id="${p.id}">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      ` : ''}
+    </div>
+  `).join('');
 }
 
 async function addProduct(name, price) {
-  await fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, price }) });
+  if (!currentUser) return showToast('Please login', true);
+  await db.from('products').insert({ user_id: currentUser.id, name, price });
   loadMarket();
 }
 
 async function deleteProduct(id) {
-  await fetch('/api/market?id=' + id, { method: 'DELETE' });
+  await db.from('products').delete().eq('id', id);
   loadMarket();
 }
 
 // ---------- Messages ----------
 async function loadMessages() {
   if (!currentUser) return;
-  const res = await fetch('/api/messages');
-  const msgs = await res.json();
-  const c = document.getElementById('messagesList');
-  if (!msgs.length) { c.innerHTML = '<p>Your messages will appear here.</p>'; return; }
-  c.innerHTML = msgs.map(m => `
+  const { data: msgs } = await db
+    .from('messages')
+    .select('id, text, created_at, from_user_id, to_user_id, from:from_user_id(display_name), to:to_user_id(display_name)')
+    .or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('messagesList');
+  if (!msgs || msgs.length === 0) {
+    container.innerHTML = '<p>Your messages will appear here.</p>';
+    return;
+  }
+  container.innerHTML = msgs.map(m => `
     <div class="msg-item">
-      <strong>${escapeHtml(m.from_name)}</strong> → ${escapeHtml(m.to_name)}: ${escapeHtml(m.text)}
+      <strong>${escapeHtml(m.from.display_name)}</strong> → ${escapeHtml(m.to.display_name)}: ${escapeHtml(m.text)}
       <br><small>${new Date(m.created_at).toLocaleString()}</small>
-    </div>`).join('');
+    </div>
+  `).join('');
 }
 
 async function sendMessage(toEmail, text) {
-  await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toEmail, text }) });
+  if (!currentUser) return showToast('Please login', true);
+  const { data: users } = await db.from('profiles').select('id').eq('email', toEmail).limit(1);
+  if (!users || users.length === 0) return showToast('User not found', true);
+  await db.from('messages').insert({ from_user_id: currentUser.id, to_user_id: users[0].id, text });
   loadMessages();
 }
 
 // ---------- Tutorials ----------
 async function loadTutorials() {
-  const res = await fetch('/api/tutorials');
-  const tutorials = await res.json();
-  const c = document.getElementById('videosList');
-  if (!tutorials.length) { c.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>'; return; }
-  c.innerHTML = tutorials.map(t => `
+  const { data: tutorials } = await db
+    .from('tutorials')
+    .select('id, title, url, description, created_at, user_id, profiles!inner(display_name)')
+    .order('created_at', { ascending: false });
+
+  const container = document.getElementById('videosList');
+  if (!tutorials || tutorials.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
+    return;
+  }
+  container.innerHTML = tutorials.map(t => `
     <div class="tutorial-item">
       <i class="fas fa-play-circle" style="color:#10B981;"></i> 
       <strong>${escapeHtml(t.title)}</strong>
       <br><a href="${escapeHtml(t.url)}" target="_blank" style="color:#10B981;">Watch Tutorial →</a>
       <p>${escapeHtml(t.description)}</p>
-      <small>Shared by ${escapeHtml(t.author)}</small>
-      <button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>`).join('');
+      <small>Shared by ${escapeHtml(t.profiles.display_name)}</small>
+      ${currentUser && currentUser.id === t.user_id ? `
+        <button class="delete-btn" data-type="tutorial" data-id="${t.id}">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      ` : ''}
+    </div>
+  `).join('');
 }
 
 async function addTutorial(title, url, description) {
-  await fetch('/api/tutorials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, url, description }) });
-  loadTutorials(); loadDashboardStats();
+  if (!currentUser) return showToast('Please login', true);
+  await db.from('tutorials').insert({ user_id: currentUser.id, title, url, description });
+  loadTutorials();
+  loadDashboardStats();
 }
 
 async function deleteTutorial(id) {
-  await fetch('/api/tutorials?id=' + id, { method: 'DELETE' });
-  loadTutorials(); loadDashboardStats();
+  await db.from('tutorials').delete().eq('id', id);
+  loadTutorials();
+  loadDashboardStats();
 }
 
 // ---------- Search ----------
 async function globalSearch(term) {
-  const res = await fetch('/api/search?q=' + encodeURIComponent(term));
-  const results = await res.json();
-  const c = document.getElementById('searchResults');
-  if (!results.length) { c.innerHTML = '<p style="padding:20px;">No matches found.</p>'; return; }
-  c.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r.text)}</div>`).join('');
+  const t = `%${term}%`;
+  const [
+    { data: forumResults },
+    { data: recordResults },
+    { data: jobResults },
+    { data: tutorialResults }
+  ] = await Promise.all([
+    db.from('forum_posts').select('content').ilike('content', t).limit(5),
+    db.from('farm_records').select('title').ilike('title', t).limit(5),
+    db.from('job_listings').select('title').ilike('title', t).limit(5),
+    db.from('tutorials').select('title').ilike('title', t).limit(5)
+  ]);
+
+  const results = [];
+  (forumResults || []).forEach(r => results.push(`Forum: ${r.content.substring(0, 70)}...`));
+  (recordResults || []).forEach(r => results.push(`Record: ${r.title}`));
+  (jobResults || []).forEach(r => results.push(`Job: ${r.title}`));
+  (tutorialResults || []).forEach(r => results.push(`Tutorial: ${r.title}`));
+
+  const container = document.getElementById('searchResults');
+  if (!results.length) {
+    container.innerHTML = '<p style="padding:20px;">No matches found.</p>';
+    return;
+  }
+  container.innerHTML = results.map(r => `<div style="padding:12px; border-bottom:1px solid #333;"><i class="fas fa-search"></i> ${escapeHtml(r)}</div>`).join('');
 }
 
 // ---------- Pest Detection (unchanged) ----------
-async function loadModel() { if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); } return mobilenetModel; }
-async function classifyPest(img) {
-  const model = await loadModel();
-  const preds = await model.classify(img);
-  if (!preds || !preds.length) return 'Analysis failed.';
-  const top = preds[0];
-  let advice = `Analysis: ${top.className} (${(top.probability*100).toFixed(1)}%)`;
-  const name = top.className.toLowerCase();
-  if (name.includes('worm') || name.includes('caterpillar') || name.includes('beetle') || name.includes('aphid')) advice += '<br><br>Pest detected – use neem oil.';
-  else if (name.includes('fungus') || name.includes('mold') || name.includes('blight')) advice += '<br><br>Fungal issue – improve air circulation.';
-  else advice += '<br><br>Monitor crop.';
-  return advice;
+async function loadModel() {
+  if (!mobilenetModel) { mobilenetModel = await mobilenet.load(); }
+  return mobilenetModel;
 }
 
-// ---------- Farming Assistant ----------
-async function wikiAnswer(q) {
+async function classifyPest(imageElement) {
   try {
-    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}?redirect=true`);
-    const d = await res.json();
-    return d.extract ? d.extract.substring(0, 550) : 'No info found.';
-  } catch { return 'Connection error.'; }
+    const model = await loadModel();
+    const predictions = await model.classify(imageElement);
+    if (predictions && predictions.length > 0) {
+      const top = predictions[0];
+      const className = top.className.toLowerCase();
+      let advice = `Analysis: ${top.className} (${(top.probability*100).toFixed(1)}% confidence)`;
+      if (className.includes('caterpillar') || className.includes('worm') || className.includes('beetle') || className.includes('aphid')) {
+        advice += '<br><br><i class="fas fa-leaf"></i> <strong>Pest Detected:</strong> Consider applying neem oil.';
+      } else if (className.includes('fungus') || className.includes('mold') || className.includes('blight')) {
+        advice += '<br><br><i class="fas fa-droplet"></i> <strong>Fungal Issue:</strong> Improve air circulation.';
+      } else {
+        advice += '<br><br><i class="fas fa-seedling"></i> Monitor your crop closely.';
+      }
+      return advice;
+    }
+    return 'Unable to analyze. Try a clearer photo.';
+  } catch (err) { return 'Analysis error.'; }
+}
+
+// ---------- Farming Assistant (unchanged) ----------
+async function wikiAnswer(question) {
+  try {
+    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    return data.extract ? data.extract.substring(0, 550) : 'No info found.';
+  } catch (e) { return 'Connection error.'; }
 }
 
 // ---------- Page navigation ----------
@@ -288,91 +419,96 @@ function showPage(pageId) {
 
 // ---------- Auth modal ----------
 function openModal(mode) {
-  document.getElementById('modalTitle').textContent = mode === 'login' ? 'Welcome Back' : 'Create Account';
+  document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
   document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
   document.getElementById('authModal').style.display = 'flex';
 }
+
 function closeModal() {
   document.getElementById('authModal').style.display = 'none';
-  ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPass').value = '';
+  document.getElementById('authDisplayName').value = '';
 }
 
 // ---------- DOM Ready ----------
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('hamburgerBtn').onclick = () => {
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('hamburgerBtn').addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('open');
     document.getElementById('sidebarOverlay').classList.toggle('active');
-  };
-  document.getElementById('sidebarOverlay').onclick = () => {
+  });
+  document.getElementById('sidebarOverlay').addEventListener('click', () => {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('active');
-  };
+  });
 
-  document.querySelectorAll('.nav-links li').forEach(li => li.onclick = e => { e.preventDefault(); showPage(li.dataset.page); });
+  document.querySelectorAll('.nav-links li').forEach(li => {
+    li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); });
+  });
 
-  document.getElementById('loginBtn').onclick = () => openModal('login');
-  document.getElementById('signupBtn').onclick = () => openModal('signup');
-  document.getElementById('closeModalBtn').onclick = closeModal;
-  document.getElementById('authModal').onclick = e => { if (e.target === document.getElementById('authModal')) closeModal(); };
+  document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
+  document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
+  document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+  document.getElementById('authModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 
   let authMode = 'login';
-  document.getElementById('loginBtn').addEventListener('click', () => authMode = 'login');
-  document.getElementById('signupBtn').addEventListener('click', () => authMode = 'signup');
+  document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
+  document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
 
-  document.getElementById('authSubmitBtn').onclick = async () => {
+  document.getElementById('authSubmitBtn').addEventListener('click', async () => {
     const email = document.getElementById('authEmail').value.trim();
-    const pass = document.getElementById('authPass').value;
-    const display = document.getElementById('authDisplayName').value.trim();
+    const password = document.getElementById('authPass').value;
+    const displayName = document.getElementById('authDisplayName').value.trim();
     try {
       if (authMode === 'login') {
-        await login(email, pass);
+        await login(email, password);
       } else {
-        if (!display) return showToast('Display name required', true);
-        await register(email, pass, display);
+        if (!displayName) return showToast('Display name required', true);
+        await signUp(email, password, displayName);
       }
       closeModal();
-    } catch (e) { showToast(e.message, true); }
-  };
+    } catch (err) { showToast(err.message, true); }
+  });
 
-  document.getElementById('userGreeting').onclick = logout;
+  document.getElementById('userGreeting').addEventListener('click', logout);
 
-  document.getElementById('postForumBtn').onclick = () => {
+  document.getElementById('postForumBtn').addEventListener('click', () => {
     const c = document.getElementById('forumContent').value.trim();
     if (c) { addForumPost(c); document.getElementById('forumContent').value = ''; }
-  };
-  document.getElementById('addRecordBtn').onclick = () => {
+  });
+  document.getElementById('addRecordBtn').addEventListener('click', () => {
     const t = document.getElementById('recordTitle').value.trim();
     const d = document.getElementById('recordDetail').value.trim();
     if (t) { addRecord(t, d); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
-  };
-  document.getElementById('postJobBtn').onclick = () => {
+  });
+  document.getElementById('postJobBtn').addEventListener('click', () => {
     const t = document.getElementById('jobTitle').value.trim();
     const d = document.getElementById('jobDesc').value.trim();
     if (t) { addJob(t, d); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
-  };
-  document.getElementById('addProductBtn').onclick = () => {
+  });
+  document.getElementById('addProductBtn').addEventListener('click', () => {
     const n = document.getElementById('productName').value.trim();
     const p = document.getElementById('productPrice').value.trim();
     if (n && p) { addProduct(n, p); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
-  };
-  document.getElementById('sendMsgBtn').onclick = () => {
+  });
+  document.getElementById('sendMsgBtn').addEventListener('click', () => {
     const to = document.getElementById('msgTo').value.trim();
     const tx = document.getElementById('msgText').value.trim();
     if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
-  };
-  document.getElementById('doSearchBtn').onclick = () => {
+  });
+  document.getElementById('doSearchBtn').addEventListener('click', () => {
     const q = document.getElementById('searchInput').value.trim();
     if (q) globalSearch(q); else showToast('Enter a search term', true);
-  };
-  document.getElementById('addVideoBtn').onclick = () => {
+  });
+  document.getElementById('addVideoBtn').addEventListener('click', () => {
     const t = document.getElementById('videoTitle').value.trim();
     const u = document.getElementById('videoUrl').value.trim();
     const d = document.getElementById('videoDesc').value.trim();
     if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
-  };
+  });
 
-  // Pest detection
-  document.getElementById('identifyPestBtn').onclick = async () => {
+  // Pest Detection
+  document.getElementById('identifyPestBtn').addEventListener('click', async () => {
     const file = document.getElementById('pestImageInput').files[0];
     if (!file) return showToast('Select an image', true);
     const reader = new FileReader();
@@ -385,10 +521,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
     };
     reader.readAsDataURL(file);
-  };
+  });
 
   // Chat
-  document.getElementById('sendChatBtn').onclick = async () => {
+  document.getElementById('sendChatBtn').addEventListener('click', async () => {
     const input = document.getElementById('chatInput').value.trim();
     if (!input) return;
     const chat = document.getElementById('chatMessages');
@@ -397,7 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reply = await wikiAnswer(input);
     chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
     chat.scrollTop = chat.scrollHeight;
-  };
+  });
 
   // Deletion
   document.addEventListener('click', async e => {
@@ -412,6 +548,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (type === 'tutorial') await deleteTutorial(id);
   });
 
+  // Init
   loadModel().catch(console.warn);
   checkSession();
   showPage('dashboard');
