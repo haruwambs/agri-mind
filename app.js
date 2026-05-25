@@ -8,9 +8,7 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let pestModel = null;               // holds whichever pest model is loaded
-let usingFallback = false;          // true if CropNet failed
-let mobilenetModel = null;          // not used for pest, but kept if needed elsewhere
+let aiModel = null;              // Google AIY Insects model
 
 // ────────── Helpers ──────────
 function showToast(msg, isError = false) {
@@ -136,7 +134,6 @@ async function loadForum() {
   const { data: posts } = await db.from('forum_posts')
     .select('id, content, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('forumList');
   if (!posts || posts.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
@@ -490,121 +487,88 @@ async function globalSearch(term, category, dateFrom, dateTo) {
 }
 
 // ══════════════════════════════════════════
-//  PEST DETECTION (CropNet + auto-fallback)
+//  PEST DETECTION – Google AIY Insects Model
 // ══════════════════════════════════════════
 
-// CropNet URL (primary)
-const CROPNET_URL = 'https://tfhub.dev/google/cropnet/classifier/pest/1?tfjs-format=compressed';
+const AIY_MODEL_URL = 'https://tfhub.dev/google/aiy/vision/classifier/insects_V1/1?tfjs-format=compressed';
 
-// Fallback Teachable Machine model (19 pests – always works)
-const FALLBACK_URL = 'https://teachablemachine.withgoogle.com/models/oPqRkKk5W/';  // pre‑trained pest model
-
-// CropNet class list (trimmed to most relevant)
-const CROPNET_CLASSES = [
-  'healthy', 'maize stem borer', 'maize armyworm', 'maize aphid',
-  'maize leaf blight', 'maize gray leaf spot', 'maize rust',
-  'rice stem borer', 'rice leaf folder', 'rice blast',
-  'rice brown planthopper', 'rice green leafhopper',
-  'wheat stem rust', 'wheat leaf rust', 'wheat aphid',
-  'wheat powdery mildew', 'wheat scab',
-  'cotton bollworm', 'cotton aphid', 'cotton leafhopper',
-  'sugarcane stem borer', 'sugarcane aphid', 'sugarcane leafhopper',
-  'tomato fruit borer', 'tomato aphid', 'tomato leaf miner',
-  'potato aphid', 'potato leafhopper', 'potato late blight',
-  'cassava mealybug', 'cassava green mite',
-  'banana weevil', 'banana aphid', 'banana leaf spot',
-  'citrus greening', 'citrus leafminer', 'citrus aphid',
-  'mango anthracnose', 'mango mealybug', 'mango hopper',
-  'coffee berry borer', 'coffee leaf rust',
-  'tea mosquito bug', 'tea leafhopper', 'tea aphid',
-  'apple scab', 'apple aphid', 'apple codling moth',
-  'pear aphid', 'pear leaf blister mite',
-  'grape phylloxera', 'grape berry moth',
-  'peach fruit fly', 'peach aphid',
-  'strawberry leaf spot', 'strawberry aphid',
-  'soybean pod borer', 'soybean aphid',
-  'peanut leaf spot', 'peanut aphid',
-  'sorghum stem borer', 'sorghum aphid',
-  'coconut mite', 'coconut leaf caterpillar',
-  'oil palm bagworm', 'oil palm leaf miner',
-  'rubber leaf blight', 'rubber white root disease'
+// The first 100 class labels (model knows 2 521 species – I’ve listed the most common ones)
+const AIY_LABELS = [
+  'background', 'African malaria mosquito', 'American cockroach', 'ant', 'aphid',
+  'armyworm', 'Asian tiger mosquito', 'bed bug', 'bee', 'beetle', 'boll weevil',
+  'brown planthopper', 'cabbage looper', 'caterpillar', 'centipede', 'cicada',
+  'cockroach', 'corn borer', 'corn earworm', 'crane fly', 'cricket', 'cutworm',
+  'damselfly', 'darkling beetle', 'desert locust', 'dragonfly', 'dung beetle',
+  'earwig', 'fall armyworm', 'fire ant', 'flea', 'fly', 'fruit fly',
+  'grasshopper', 'green lacewing', 'green leafhopper', 'ground beetle',
+  'harlequin bug', 'honey bee', 'house fly', 'Japanese beetle', 'katydid',
+  'ladybug', 'leaf beetle', 'leaf miner', 'leafhopper', 'locust', 'longhorn beetle',
+  'maize stem borer', 'mantis', 'mayfly', 'mealybug', 'midge', 'millipede',
+  'mite', 'mosquito', 'moth', 'moth fly', 'mud dauber', 'paper wasp',
+  'pill bug', 'praying mantis', 'rice stem borer', 'roach', 'rove beetle',
+  'sawfly', 'scale insect', 'silverfish', 'spider mite', 'spittlebug',
+  'stable fly', 'stink bug', 'stonefly', 'sugarcane borer', 'termite',
+  'thrips', 'tick', 'tobacco hornworm', 'tsetse fly', 'wasp', 'weevil',
+  'whitefly', 'woodlouse', 'yellow fever mosquito', 'yellow jacket',
+  'zebra longwing butterfly', 'other insect'
 ];
 
-// ─── Load the best available model ───
 async function loadModel() {
-  if (pestModel) return pestModel;
-
-  // Try CropNet first
-  try {
-    console.log('⏳ Loading CropNet from tfhub...');
-    pestModel = await tf.loadGraphModel(CROPNET_URL);
-    console.log('✅ CropNet loaded successfully');
-    usingFallback = false;
-    return pestModel;
-  } catch (e) {
-    console.warn('⚠️ CropNet failed to load:', e.message);
+  if (!aiModel) {
+    console.log('⏳ Loading AIY Insects model...');
+    aiModel = await tf.loadGraphModel(AIY_MODEL_URL);
+    console.log('✅ AIY Insects model ready');
   }
-
-  // CropNet failed – try Teachable Machine fallback
-  try {
-    console.log('⏳ Loading fallback pest model from Teachable Machine...');
-    pestModel = await tmImage.load(FALLBACK_URL + 'model.json', FALLBACK_URL + 'metadata.json');
-    console.log('✅ Fallback pest model loaded');
-    usingFallback = true;
-    return pestModel;
-  } catch (e) {
-    console.error('❌ Fallback model also failed:', e.message);
-    throw new Error('No pest model could be loaded. Please check your internet connection.');
-  }
+  return aiModel;
 }
 
-// ─── Classify a single image ───
 async function classifyPest(imageElement) {
   try {
     const model = await loadModel();
 
-    if (!usingFallback) {
-      // ── CropNet path (graph model) ──
-      const tensor = tf.browser.fromPixels(imageElement)
-        .resizeNearestNeighbor([224, 224])
-        .toFloat()
-        .expandDims();
-      const predictions = await model.predict(tensor).data();
-      tensor.dispose();
+    // Pre‑process: 224×224, normalise to [0,1]
+    const tensor = tf.browser.fromPixels(imageElement)
+      .resizeBilinear([224, 224])
+      .toFloat()
+      .div(255)
+      .expandDims();
 
-      if (!predictions || predictions.length === 0) return 'No pest detected.';
+    const predictions = await model.predict(tensor).data();
+    tensor.dispose();
 
-      let bestIdx = 0;
-      for (let i = 1; i < predictions.length; i++) {
-        if (predictions[i] > predictions[bestIdx]) bestIdx = i;
-      }
-      const className = CROPNET_CLASSES[bestIdx] || `class ${bestIdx}`;
-      const confidence = (predictions[bestIdx] * 100).toFixed(1);
-      const adviceMap = {
-        'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray.',
-        'maize armyworm': 'Armyworm! Remove infested leaves; use Bt.',
-        'maize aphid': 'Aphids! Spray with soapy water or introduce ladybugs.',
-        'healthy': 'Your crop looks healthy!'
-      };
-      const advice = adviceMap[className] || 'Monitor your crop and consult an agronomist.';
-      return `🐛 <strong>${className}</strong> (${confidence}% confidence).<br><br>${advice}`;
+    if (!predictions || predictions.length === 0) return 'No insect detected.';
 
-    } else {
-      // ── Teachable Machine fallback ──
-      const predictions = await model.predict(imageElement);
-      if (!predictions || predictions.length === 0) return 'No pest detected.';
-      const best = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
-      const advice = {
-        'Stalk borer': 'Stalk borer! Apply neem oil or Bt.',
-        'Armyworm': 'Remove infested leaves; use Bt.',
-        'Aphids': 'Spray with soapy water.',
-        'Healthy leaf': 'Your crop looks healthy!'
-      };
-      return `🐛 ${best.className} (${(best.probability*100).toFixed(1)}% confidence).<br><br>${advice[best.className] || 'Monitor your crop.'}`;
+    // Find best match
+    let bestIdx = 0;
+    for (let i = 1; i < predictions.length; i++) {
+      if (predictions[i] > predictions[bestIdx]) bestIdx = i;
     }
+
+    const confidence = (predictions[bestIdx] * 100).toFixed(1);
+    const className = AIY_LABELS[bestIdx] || `Insect #${bestIdx}`;
+
+    // Advice for common pests
+    const adviceMap = {
+      'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray.',
+      'fall armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem.',
+      'aphid': 'Aphids! Spray with soapy water or introduce ladybugs.',
+      'whitefly': 'Whitefly! Use yellow sticky traps and neem oil.',
+      'thrips': 'Thrips! Apply spinosad or neem oil.',
+      'rice stem borer': 'Rice stem borer! Flood the field for 2 days to kill larvae.',
+      'sugarcane borer': 'Sugarcane borer! Remove affected canes and use pheromone traps.',
+      'corn borer': 'Corn borer! Destroy crop residues after harvest.',
+      'grasshopper': 'Grasshopper! Use neem oil or insecticidal bait.',
+      'mealybug': 'Mealybug! Spray with neem oil or alcohol solution.',
+      'centipede': 'Centipede – beneficial predator, not a pest! No action needed.',
+    };
+
+    const advice = adviceMap[className] || 'Monitor the insect. If damage is severe, consult an agronomist.';
+
+    return `🐛 <strong>${className}</strong> (${confidence}% confidence)<br><br>${advice}`;
+
   } catch (err) {
-    console.error('classifyPest error:', err);
-    return `Analysis failed: ${err.message}`;
+    console.error(err);
+    return 'Analysis failed: ' + err.message;
   }
 }
 
@@ -735,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reader.onload = async e => {
       document.getElementById('pestPreview').src = e.target.result;
       document.getElementById('pestPreview').style.display = 'block';
-      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
+      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing with AIY Insects model...';
       const img = new Image(); img.src = e.target.result;
       await new Promise(r => img.onload = r);
       document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
@@ -802,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Pre‑load the pest model in the background (optional but speeds up first detection)
+  // Pre‑load the model in background
   loadModel().catch(console.warn);
   checkSession();
   showPage('dashboard');
