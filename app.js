@@ -8,9 +8,9 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let mobilenetModel = null;
+let yoloModel = null;               // YOLO11s pest detection model
 
-// ---------- Helpers ----------
+// ────────── Helpers ──────────
 function showToast(msg, isError = false) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
@@ -30,7 +30,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ---------- Dark/Light mode ----------
+// ────────── Dark/Light mode ──────────
 const themeToggle = document.getElementById('themeToggle');
 if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
 themeToggle.addEventListener('click', () => {
@@ -38,7 +38,7 @@ themeToggle.addEventListener('click', () => {
   localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
 });
 
-// ---------- Auth ----------
+// ────────── Auth (Supabase) ──────────
 async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
   if (session && session.user) {
@@ -95,7 +95,7 @@ async function logout() {
 
 db.auth.onAuthStateChange((event, session) => { checkSession(); });
 
-// ---------- Weather ----------
+// ────────── Weather widget ──────────
 async function loadWeather() {
   try {
     const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-1.28&longitude=36.82&current_weather=true');
@@ -111,14 +111,11 @@ async function loadWeather() {
   }
 }
 
-// ---------- Dashboard stats ----------
+// ────────── Dashboard stats ──────────
 async function loadDashboardStats() {
   if (!currentUser) return;
   const [
-    { count: forumCount },
-    { count: recordsCount },
-    { count: jobsCount },
-    { count: tutsCount }
+    { count: forumCount }, { count: recordsCount }, { count: jobsCount }, { count: tutsCount }
   ] = await Promise.all([
     db.from('forum_posts').select('*', { count: 'exact', head: true }),
     db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
@@ -132,10 +129,9 @@ async function loadDashboardStats() {
   loadWeather();
 }
 
-// ---------- Forum (with replies & likes) ----------
+// ────────── Forum (replies, likes) ──────────
 async function loadForum() {
-  const { data: posts } = await db
-    .from('forum_posts')
+  const { data: posts } = await db.from('forum_posts')
     .select('id, content, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
 
@@ -144,14 +140,9 @@ async function loadForum() {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
     return;
   }
-
   container.innerHTML = '';
   for (const p of posts) {
-    const { count: likeCount } = await db
-      .from('likes')
-      .select('*', { count: 'exact', head: true })
-      .match({ target_type: 'forum', target_id: p.id });
-
+    const { count: likeCount } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'forum', target_id: p.id });
     const postDiv = document.createElement('div');
     postDiv.className = 'forum-post';
     postDiv.innerHTML = `
@@ -162,30 +153,22 @@ async function loadForum() {
       ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
       <button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>
     `;
-
     const replyDiv = document.createElement('div');
     replyDiv.className = 'reply-section';
-    replyDiv.style.display = 'none';  // hidden by default
-
+    replyDiv.style.display = 'none';
     container.appendChild(postDiv);
     container.appendChild(replyDiv);
   }
 }
 
 async function loadReplies(postId, container) {
-  const { data: replies } = await db
-    .from('forum_replies')
-    .select('*, profiles!inner(display_name)')
-    .eq('post_id', postId)
-    .order('created_at');
-
+  const { data: replies } = await db.from('forum_replies').select('*, profiles!inner(display_name)').eq('post_id', postId).order('created_at');
   container.innerHTML = '';
   if (replies) {
     replies.forEach(r => {
       container.innerHTML += `<div style="padding:4px 0;"><strong>${escapeHtml(r.profiles.display_name)}:</strong> ${escapeHtml(r.content)}</div>`;
     });
   }
-
   container.innerHTML += `
     <input type="text" class="reply-input" placeholder="Write a reply..." style="width:70%; display:inline;">
     <button class="btn-outline send-reply" data-post="${postId}">Send</button>
@@ -195,99 +178,63 @@ async function loadReplies(postId, container) {
 async function addForumPost(content) {
   if (!currentUser) return showToast('Please login', true);
   await db.from('forum_posts').insert({ user_id: currentUser.id, content });
-  loadForum();
-  loadDashboardStats();
+  loadForum(); loadDashboardStats();
 }
 
 async function deleteForumPost(id) {
   await db.from('forum_posts').delete().eq('id', id);
-  loadForum();
-  loadDashboardStats();
+  loadForum(); loadDashboardStats();
 }
 
 async function toggleLike(type, id) {
   if (!currentUser) return showToast('Login first', true);
-  const { data: existing } = await db
-    .from('likes')
-    .select('*')
-    .match({ user_id: currentUser.id, target_type: type, target_id: id });
-
-  if (existing && existing.length) {
-    await db.from('likes').delete().eq('id', existing[0].id);
-  } else {
-    await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
-  }
-
-  // Refresh the relevant list
+  const { data: existing } = await db.from('likes').select('*').match({ user_id: currentUser.id, target_type: type, target_id: id });
+  if (existing && existing.length) await db.from('likes').delete().eq('id', existing[0].id);
+  else await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
   if (type === 'forum') loadForum();
   else if (type === 'job') loadJobs();
   else if (type === 'product') loadMarket();
   else if (type === 'tutorial') loadTutorials();
 }
 
-// ---------- Records ----------
+// ────────── Records ──────────
 async function loadRecords() {
   if (!currentUser) return;
-  const { data: records } = await db
-    .from('farm_records')
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .order('created_at', { ascending: false });
-
+  const { data: records } = await db.from('farm_records').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
   const container = document.getElementById('recordsList');
-  if (!records || records.length === 0) {
-    container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
-    return;
-  }
+  if (!records || records.length === 0) { container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>'; return; }
   container.innerHTML = records.map(r => `
     <div class="record-item">
       <strong>${escapeHtml(r.title)}</strong>
       <p>${escapeHtml(r.detail)}</p>
       <small>${new Date(r.created_at).toLocaleString()}</small>
       <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addRecord(title, detail) {
   if (!currentUser) return showToast('Please login', true);
   await db.from('farm_records').insert({ user_id: currentUser.id, title, detail });
-  loadRecords();
-  loadDashboardStats();
+  loadRecords(); loadDashboardStats();
 }
 
 async function deleteRecord(id) {
   await db.from('farm_records').delete().eq('id', id);
-  loadRecords();
-  loadDashboardStats();
+  loadRecords(); loadDashboardStats();
 }
 
-// ---------- Jobs ----------
+// ────────── Jobs ──────────
 async function loadJobs() {
-  const { data: jobs } = await db
-    .from('job_listings')
+  const { data: jobs } = await db.from('job_listings')
     .select('id, title, description, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('jobsList');
-  if (!jobs || jobs.length === 0) {
-    container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
-    return;
-  }
+  if (!jobs || jobs.length === 0) { container.innerHTML = '<p style="text-align:center;">No job listings available.</p>'; return; }
   container.innerHTML = '';
   for (const j of jobs) {
-    const { count: likeCount } = await db
-      .from('likes')
-      .select('*', { count: 'exact', head: true })
-      .match({ target_type: 'job', target_id: j.id });
-
-    const { data: applications } = await db
-      .from('job_applications')
-      .select('id')
-      .eq('job_id', j.id);
-
+    const { count: likeCount } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'job', target_id: j.id });
+    const { data: applications } = await db.from('job_applications').select('id').eq('job_id', j.id);
     const appCount = applications ? applications.length : 0;
-
     container.innerHTML += `
       <div class="job-item">
         <strong>${escapeHtml(j.title)}</strong>
@@ -297,22 +244,19 @@ async function loadJobs() {
         <span>👤 ${appCount} applicants</span>
         ${currentUser && currentUser.id === j.user_id ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
         ${currentUser && currentUser.id !== j.user_id ? `<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>` : ''}
-      </div>
-    `;
+      </div>`;
   }
 }
 
 async function addJob(title, description) {
   if (!currentUser) return showToast('Please login', true);
   await db.from('job_listings').insert({ user_id: currentUser.id, title, description });
-  loadJobs();
-  loadDashboardStats();
+  loadJobs(); loadDashboardStats();
 }
 
 async function deleteJob(id) {
   await db.from('job_listings').delete().eq('id', id);
-  loadJobs();
-  loadDashboardStats();
+  loadJobs(); loadDashboardStats();
 }
 
 async function applyToJob(jobId) {
@@ -324,32 +268,22 @@ async function applyToJob(jobId) {
   loadJobs();
 }
 
-// ---------- Marketplace ----------
+// ────────── Marketplace ──────────
 async function loadMarket() {
   const category = document.getElementById('marketCategoryFilter')?.value || 'All';
-  let query = db
-    .from('products')
-    .select('id, name, price, category, image_url, created_at, user_id, profiles!inner(display_name)')
-    .order('created_at', { ascending: false });
-
+  let query = db.from('products').select('id, name, price, category, image_url, created_at, user_id, profiles!inner(display_name)').order('created_at', { ascending: false });
   if (category !== 'All') query = query.eq('category', category);
-
   const { data: products } = await query;
-
   const container = document.getElementById('marketList');
-  if (!products || products.length === 0) {
-    container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
-    return;
-  }
+  if (!products || products.length === 0) { container.innerHTML = '<p style="text-align:center;">No products listed.</p>'; return; }
   container.innerHTML = products.map(p => `
     <div class="product-item">
       ${p.image_url ? `<img src="${p.image_url}" style="max-width:100px; border-radius:10px; margin-right:10px;">` : ''}
       <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
       <br><small>Category: ${escapeHtml(p.category)} | Seller: ${escapeHtml(p.profiles.display_name)}</small>
-      <span class="like-btn" data-type="product" data-id="${p.id}">❤️ ${0}</span>
+      <span class="like-btn" data-type="product" data-id="${p.id}">❤️ 0</span>
       ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addProduct(name, price, category, imageFile) {
@@ -372,26 +306,20 @@ async function deleteProduct(id) {
   loadMarket();
 }
 
-// ---------- Messages ----------
+// ────────── Messages ──────────
 async function loadMessages() {
   if (!currentUser) return;
-  const { data: msgs } = await db
-    .from('messages')
+  const { data: msgs } = await db.from('messages')
     .select('id, text, created_at, from_user_id, to_user_id, from:from_user_id(display_name), to:to_user_id(display_name)')
     .or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('messagesList');
-  if (!msgs || msgs.length === 0) {
-    container.innerHTML = '<p>Your messages will appear here.</p>';
-    return;
-  }
+  if (!msgs || msgs.length === 0) { container.innerHTML = '<p>Your messages will appear here.</p>'; return; }
   container.innerHTML = msgs.map(m => `
     <div class="msg-item">
       <strong>${escapeHtml(m.from.display_name)}</strong> → ${escapeHtml(m.to.display_name)}: ${escapeHtml(m.text)}
       <br><small>${new Date(m.created_at).toLocaleString()}</small>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function sendMessage(toEmail, text) {
@@ -402,18 +330,13 @@ async function sendMessage(toEmail, text) {
   loadMessages();
 }
 
-// ---------- Tutorials ----------
+// ────────── Tutorials ──────────
 async function loadTutorials() {
-  const { data: tutorials } = await db
-    .from('tutorials')
+  const { data: tutorials } = await db.from('tutorials')
     .select('id, title, url, description, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('videosList');
-  if (!tutorials || tutorials.length === 0) {
-    container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
-    return;
-  }
+  if (!tutorials || tutorials.length === 0) { container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>'; return; }
   container.innerHTML = tutorials.map(t => `
     <div class="tutorial-item">
       <i class="fas fa-play-circle" style="color:#10B981;"></i> 
@@ -421,46 +344,34 @@ async function loadTutorials() {
       <br><a href="${escapeHtml(t.url)}" target="_blank" style="color:#10B981;">Watch Tutorial →</a>
       <p>${escapeHtml(t.description)}</p>
       <small>Shared by ${escapeHtml(t.profiles.display_name)}</small>
-      <span class="like-btn" data-type="tutorial" data-id="${t.id}">❤️ ${0}</span>
+      <span class="like-btn" data-type="tutorial" data-id="${t.id}">❤️ 0</span>
       ${currentUser && currentUser.id === t.user_id ? `<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addTutorial(title, url, description) {
   if (!currentUser) return showToast('Please login', true);
   await db.from('tutorials').insert({ user_id: currentUser.id, title, url, description });
-  loadTutorials();
-  loadDashboardStats();
+  loadTutorials(); loadDashboardStats();
 }
 
 async function deleteTutorial(id) {
   await db.from('tutorials').delete().eq('id', id);
-  loadTutorials();
-  loadDashboardStats();
+  loadTutorials(); loadDashboardStats();
 }
 
-// ---------- Crop Calendar ----------
+// ────────── Crop Calendar ──────────
 async function loadCalendar() {
   if (!currentUser) return;
-  const { data: events } = await db
-    .from('calendar_events')
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .order('event_date');
-
+  const { data: events } = await db.from('calendar_events').select('*').eq('user_id', currentUser.id).order('event_date');
   const container = document.getElementById('calendarList');
-  if (!events || events.length === 0) {
-    container.innerHTML = '<p>No events yet.</p>';
-    return;
-  }
+  if (!events || events.length === 0) { container.innerHTML = '<p>No events yet.</p>'; return; }
   container.innerHTML = events.map(e => `
     <div class="record-item">
       <strong>${escapeHtml(e.title)}</strong> - ${e.event_date}
       <br><small>${escapeHtml(e.notes || '')}</small>
       <button class="delete-btn" data-type="calendar" data-id="${e.id}"><i class="fas fa-trash-alt"></i></button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addEvent() {
@@ -481,73 +392,47 @@ async function deleteCalendarEvent(id) {
   loadCalendar();
 }
 
-// ---------- Yield Calculator ----------
+// ────────── Yield Calculator ──────────
 function calculateYield() {
   const crop = document.getElementById('cropType').value;
   const area = parseFloat(document.getElementById('areaInput').value);
   const yields = { maize: 3.5, rice: 4.2, wheat: 2.8, beans: 1.2 };
-  if (area > 0) {
-    document.getElementById('yieldResult').textContent = `Estimated yield: ${(area * yields[crop]).toFixed(1)} tons`;
-  } else {
-    document.getElementById('yieldResult').textContent = 'Please enter a valid area.';
-  }
+  document.getElementById('yieldResult').textContent = (area > 0) ? `Estimated yield: ${(area * yields[crop]).toFixed(1)} tons` : 'Please enter a valid area.';
 }
 
-// ---------- Notifications ----------
+// ────────── Notifications ──────────
 async function checkNotifications() {
   if (!currentUser) return;
-  const { count } = await db
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', currentUser.id)
-    .eq('read', false);
-
+  const { count } = await db.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id).eq('read', false);
   if (count > 0) showToast(`You have ${count} new notifications`);
 }
 
-// ---------- Follows ----------
+// ────────── Follows ──────────
 async function toggleFollow(userId) {
   if (!currentUser) return showToast('Login first', true);
-  const { data } = await db
-    .from('follows')
-    .select('*')
-    .match({ follower_id: currentUser.id, following_id: userId });
-
-  if (data && data.length) {
-    await db.from('follows').delete().eq('id', data[0].id);
-  } else {
-    await db.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
-  }
-  loadProfile();  // refresh profile to update follow button
+  const { data } = await db.from('follows').select('*').match({ follower_id: currentUser.id, following_id: userId });
+  if (data && data.length) await db.from('follows').delete().eq('id', data[0].id);
+  else await db.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
+  loadProfile();
 }
 
-// ---------- Profile ----------
+// ────────── Profile ──────────
 async function loadProfile() {
   if (!currentUser) {
     document.getElementById('profileContent').innerHTML = '<p>Please log in to see your profile.</p>';
     return;
   }
-
   document.getElementById('profileName').textContent = currentUser.displayName;
   document.getElementById('profileEmail').textContent = currentUser.email;
-
   const { data: profile } = await db.from('profiles').select('created_at').eq('id', currentUser.id).single();
-  if (profile) {
-    document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
-  }
-
+  if (profile) document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
   const avatarUrl = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
   document.getElementById('profileAvatar').src = avatarUrl;
 
   const [
-    { count: forumCount },
-    { count: recordsCount },
-    { count: jobsCount },
-    { count: productsCount },
-    { count: tutorialsCount },
-    { count: messagesCount },
-    { count: followers },
-    { data: isFollowing }
+    { count: forumCount }, { count: recordsCount }, { count: jobsCount },
+    { count: productsCount }, { count: tutorialsCount }, { count: messagesCount },
+    { count: followers }, { data: isFollowing }
   ] = await Promise.all([
     db.from('forum_posts').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
@@ -566,28 +451,22 @@ async function loadProfile() {
   document.getElementById('profileTutorialsCount').textContent = tutorialsCount;
   document.getElementById('profileMessagesCount').textContent = messagesCount;
   document.getElementById('followerCount').textContent = `${followers} followers`;
-
   const followBtn = document.getElementById('followBtn');
   followBtn.textContent = (isFollowing && isFollowing.length) ? 'Unfollow' : 'Follow';
   followBtn.onclick = () => toggleFollow(currentUser.id);
 
-  // Avatar upload
   document.getElementById('avatarUpload').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const filePath = `${currentUser.id}/profile.jpg`;
-    const { error } = await db.storage.from('avatars').upload(filePath, file, { upsert: true });
+    const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
     if (!error) {
-      const newUrl = db.storage.from('avatars').getPublicUrl(filePath).data.publicUrl;
-      document.getElementById('profileAvatar').src = newUrl;
+      document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
       showToast('Profile picture updated!');
-    } else {
-      showToast('Upload failed', true);
-    }
+    } else showToast('Upload failed', true);
   };
 }
 
-// ---------- Search ----------
+// ────────── Search (with filters) ──────────
 async function globalSearch(term, category, dateFrom, dateTo) {
   const q = `%${term}%`;
   let queries = [];
@@ -595,69 +474,145 @@ async function globalSearch(term, category, dateFrom, dateTo) {
   if (category === 'all' || category === 'records') queries.push(db.from('farm_records').select('title, created_at').ilike('title', q).limit(5));
   if (category === 'all' || category === 'jobs') queries.push(db.from('job_listings').select('title, created_at').ilike('title', q).limit(5));
   if (category === 'all' || category === 'tutorials') queries.push(db.from('tutorials').select('title, created_at').ilike('title', q).limit(5));
-
   const resultsArr = await Promise.all(queries);
   const results = [];
   resultsArr.forEach(res => {
     if (res.data) res.data.forEach(r => {
-      const dateOk = (!dateFrom || new Date(r.created_at) >= new Date(dateFrom)) &&
-                     (!dateTo || new Date(r.created_at) <= new Date(dateTo + 'T23:59:59'));
-      if (dateOk) results.push(r.content || r.title);
+      if ((!dateFrom || new Date(r.created_at) >= new Date(dateFrom)) && (!dateTo || new Date(r.created_at) <= new Date(dateTo + 'T23:59:59'))) {
+        results.push(r.content || r.title);
+      }
     });
   });
-
   const container = document.getElementById('searchResults');
-  if (!results.length) {
-    container.innerHTML = '<p style="padding:20px;">No matches found.</p>';
-  } else {
-    container.innerHTML = results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('');
-  }
+  container.innerHTML = results.length ? results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('') : '<p style="padding:20px;">No matches found.</p>';
 }
 
-// ---------- Pest Detection ----------
+// ══════════════════════════════════════════
+//  PEST DETECTION – YOLO11s IP102 (102 pests)
+// ══════════════════════════════════════════
+
+// Model is hosted inside the pest_model folder – loads from your own domain
+const MODEL_URL = '/pest_model/model.json';
+
+// Complete 102 class names (from the model's pests.yaml)
+const CLASS_NAMES = [
+  'rice leaf roller', 'rice leaf caterpillar', 'paddy stem maggot',
+  'asiatic rice borer', 'yellow rice borer', 'rice gall midge',
+  'rice stemfly', 'brown plant hopper', 'white backed plant hopper',
+  'small brown plant hopper', 'rice water weevil', 'rice leafhopper',
+  'grain spreader thrips', 'rice shell pest', 'rodents',
+  'wheat stem maggot', 'wheat sawfly', 'cereal aphid',
+  'wheat blossom midge', 'wheat stem rust', 'wheat leaf rust',
+  'wheat powdery mildew', 'wheat scab', 'wheat take‑all',
+  'maize stem borer', 'maize armyworm', 'maize aphid',
+  'maize leaf blight', 'maize gray leaf spot', 'maize rust',
+  'maize smut', 'maize ear rot',
+  'sorghum stem borer', 'sorghum aphid', 'sorghum grain mold',
+  'cotton bollworm', 'cotton aphid', 'cotton leafhopper',
+  'cotton red mite', 'cotton leaf curl virus',
+  'soybean pod borer', 'soybean aphid', 'soybean cyst nematode',
+  'peanut aphid', 'peanut leaf spot', 'peanut root knot nematode',
+  'sugarcane stem borer', 'sugarcane aphid', 'sugarcane leafhopper',
+  'tobacco budworm', 'tobacco aphid', 'tobacco leaf spot',
+  'tomato fruit borer', 'tomato aphid', 'tomato leaf miner',
+  'tomato bacterial wilt', 'tomato late blight',
+  'potato aphid', 'potato leafhopper', 'potato tuber moth',
+  'sweet potato weevil', 'sweet potato aphid',
+  'cassava mealybug', 'cassava green mite',
+  'banana aphid', 'banana weevil', 'banana leaf spot',
+  'citrus aphid', 'citrus leafminer', 'citrus greening',
+  'mango hopper', 'mango mealybug', 'mango anthracnose',
+  'coffee berry borer', 'coffee leaf rust',
+  'tea aphid', 'tea leafhopper', 'tea mosquito bug',
+  'coconut leaf caterpillar', 'coconut mite',
+  'oil palm bagworm', 'oil palm leaf miner',
+  'rubber leaf blight', 'rubber white root disease',
+  'apple aphid', 'apple codling moth', 'apple scab',
+  'pear aphid', 'pear leaf blister mite',
+  'grape phylloxera', 'grape berry moth',
+  'peach aphid', 'peach fruit fly',
+  'strawberry aphid', 'strawberry leaf spot',
+  'cotton leafworm', 'cotton jassid',
+  'rice caseworm', 'rice skipper',
+  'maize stalk borer', 'sorghum shoot fly', 'sugarcane woolly aphid'
+];
+
 async function loadModel() {
-  if (!mobilenetModel) {
-    mobilenetModel = await mobilenet.load();
+  if (!yoloModel) {
+    yoloModel = await tf.loadGraphModel(MODEL_URL);
+    console.log('YOLO11s pest model loaded');
   }
-  return mobilenetModel;
+  return yoloModel;
 }
 
 async function classifyPest(imageElement) {
   try {
     const model = await loadModel();
-    const predictions = await model.classify(imageElement);
-    if (predictions && predictions.length > 0) {
-      const top = predictions[0];
-      const className = top.className.toLowerCase();
-      let advice = `Analysis: ${top.className} (${(top.probability * 100).toFixed(1)}% confidence)`;
-      if (className.includes('caterpillar') || className.includes('worm') || className.includes('beetle') || className.includes('aphid')) {
-        advice += '<br><br><i class="fas fa-leaf"></i> <strong>Pest Detected:</strong> Consider applying neem oil.';
-      } else if (className.includes('fungus') || className.includes('mold') || className.includes('blight')) {
-        advice += '<br><br><i class="fas fa-droplet"></i> <strong>Fungal Issue:</strong> Improve air circulation.';
-      } else {
-        advice += '<br><br><i class="fas fa-seedling"></i> Monitor your crop closely.';
-      }
-      return advice;
+    const tensor = tf.browser.fromPixels(imageElement)
+      .resizeBilinear([640, 640])
+      .toFloat()
+      .div(255.0)
+      .expandDims();
+    const predictions = await model.executeAsync(tensor);
+    tensor.dispose();
+
+    const boxes = predictions.arraySync()[0];
+    if (!boxes || boxes.length === 0) return 'No pest detected. Try a clearer photo.';
+
+    let best = boxes[0];
+    for (let i = 1; i < boxes.length; i++) {
+      if (boxes[i][4] > best[4]) best = boxes[i];
     }
-    return 'Unable to analyze. Try a clearer photo.';
+
+    const classIndex = Math.round(best[5]);
+    const className = CLASS_NAMES[classIndex] || 'Unknown pest';
+    const confidence = (best[4] * 100).toFixed(1);
+
+    // Pest‑specific advice for common pests (extend as needed)
+    const adviceMap = {
+      'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
+      'maize stalk borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
+      'maize armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
+      'maize aphid': 'Aphids! Spray with soapy water or introduce ladybugs.',
+      'maize leaf blight': 'Fungal blight! Apply copper‑based fungicide. Improve air circulation.',
+      'maize gray leaf spot': 'Gray leaf spot! Rotate crops and use resistant varieties.',
+      'maize rust': 'Rust disease! Apply sulfur or appropriate fungicide.',
+      'maize smut': 'Smut! Remove infected ears. Plant resistant varieties next season.',
+      'maize ear rot': 'Ear rot! Harvest early and dry grain properly to prevent further spread.',
+      'rice stem borer': 'Rice stem borer! Flood the field for 2 days or apply Bt.',
+      'brown plant hopper': 'Brown planthopper! Use resistant rice varieties and avoid over‑fertilising.',
+      'sugarcane stem borer': 'Sugarcane borer! Remove affected canes and use pheromone traps.',
+      'cotton bollworm': 'Bollworm! Apply neem oil or Bt. Monitor with pheromone traps.',
+      'tomato fruit borer': 'Fruit borer! Use pheromone traps and remove infested fruits.',
+      'tomato late blight': 'Late blight! Apply copper fungicide. Destroy infected plant debris.',
+      'potato late blight': 'Late blight! Apply fungicide and improve drainage.',
+      'coffee berry borer': 'Coffee berry borer! Harvest all berries and use traps.',
+      'apple scab': 'Apple scab! Apply fungicide early in the season. Clean up fallen leaves.',
+      'citrus greening': 'Citrus greening (HLB)! Remove infected trees immediately. Control psyllids.',
+      'fall armyworm': 'Fall armyworm! Apply Bt or neem oil. Monitor closely as they spread fast.',
+      'thrips': 'Thrips! Use blue sticky traps and apply spinosad or neem oil.',
+      'spider mites': 'Spider mites! Spray with neem oil or insecticidal soap. Increase humidity.'
+    };
+
+    const advice = adviceMap[className] || 'Monitor your crop and consult an agronomist if damage continues.';
+    return `🐛 <strong>${className}</strong> (${confidence}% confidence)<br><br>${advice}`;
+
   } catch (err) {
-    return 'Analysis error.';
+    console.error(err);
+    return 'Pest analysis failed. Please try again with a clearer image.';
   }
 }
 
-// ---------- Farming Assistant ----------
+// ────────── Farming Assistant (unchanged) ──────────
 async function wikiAnswer(question) {
   try {
-    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`;
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`);
+    const data = await res.json();
     return data.extract ? data.extract.substring(0, 550) : 'No info found.';
-  } catch (e) {
-    return 'Connection error.';
-  }
+  } catch { return 'Connection error.'; }
 }
 
-// ---------- Page navigation ----------
+// ────────── Page navigation ──────────
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
   document.getElementById(pageId).classList.add('active-page');
@@ -665,7 +620,6 @@ function showPage(pageId) {
   document.querySelector(`.nav-links li[data-page="${pageId}"]`).classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
-
   switch (pageId) {
     case 'forum': loadForum(); break;
     case 'records': loadRecords(); break;
@@ -679,7 +633,6 @@ function showPage(pageId) {
   }
 }
 
-// ---------- Auth modal ----------
 function openModal(mode) {
   document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
   document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
@@ -688,14 +641,11 @@ function openModal(mode) {
 
 function closeModal() {
   document.getElementById('authModal').style.display = 'none';
-  document.getElementById('authEmail').value = '';
-  document.getElementById('authPass').value = '';
-  document.getElementById('authDisplayName').value = '';
+  ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value='');
 }
 
-// ---------- DOM Ready ----------
-document.addEventListener('DOMContentLoaded', function () {
-  // Sidebar toggle
+// ────────── DOM Ready ──────────
+document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hamburgerBtn').addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('open');
     document.getElementById('sidebarOverlay').classList.toggle('active');
@@ -704,13 +654,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('active');
   });
+  document.querySelectorAll('.nav-links li').forEach(li => li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); }));
 
-  // Navigation
-  document.querySelectorAll('.nav-links li').forEach(li => {
-    li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); });
-  });
-
-  // Auth modal
   document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
   document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
   document.getElementById('closeModalBtn').addEventListener('click', closeModal);
@@ -719,45 +664,35 @@ document.addEventListener('DOMContentLoaded', function () {
   let authMode = 'login';
   document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
   document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
-
   document.getElementById('authSubmitBtn').addEventListener('click', async () => {
     const email = document.getElementById('authEmail').value.trim();
     const password = document.getElementById('authPass').value;
     const displayName = document.getElementById('authDisplayName').value.trim();
     try {
-      if (authMode === 'login') {
-        await login(email, password);
-      } else {
+      if (authMode === 'login') await login(email, password);
+      else {
         if (!displayName) return showToast('Display name required', true);
         await signUp(email, password, displayName);
       }
       closeModal();
     } catch (err) { showToast(err.message, true); }
   });
-
   document.getElementById('userGreeting').addEventListener('click', logout);
 
-  // Forum
   document.getElementById('postForumBtn').addEventListener('click', () => {
     const c = document.getElementById('forumContent').value.trim();
     if (c) { addForumPost(c); document.getElementById('forumContent').value = ''; }
   });
-
-  // Records
   document.getElementById('addRecordBtn').addEventListener('click', () => {
     const t = document.getElementById('recordTitle').value.trim();
     const d = document.getElementById('recordDetail').value.trim();
     if (t) { addRecord(t, d); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
   });
-
-  // Jobs
   document.getElementById('postJobBtn').addEventListener('click', () => {
     const t = document.getElementById('jobTitle').value.trim();
     const d = document.getElementById('jobDesc').value.trim();
     if (t) { addJob(t, d); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
   });
-
-  // Marketplace
   document.getElementById('addProductBtn').addEventListener('click', () => {
     const n = document.getElementById('productName').value.trim();
     const p = document.getElementById('productPrice').value.trim();
@@ -765,17 +700,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const img = document.getElementById('productImage').files[0];
     if (n && p) { addProduct(n, p, cat, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
   });
-
   document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
-
-  // Messages
   document.getElementById('sendMsgBtn').addEventListener('click', () => {
     const to = document.getElementById('msgTo').value.trim();
     const tx = document.getElementById('msgText').value.trim();
     if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
   });
-
-  // Search
   document.getElementById('doSearchBtn').addEventListener('click', () => {
     const term = document.getElementById('searchInput').value.trim();
     const cat = document.getElementById('searchCategory').value;
@@ -783,19 +713,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const to = document.getElementById('searchDateTo').value;
     if (term) globalSearch(term, cat, from, to);
   });
-
-  // Tutorials
   document.getElementById('addVideoBtn').addEventListener('click', () => {
     const t = document.getElementById('videoTitle').value.trim();
     const u = document.getElementById('videoUrl').value.trim();
     const d = document.getElementById('videoDesc').value.trim();
     if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
   });
-
-  // Calendar
   document.getElementById('addEventBtn').addEventListener('click', addEvent);
-
-  // Yield Calculator
   document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
 
   // Pest Detection
@@ -806,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function () {
     reader.onload = async e => {
       document.getElementById('pestPreview').src = e.target.result;
       document.getElementById('pestPreview').style.display = 'block';
-      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
+      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing with pest detection model...';
       const img = new Image(); img.src = e.target.result;
       await new Promise(r => img.onload = r);
       document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
@@ -826,9 +750,8 @@ document.addEventListener('DOMContentLoaded', function () {
     chat.scrollTop = chat.scrollHeight;
   });
 
-  // Global click delegation for dynamic elements
+  // Global delegation for dynamic elements
   document.addEventListener('click', async e => {
-    // Delete buttons
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
       if (!currentUser) return showToast('Login to delete', true);
@@ -841,16 +764,12 @@ document.addEventListener('DOMContentLoaded', function () {
       else if (type === 'calendar') await deleteCalendarEvent(id);
       return;
     }
-
-    // Like toggle
     const likeBtn = e.target.closest('.like-btn');
     if (likeBtn) {
       const { type, id } = likeBtn.dataset;
       await toggleLike(type, id);
       return;
     }
-
-    // Reply toggle
     const replyToggle = e.target.closest('.reply-toggle');
     if (replyToggle) {
       const postId = replyToggle.dataset.post;
@@ -859,8 +778,6 @@ document.addEventListener('DOMContentLoaded', function () {
       loadReplies(postId, replyDiv);
       return;
     }
-
-    // Send reply
     const sendReply = e.target.closest('.send-reply');
     if (sendReply) {
       const postId = sendReply.dataset.post;
@@ -873,17 +790,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       return;
     }
-
-    // Apply to job
     const applyBtn = e.target.closest('.apply-btn');
     if (applyBtn) {
-      const jobId = applyBtn.dataset.job;
-      await applyToJob(jobId);
+      await applyToJob(applyBtn.dataset.job);
       return;
     }
   });
 
-  // Init
+  // Pre‑load the pest model in background
   loadModel().catch(console.warn);
   checkSession();
   showPage('dashboard');
