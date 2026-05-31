@@ -7,11 +7,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
-    <!-- TensorFlow.js core library (required for YOLO11s pest detection) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <!-- Teachable Machine library (for custom pest detection model) -->
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
     <!-- Supabase client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Main app logic (pest detection uses /pest_model/model.json) -->
+    <!-- Main app logic -->
     <script src="app.js" defer></script>
 </head>
 <body>
@@ -438,7 +438,7 @@
     </main>
 </div>
 
-<!-- Auth Modal (email/password/display name) -->
+<!-- Auth Modal -->
 <div id="authModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:1500;">
     <div style="background:#0f0f0f; border-radius:48px; padding:32px; max-width:400px; width:90%; border:1px solid #10B981;">
         <h3 id="modalTitle">Log in</h3>
