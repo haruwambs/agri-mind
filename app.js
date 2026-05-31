@@ -8,7 +8,7 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let pestModel = null;   // Teachable Machine model
+let pestModel = null;   // Your custom model loaded from your own domain
 
 // ────────── Helpers ──────────
 function showToast(msg, isError = false) {
@@ -487,15 +487,16 @@ async function globalSearch(term, category, dateFrom, dateTo) {
 }
 
 // ══════════════════════════════════════════
-//  PEST DETECTION – Teachable Machine Model
+//  PEST DETECTION – Your Custom Model
 // ══════════════════════════════════════════
 
-// Your Teachable Machine model URL (5 classes)
-const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/3PP7fCkMT/';
+// Model is hosted on your own domain – never expires
+const MODEL_URL = '/pest_model/model.json';
+const METADATA_URL = '/pest_model/metadata.json';
 
 async function loadModel() {
   if (!pestModel) {
-    pestModel = await tmImage.load(MODEL_URL + 'model.json', MODEL_URL + 'metadata.json');
+    pestModel = await tmImage.load(MODEL_URL, METADATA_URL);
   }
   return pestModel;
 }
