@@ -8,7 +8,7 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let yoloModel = null;
+let pestModel = null;   // Teachable Machine model
 
 // ────────── Helpers ──────────
 function showToast(msg, isError = false) {
@@ -487,123 +487,49 @@ async function globalSearch(term, category, dateFrom, dateTo) {
 }
 
 // ══════════════════════════════════════════
-//  PEST DETECTION – YOLO11s IP102 (102 pests)
+//  PEST DETECTION – Teachable Machine Model
 // ══════════════════════════════════════════
 
-// Model is served from the same domain – no CORS issues
-const MODEL_URL = '/pest_model/model.json';
-
-// Complete 102 class names (from the model's pests.yaml)
-const CLASS_NAMES = [
-  'rice leaf roller', 'rice leaf caterpillar', 'paddy stem maggot',
-  'asiatic rice borer', 'yellow rice borer', 'rice gall midge',
-  'rice stemfly', 'brown plant hopper', 'white backed plant hopper',
-  'small brown plant hopper', 'rice water weevil', 'rice leafhopper',
-  'grain spreader thrips', 'rice shell pest', 'rodents',
-  'wheat stem maggot', 'wheat sawfly', 'cereal aphid',
-  'wheat blossom midge', 'wheat stem rust', 'wheat leaf rust',
-  'wheat powdery mildew', 'wheat scab', 'wheat take‑all',
-  'maize stem borer', 'maize armyworm', 'maize aphid',
-  'maize leaf blight', 'maize gray leaf spot', 'maize rust',
-  'maize smut', 'maize ear rot',
-  'sorghum stem borer', 'sorghum aphid', 'sorghum grain mold',
-  'cotton bollworm', 'cotton aphid', 'cotton leafhopper',
-  'cotton red mite', 'cotton leaf curl virus',
-  'soybean pod borer', 'soybean aphid', 'soybean cyst nematode',
-  'peanut aphid', 'peanut leaf spot', 'peanut root knot nematode',
-  'sugarcane stem borer', 'sugarcane aphid', 'sugarcane leafhopper',
-  'tobacco budworm', 'tobacco aphid', 'tobacco leaf spot',
-  'tomato fruit borer', 'tomato aphid', 'tomato leaf miner',
-  'tomato bacterial wilt', 'tomato late blight',
-  'potato aphid', 'potato leafhopper', 'potato tuber moth',
-  'sweet potato weevil', 'sweet potato aphid',
-  'cassava mealybug', 'cassava green mite',
-  'banana aphid', 'banana weevil', 'banana leaf spot',
-  'citrus aphid', 'citrus leafminer', 'citrus greening',
-  'mango hopper', 'mango mealybug', 'mango anthracnose',
-  'coffee berry borer', 'coffee leaf rust',
-  'tea aphid', 'tea leafhopper', 'tea mosquito bug',
-  'coconut leaf caterpillar', 'coconut mite',
-  'oil palm bagworm', 'oil palm leaf miner',
-  'rubber leaf blight', 'rubber white root disease',
-  'apple aphid', 'apple codling moth', 'apple scab',
-  'pear aphid', 'pear leaf blister mite',
-  'grape phylloxera', 'grape berry moth',
-  'peach aphid', 'peach fruit fly',
-  'strawberry aphid', 'strawberry leaf spot',
-  'cotton leafworm', 'cotton jassid',
-  'rice caseworm', 'rice skipper',
-  'maize stalk borer', 'sorghum shoot fly', 'sugarcane woolly aphid'
-];
+// Replace with your copied Teachable Machine URL
+const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
 
 async function loadModel() {
-  if (!yoloModel) {
-    yoloModel = await tf.loadGraphModel(MODEL_URL);
-    console.log('YOLO11s pest model loaded');
+  if (!pestModel) {
+    pestModel = await tmImage.load(MODEL_URL + 'model.json', MODEL_URL + 'metadata.json');
   }
-  return yoloModel;
+  return pestModel;
 }
 
 async function classifyPest(imageElement) {
   const resultDiv = document.getElementById('pestResult');
-  resultDiv.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Loading model and analyzing...';
+  resultDiv.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
   try {
     const model = await loadModel();
-    const tensor = tf.browser.fromPixels(imageElement)
-      .resizeBilinear([640, 640])
-      .toFloat()
-      .div(255.0)
-      .expandDims();
-    const predictions = await model.executeAsync(tensor);
-    tensor.dispose();
-
-    const boxes = predictions.arraySync()[0];
-    if (!boxes || boxes.length === 0) {
+    const predictions = await model.predict(imageElement);
+    if (!predictions || predictions.length === 0) {
       resultDiv.innerHTML = 'No pest detected. Try a clearer photo.';
       return;
     }
 
-    let best = boxes[0];
-    for (let i = 1; i < boxes.length; i++) {
-      if (boxes[i][4] > best[4]) best = boxes[i];
-    }
+    // Find the class with the highest probability
+    const best = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
+    const confidence = (best.probability * 100).toFixed(1);
 
-    const classIndex = Math.round(best[5]);
-    const className = CLASS_NAMES[classIndex] || 'Unknown pest';
-    const confidence = (best[4] * 100).toFixed(1);
-
+    // Pest‑specific advice (match these exactly to your Teachable Machine class names)
     const adviceMap = {
-      'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
-      'maize stalk borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
-      'maize armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
-      'maize aphid': 'Aphids! Spray with soapy water or introduce ladybugs.',
-      'maize leaf blight': 'Fungal blight! Apply copper‑based fungicide. Improve air circulation.',
-      'maize gray leaf spot': 'Gray leaf spot! Rotate crops and use resistant varieties.',
-      'maize rust': 'Rust disease! Apply sulfur or appropriate fungicide.',
-      'maize smut': 'Smut! Remove infected ears. Plant resistant varieties next season.',
-      'maize ear rot': 'Ear rot! Harvest early and dry grain properly to prevent further spread.',
-      'rice stem borer': 'Rice stem borer! Flood the field for 2 days or apply Bt.',
-      'brown plant hopper': 'Brown planthopper! Use resistant rice varieties and avoid over‑fertilising.',
-      'sugarcane stem borer': 'Sugarcane borer! Remove affected canes and use pheromone traps.',
-      'cotton bollworm': 'Bollworm! Apply neem oil or Bt. Monitor with pheromone traps.',
-      'tomato fruit borer': 'Fruit borer! Use pheromone traps and remove infested fruits.',
-      'tomato late blight': 'Late blight! Apply copper fungicide. Destroy infected plant debris.',
-      'potato late blight': 'Late blight! Apply fungicide and improve drainage.',
-      'coffee berry borer': 'Coffee berry borer! Harvest all berries and use traps.',
-      'apple scab': 'Apple scab! Apply fungicide early in the season. Clean up fallen leaves.',
-      'citrus greening': 'Citrus greening (HLB)! Remove infected trees immediately. Control psyllids.',
-      'fall armyworm': 'Fall armyworm! Apply Bt or neem oil. Monitor closely as they spread fast.',
-      'thrips': 'Thrips! Use blue sticky traps and apply spinosad or neem oil.',
-      'spider mites': 'Spider mites! Spray with neem oil or insecticidal soap. Increase humidity.'
+      'Armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
+      'Stalk Borer': 'Stalk borer detected! Apply neem oil or Bt spray.',
+      'Maize Rust': 'Rust disease! Apply sulfur or fungicide.',
+      'Rice Stalk Borer': 'Rice stem borer! Flood the field or apply Bt.',
+      'Healthy Leaf': 'Your crop looks healthy! Keep monitoring.',
+      // Add more entries to match your exact class names
     };
 
-    const advice = adviceMap[className] || 'Monitor your crop and consult an agronomist if damage continues.';
-    resultDiv.innerHTML = `🐛 <strong>${className}</strong> (${confidence}% confidence)<br><br>${advice}`;
+    const advice = adviceMap[best.className] || 'Monitor your crop and consult an agronomist.';
+    resultDiv.innerHTML = `🐛 <strong>${best.className}</strong> (${confidence}% confidence)<br><br>${advice}`;
 
   } catch (err) {
-    console.error(err);
-    // Show the error directly on the page so you can see what went wrong
-    resultDiv.innerHTML = `❌ Analysis failed<br><small style="color:red;">${err.message}</small>`;
+    resultDiv.innerHTML = `❌ Analysis failed<br><small style="color:red;">${err.message || err}</small>`;
   }
 }
 
@@ -734,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
     reader.onload = async e => {
       document.getElementById('pestPreview').src = e.target.result;
       document.getElementById('pestPreview').style.display = 'block';
-      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing with pest detection model...';
+      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing with custom model...';
       const img = new Image(); img.src = e.target.result;
       await new Promise(r => img.onload = r);
       document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
