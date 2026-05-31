@@ -7,11 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
-    <!-- Teachable Machine library (required to load your custom model from /pest_model/) -->
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
-    <!-- Supabase client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Main app logic -->
     <script src="app.js" defer></script>
 </head>
 <body>
@@ -25,7 +21,6 @@
         </div>
         <ul class="nav-links" id="navLinks">
             <li data-page="dashboard" class="active"><a><i class="fas fa-chart-line"></i> Dashboard</a></li>
-            <li data-page="pestai"><a><i class="fas fa-bug"></i> Pest Detection</a></li>
             <li data-page="wikichat"><a><i class="fas fa-robot"></i> Farming Assistant</a></li>
             <li data-page="forum"><a><i class="fas fa-comments"></i> Farmers Forum</a></li>
             <li data-page="records"><a><i class="fas fa-database"></i> Farm Records</a></li>
@@ -58,10 +53,34 @@
             <div class="card">
                 <h2><i class="fas fa-charging-station"></i> Smart Farming Dashboard</h2>
                 <p style="margin-top: 8px;">Your complete agricultural companion - pest identification, community knowledge, and farm management tools.</p>
+                
+                <!-- Weather Widget -->
                 <div class="card" style="background:#0a0a0a; margin-top:20px;">
                     <h4><i class="fas fa-cloud-sun"></i> Weather</h4>
                     <div id="weatherWidget">Loading weather...</div>
                 </div>
+
+                <!-- Offline Pest Detector Promo -->
+                <div class="card" style="background:#0a0a0a; margin-top:20px; border-left:4px solid #10B981;">
+                    <h4 style="color:#10B981; margin-bottom:8px;">
+                        <i class="fas fa-microscope"></i> Offline Pest Detector
+                    </h4>
+                    <p style="font-size:0.9rem; color:#aaa; line-height:1.6;">
+                        Get our standalone pest detection tool that works <strong>completely offline</strong> on any device.
+                        Identifies <strong>102 pest species</strong> including stalk borer, armyworm, and more — no internet needed.
+                    </p>
+                    <a href="https://wa.me/254573373146?text=Hi%2C%20I%20would%20like%20to%20get%20the%20AgriMind%20Pest%20Detector%20file."
+                       target="_blank"
+                       class="btn-primary"
+                       style="text-decoration:none; margin-top:12px; display:inline-flex; align-items:center; gap:8px;">
+                        <i class="fab fa-whatsapp"></i> Request via WhatsApp
+                    </a>
+                    <p style="font-size:0.7rem; color:#666; margin-top:8px;">
+                        or contact <strong>0573373146</strong> · Works offline · No app install needed
+                    </p>
+                </div>
+
+                <!-- Stats Grid -->
                 <div class="grid-2cols" style="margin-top: 28px;">
                     <div class="card" style="background:#0a0a0a; text-align:center;">
                         <i class="fas fa-clipboard-list" style="font-size:28px; color:#10B981;"></i> 
@@ -84,23 +103,6 @@
                         <span id="statForum">0</span>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- PEST DETECTION -->
-        <div id="pestai" class="page">
-            <div class="card">
-                <h2><i class="fas fa-microscope"></i> Smart Pest Detection</h2>
-                <p>Upload a photo of your crop leaves, and our intelligent system will analyze it for potential pest infestations or diseases. Early detection helps protect your harvest.</p>
-                <input type="file" id="pestImageInput" accept="image/*" capture="environment">
-                <div style="margin: 16px 0;">
-                    <img id="pestPreview" style="max-width:100%; border-radius: 32px; display:none; border:1px solid #10B981;">
-                </div>
-                <button id="identifyPestBtn" class="btn-primary">
-                    <i class="fas fa-search"></i> Analyze Crop Image
-                </button>
-                <div id="pestResult" style="margin-top: 24px; background:#111; border-radius: 28px; padding: 18px;"></div>
-                <p style="font-size:12px; margin-top:12px; color:#aaa;">*For best results, use clear images in good lighting. The system works offline and processes everything on your device.</p>
             </div>
         </div>
 
@@ -333,7 +335,7 @@
                     <p>AgriMind is designed to be your complete farming companion. Here's how to make the most of each feature:</p>
                     <ul>
                         <li><strong>Dashboard:</strong> View statistics of all your farming activities at a glance</li>
-                        <li><strong>Pest Detection:</strong> Upload crop images to identify potential pest problems</li>
+                        <li><strong>Pest Detector:</strong> Download our offline pest detection tool via WhatsApp</li>
                         <li><strong>Farming Assistant:</strong> Get instant answers to your agricultural questions</li>
                         <li><strong>Forum:</strong> Connect with other farmers and share knowledge</li>
                         <li><strong>Records:</strong> Maintain detailed logs of your farming activities</li>
