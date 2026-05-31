@@ -8,7 +8,6 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let pestModel = null;   // Your custom model loaded from your own domain
 
 // ────────── Helpers ──────────
 function showToast(msg, isError = false) {
@@ -486,53 +485,6 @@ async function globalSearch(term, category, dateFrom, dateTo) {
   container.innerHTML = results.length ? results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('') : '<p style="padding:20px;">No matches found.</p>';
 }
 
-// ══════════════════════════════════════════
-//  PEST DETECTION – Your Custom Model
-// ══════════════════════════════════════════
-
-// Model is hosted on your own domain – never expires
-const MODEL_URL = '/pest_model/model.json';
-const METADATA_URL = '/pest_model/metadata.json';
-
-async function loadModel() {
-  if (!pestModel) {
-    pestModel = await tmImage.load(MODEL_URL, METADATA_URL);
-  }
-  return pestModel;
-}
-
-async function classifyPest(imageElement) {
-  const resultDiv = document.getElementById('pestResult');
-  resultDiv.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing...';
-  try {
-    const model = await loadModel();
-    const predictions = await model.predict(imageElement);
-    if (!predictions || predictions.length === 0) {
-      resultDiv.innerHTML = 'No pest detected. Try a clearer photo.';
-      return;
-    }
-
-    // Find the class with the highest probability
-    const best = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
-    const confidence = (best.probability * 100).toFixed(1);
-
-    // Pest‑specific advice – all 5 classes
-    const adviceMap = {
-      'stalk borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
-      'armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
-      'maize rust': 'Rust disease! Apply sulfur or appropriate fungicide.',
-      'healthy leaf': 'Your crop looks healthy! Keep monitoring.',
-      'rice stem borer': 'Rice stem borer! Flood the field for 2 days or apply Bt.',
-    };
-
-    const advice = adviceMap[best.className] || 'Monitor your crop and consult an agronomist.';
-    resultDiv.innerHTML = `🐛 <strong>${best.className}</strong> (${confidence}% confidence)<br><br>${advice}`;
-
-  } catch (err) {
-    resultDiv.innerHTML = `❌ Analysis failed<br><small style="color:red;">${err.message || err}</small>`;
-  }
-}
-
 // ────────── Farming Assistant (unchanged) ──────────
 async function wikiAnswer(question) {
   try {
@@ -652,22 +604,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('addEventBtn').addEventListener('click', addEvent);
   document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
 
-  // Pest Detection
-  document.getElementById('identifyPestBtn').addEventListener('click', async () => {
-    const file = document.getElementById('pestImageInput').files[0];
-    if (!file) return showToast('Select an image', true);
-    const reader = new FileReader();
-    reader.onload = async e => {
-      document.getElementById('pestPreview').src = e.target.result;
-      document.getElementById('pestPreview').style.display = 'block';
-      document.getElementById('pestResult').innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Analyzing with custom model...';
-      const img = new Image(); img.src = e.target.result;
-      await new Promise(r => img.onload = r);
-      document.getElementById('pestResult').innerHTML = `<i class="fas fa-microscope"></i> ${await classifyPest(img)}`;
-    };
-    reader.readAsDataURL(file);
-  });
-
   // Chat
   document.getElementById('sendChatBtn').addEventListener('click', async () => {
     const input = document.getElementById('chatInput').value.trim();
@@ -727,8 +663,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Pre‑load the pest model in background
-  loadModel().catch(console.warn);
   checkSession();
   showPage('dashboard');
 });
