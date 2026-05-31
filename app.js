@@ -490,7 +490,7 @@ async function globalSearch(term, category, dateFrom, dateTo) {
 //  PEST DETECTION – Teachable Machine Model
 // ══════════════════════════════════════════
 
-// Your current Teachable Machine model URL (4 classes trained)
+// Your Teachable Machine model URL (5 classes)
 const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/3PP7fCkMT/';
 
 async function loadModel() {
@@ -515,7 +515,7 @@ async function classifyPest(imageElement) {
     const best = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
     const confidence = (best.probability * 100).toFixed(1);
 
-    // Pest‑specific advice – 5 classes (rice stem borer ready for when you retrain)
+    // Pest‑specific advice – all 5 classes
     const adviceMap = {
       'stalk borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
       'armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
