@@ -490,8 +490,8 @@ async function globalSearch(term, category, dateFrom, dateTo) {
 //  PEST DETECTION – Teachable Machine Model
 // ══════════════════════════════════════════
 
-// Replace with your copied Teachable Machine URL
-const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/';
+// Your current Teachable Machine model URL (4 classes trained)
+const MODEL_URL = 'https://teachablemachine.withgoogle.com/models/3PP7fCkMT/';
 
 async function loadModel() {
   if (!pestModel) {
@@ -515,14 +515,13 @@ async function classifyPest(imageElement) {
     const best = predictions.reduce((a, b) => a.probability > b.probability ? a : b);
     const confidence = (best.probability * 100).toFixed(1);
 
-    // Pest‑specific advice (match these exactly to your Teachable Machine class names)
+    // Pest‑specific advice – 5 classes (rice stem borer ready for when you retrain)
     const adviceMap = {
-      'Armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
-      'Stalk Borer': 'Stalk borer detected! Apply neem oil or Bt spray.',
-      'Maize Rust': 'Rust disease! Apply sulfur or fungicide.',
-      'Rice Stalk Borer': 'Rice stem borer! Flood the field or apply Bt.',
-      'Healthy Leaf': 'Your crop looks healthy! Keep monitoring.',
-      // Add more entries to match your exact class names
+      'stalk borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
+      'armyworm': 'Armyworm! Use Bt (Bacillus thuringiensis) or neem oil.',
+      'maize rust': 'Rust disease! Apply sulfur or appropriate fungicide.',
+      'healthy leaf': 'Your crop looks healthy! Keep monitoring.',
+      'rice stem borer': 'Rice stem borer! Flood the field for 2 days or apply Bt.',
     };
 
     const advice = adviceMap[best.className] || 'Monitor your crop and consult an agronomist.';
