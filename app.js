@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//  SUPABASE CREDENTIALS (yours already filled)
+//  SUPABASE CREDENTIALS (already filled)
 // ═══════════════════════════════════════════
 const SUPABASE_URL = 'https://injbsydeejivijbeatep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluamJzeWRlZWppdmlqYmVhdGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4MzEsImV4cCI6MjA5NTMxMDgzMX0.pc-QfLVYUHk5Ky3DClI0b4ThXjLHsUsDcT8qlUOSuKA';
@@ -8,7 +8,7 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let currentUser = null;
-let yoloModel = null;               // YOLO11s pest detection model
+let yoloModel = null;
 
 // ────────── Helpers ──────────
 function showToast(msg, isError = false) {
@@ -134,7 +134,6 @@ async function loadForum() {
   const { data: posts } = await db.from('forum_posts')
     .select('id, content, created_at, user_id, profiles!inner(display_name)')
     .order('created_at', { ascending: false });
-
   const container = document.getElementById('forumList');
   if (!posts || posts.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;">No discussions yet.</div>';
@@ -491,7 +490,7 @@ async function globalSearch(term, category, dateFrom, dateTo) {
 //  PEST DETECTION – YOLO11s IP102 (102 pests)
 // ══════════════════════════════════════════
 
-// Model is hosted inside the pest_model folder – loads from your own domain
+// Model is served from the same domain – no CORS issues
 const MODEL_URL = '/pest_model/model.json';
 
 // Complete 102 class names (from the model's pests.yaml)
@@ -546,6 +545,8 @@ async function loadModel() {
 }
 
 async function classifyPest(imageElement) {
+  const resultDiv = document.getElementById('pestResult');
+  resultDiv.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Loading model and analyzing...';
   try {
     const model = await loadModel();
     const tensor = tf.browser.fromPixels(imageElement)
@@ -557,7 +558,10 @@ async function classifyPest(imageElement) {
     tensor.dispose();
 
     const boxes = predictions.arraySync()[0];
-    if (!boxes || boxes.length === 0) return 'No pest detected. Try a clearer photo.';
+    if (!boxes || boxes.length === 0) {
+      resultDiv.innerHTML = 'No pest detected. Try a clearer photo.';
+      return;
+    }
 
     let best = boxes[0];
     for (let i = 1; i < boxes.length; i++) {
@@ -568,7 +572,6 @@ async function classifyPest(imageElement) {
     const className = CLASS_NAMES[classIndex] || 'Unknown pest';
     const confidence = (best[4] * 100).toFixed(1);
 
-    // Pest‑specific advice for common pests (extend as needed)
     const adviceMap = {
       'maize stem borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
       'maize stalk borer': 'Stalk borer detected! Apply neem oil or Bt spray. Remove infested plants.',
@@ -595,11 +598,12 @@ async function classifyPest(imageElement) {
     };
 
     const advice = adviceMap[className] || 'Monitor your crop and consult an agronomist if damage continues.';
-    return `🐛 <strong>${className}</strong> (${confidence}% confidence)<br><br>${advice}`;
+    resultDiv.innerHTML = `🐛 <strong>${className}</strong> (${confidence}% confidence)<br><br>${advice}`;
 
   } catch (err) {
     console.error(err);
-    return 'Pest analysis failed. Please try again with a clearer image.';
+    // Show the error directly on the page so you can see what went wrong
+    resultDiv.innerHTML = `❌ Analysis failed<br><small style="color:red;">${err.message}</small>`;
   }
 }
 
