@@ -7,8 +7,6 @@
   --toast-bg: #10B981;
   --accent: #10B981;
   --danger: #ff6b6b;
-  --google-blue: #4285F4;
-  --facebook-blue: #1877F2;
 }
 
 /* ═══════════════════════════════════════════ */
@@ -23,8 +21,6 @@ body.light {
   --toast-bg: #2563eb;
   --accent: #2563eb;
   --danger: #dc2626;
-  --google-blue: #4285F4;
-  --facebook-blue: #1877F2;
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
@@ -39,7 +35,6 @@ body{
   transition: all 0.3s ease;
 }
 
-/* Light mode - keep background image */
 body.light {
   background: linear-gradient(135deg,rgba(255,255,255,0.85),rgba(240,245,255,0.9)),url('https://images.unsplash.com/photo-1625246333195-78d9c38ad449?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80');
   background-size:cover;
@@ -49,7 +44,6 @@ body.light {
 
 .app-container{display:flex;min-height:100vh;position:relative}
 
-/* Sidebar */
 .sidebar{
   position:fixed;top:0;left:0;width:280px;height:100%;
   background:var(--card-bg);
@@ -132,7 +126,6 @@ body.light .nav-links li a:hover {
 
 .main-content{flex:1;padding:20px 28px 48px;width:100%}
 
-/* Top Bar */
 .top-bar{
   display:flex;align-items:center;justify-content:space-between;
   margin-bottom:32px;
@@ -210,12 +203,10 @@ body.light .user-greeting:hover {
   background: #dbeafe;
 }
 
-/* Pages */
 .page{display:none;animation:fadeSlide 0.25s ease}
 .active-page{display:block}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* Cards */
 .card{
   background:var(--card-bg);
   backdrop-filter:blur(14px);
@@ -237,7 +228,6 @@ body.light .card:hover {
   border-color: #93c5fd;
 }
 
-/* Buttons */
 .btn-primary{
   background:var(--accent);
   border:none;
@@ -262,7 +252,6 @@ body.light .btn-primary:hover {
   transform: scale(0.98);
 }
 
-/* Inputs */
 input,textarea,select{
   background:var(--input-bg);
   border:1px solid var(--border);
@@ -300,7 +289,6 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 
 .grid-2cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;margin-top:20px}
 
-/* Chat */
 .chat-window{
   background:#0a0a0acc;
   border-radius:32px;
@@ -331,7 +319,6 @@ body.light .bot-msg {
   border: 1px solid #e5e7eb;
 }
 
-/* Content Items */
 .forum-post,.record-item,.job-item,.product-item,.msg-item,.tutorial-item{
   background:var(--card-bg);
   border-radius:28px;
@@ -363,7 +350,6 @@ body.light .delete-btn {
 
 .delete-btn:hover{opacity:1}
 
-/* Toast */
 .toast{
   position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
   background:var(--toast-bg);color:black;
@@ -394,7 +380,6 @@ body.light footer {
   color: #4b5563;
 }
 
-/* Documentation */
 .doc-section{
   background:var(--card-bg);
   border-radius:20px;padding:20px;
@@ -418,7 +403,6 @@ body.light .doc-section h3 {
 .doc-section ul{list-style:none}
 .doc-section ul li:before{content:"🌱 "}
 
-/* Contact Card */
 .contact-card{
   background:linear-gradient(135deg,#10B981,#059669);
   border-radius:24px;padding:24px;
@@ -438,21 +422,18 @@ body.light .contact-card {
 
 .contact-info i{margin-right:10px}
 
-/* Theme Toggle */
 .theme-toggle{cursor:pointer;font-size:20px;color:var(--accent)}
 
 body.light .theme-toggle {
   color: #2563eb;
 }
 
-/* Like Button */
 .like-btn{cursor:pointer;color:var(--accent);margin-right:8px}
 
 body.light .like-btn {
   color: #2563eb;
 }
 
-/* Reply Section */
 .reply-section{margin-top:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:16px}
 
 body.light .reply-section {
@@ -463,121 +444,7 @@ body.light .reply-section {
 .reply-input{width:70%!important;display:inline}
 .apply-btn{margin-left:8px}
 
-/* ═══════════════════════════════════════════ */
-/*  SOCIAL AUTH BUTTONS                      */
-/* ═══════════════════════════════════════════ */
-.social-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  padding: 14px;
-  border: 2px solid var(--border);
-  border-radius: 34px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-family: 'Inter', sans-serif;
-  margin-bottom: 10px;
-  background: var(--input-bg);
-  color: var(--text-color);
-}
-
-.social-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-}
-
-.social-btn img {
-  width: 20px;
-  height: 20px;
-}
-
-/* Google Button */
-.google-btn {
-  border-color: var(--border);
-  background: white;
-  color: #333;
-}
-
-.google-btn:hover {
-  border-color: var(--google-blue);
-  background: #f8fbff;
-  box-shadow: 0 8px 25px rgba(66,133,244,0.2);
-}
-
-body.light .google-btn {
-  background: white;
-  color: #333;
-  border-color: #d1d5db;
-}
-
-body.light .google-btn:hover {
-  border-color: var(--google-blue);
-  box-shadow: 0 8px 25px rgba(66,133,244,0.3);
-}
-
-/* Facebook Button */
-.facebook-btn {
-  border-color: var(--facebook-blue);
-  background: var(--facebook-blue);
-  color: white;
-}
-
-.facebook-btn:hover {
-  background: #1666d9;
-  border-color: #1666d9;
-  box-shadow: 0 8px 25px rgba(24,119,242,0.3);
-}
-
-body.light .facebook-btn {
-  background: var(--facebook-blue);
-  color: white;
-}
-
-.social-icon-fb {
-  font-size: 18px;
-}
-
-/* Auth Modal Divider */
-.auth-divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  margin: 20px 0;
-  color: #666;
-  font-size: 13px;
-}
-
-body.light .auth-divider {
-  color: #4b5563;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  content: '';
-  flex: 1;
-  border-bottom: 1px solid var(--border);
-}
-
-body.light .auth-divider::before,
-body.light .auth-divider::after {
-  border-bottom: 1px solid #d1d5db;
-}
-
-.auth-divider span {
-  padding: 0 16px;
-  font-weight: 500;
-}
-
 /* Auth Modal */
-#authModal > div {
-  background: var(--card-bg);
-  border: 1px solid var(--accent);
-}
-
 body.light #authModal > div {
   background: white;
   border: 2px solid #2563eb;
@@ -588,7 +455,7 @@ body.light #modalTitle {
   color: #0f172a;
 }
 
-/* Stats Cards in Dashboard */
+/* Stats Cards */
 body.light .card[style*="background:#0a0a0a"] {
   background: rgba(255,255,255,0.85) !important;
   backdrop-filter: blur(10px);
@@ -620,12 +487,6 @@ body.light .card[style*="border-left:4px solid #10B981"] .btn-primary {
   color: white !important;
 }
 
-/* Weather card */
-body.light .card[style*="background:#0a0a0a"] h4 {
-  color: #0f172a !important;
-}
-
-/* Paragraph text in cards */
 body.light .card p,
 body.light .card span,
 body.light .card small {
@@ -638,26 +499,7 @@ body.light .card h4 {
   color: #0f172a;
 }
 
-/* Provider Icons */
-.user-greeting i.fa-google {
-  color: #4285F4;
-}
-
-.user-greeting i.fa-facebook {
-  color: #1877F2;
-}
-
-body.light .user-greeting i.fa-google,
-body.light .user-greeting i.fa-facebook {
-  color: inherit;
-}
-
-/* Responsive */
 @media(max-width:680px){
   .main-content{padding:16px}
   .card{padding:20px}
-  .social-btn {
-    padding: 12px;
-    font-size: 13px;
-  }
 }
