@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════
-//  SUPABASE CREDENTIALS
+//  SUPABASE CREDENTIALS (already filled)
 // ═══════════════════════════════════════════
 const SUPABASE_URL = 'https://injbsydeejivijbeatep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluamJzeWRlZWppdmlqYmVhdGVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MzQ4MzEsImV4cCI6MjA5NTMxMDgzMX0.pc-QfLVYUHk5Ky3DClI0b4ThXjLHsUsDcT8qlUOSuKA';
@@ -37,7 +37,7 @@ themeToggle.addEventListener('click', () => {
   localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
 });
 
-// ────────── Auth ──────────
+// ────────── Auth (Supabase) ──────────
 async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
   if (session && session.user) {
@@ -94,7 +94,7 @@ async function logout() {
 
 db.auth.onAuthStateChange((event, session) => { checkSession(); });
 
-// ────────── Weather ──────────
+// ────────── Weather widget ──────────
 async function loadWeather() {
   try {
     const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-1.28&longitude=36.82&current_weather=true');
@@ -110,7 +110,7 @@ async function loadWeather() {
   }
 }
 
-// ────────── Dashboard ──────────
+// ────────── Dashboard stats ──────────
 async function loadDashboardStats() {
   if (!currentUser) return;
   const [
@@ -128,7 +128,7 @@ async function loadDashboardStats() {
   loadWeather();
 }
 
-// ────────── Forum ──────────
+// ────────── Forum (replies, likes) ──────────
 async function loadForum() {
   const { data: posts } = await db.from('forum_posts')
     .select('id, content, created_at, user_id, profiles!inner(display_name)')
@@ -358,7 +358,7 @@ async function deleteTutorial(id) {
   loadTutorials(); loadDashboardStats();
 }
 
-// ────────── Calendar ──────────
+// ────────── Crop Calendar ──────────
 async function loadCalendar() {
   if (!currentUser) return;
   const { data: events } = await db.from('calendar_events').select('*').eq('user_id', currentUser.id).order('event_date');
@@ -437,4 +437,233 @@ async function loadProfile() {
     db.from('job_listings').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('products').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
     db.from('tutorials').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
-    db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser
+    db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`),
+    db.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', currentUser.id),
+    db.from('follows').select('*').eq('follower_id', currentUser.id).eq('following_id', currentUser.id)
+  ]);
+
+  document.getElementById('profileForumCount').textContent = forumCount;
+  document.getElementById('profileRecordsCount').textContent = recordsCount;
+  document.getElementById('profileJobsCount').textContent = jobsCount;
+  document.getElementById('profileProductsCount').textContent = productsCount;
+  document.getElementById('profileTutorialsCount').textContent = tutorialsCount;
+  document.getElementById('profileMessagesCount').textContent = messagesCount;
+  document.getElementById('followerCount').textContent = `${followers} followers`;
+  const followBtn = document.getElementById('followBtn');
+  followBtn.textContent = (isFollowing && isFollowing.length) ? 'Unfollow' : 'Follow';
+  followBtn.onclick = () => toggleFollow(currentUser.id);
+
+  document.getElementById('avatarUpload').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
+    if (!error) {
+      document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
+      showToast('Profile picture updated!');
+    } else showToast('Upload failed', true);
+  };
+}
+
+// ────────── Search (with filters) ──────────
+async function globalSearch(term, category, dateFrom, dateTo) {
+  const q = `%${term}%`;
+  let queries = [];
+  if (category === 'all' || category === 'forum') queries.push(db.from('forum_posts').select('content, created_at').ilike('content', q).limit(5));
+  if (category === 'all' || category === 'records') queries.push(db.from('farm_records').select('title, created_at').ilike('title', q).limit(5));
+  if (category === 'all' || category === 'jobs') queries.push(db.from('job_listings').select('title, created_at').ilike('title', q).limit(5));
+  if (category === 'all' || category === 'tutorials') queries.push(db.from('tutorials').select('title, created_at').ilike('title', q).limit(5));
+  const resultsArr = await Promise.all(queries);
+  const results = [];
+  resultsArr.forEach(res => {
+    if (res.data) res.data.forEach(r => {
+      if ((!dateFrom || new Date(r.created_at) >= new Date(dateFrom)) && (!dateTo || new Date(r.created_at) <= new Date(dateTo + 'T23:59:59'))) {
+        results.push(r.content || r.title);
+      }
+    });
+  });
+  const container = document.getElementById('searchResults');
+  container.innerHTML = results.length ? results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('') : '<p style="padding:20px;">No matches found.</p>';
+}
+
+// ────────── Farming Assistant ──────────
+async function wikiAnswer(question) {
+  try {
+    const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`);
+    const data = await res.json();
+    return data.extract ? data.extract.substring(0, 550) : 'No info found.';
+  } catch { return 'Connection error.'; }
+}
+
+// ────────── Page navigation ──────────
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+  document.getElementById(pageId).classList.add('active-page');
+  document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
+  const navItem = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
+  if (navItem) navItem.classList.add('active');
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('active');
+  switch (pageId) {
+    case 'forum': loadForum(); break;
+    case 'records': loadRecords(); break;
+    case 'jobs': loadJobs(); break;
+    case 'market': loadMarket(); break;
+    case 'messages': loadMessages(); break;
+    case 'tutorials': loadTutorials(); break;
+    case 'profile': loadProfile(); break;
+    case 'calendar': loadCalendar(); break;
+    case 'dashboard': loadDashboardStats(); break;
+  }
+}
+
+function openModal(mode) {
+  document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
+  document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
+  document.getElementById('authModal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('authModal').style.display = 'none';
+  ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value='');
+}
+
+// ────────── DOM Ready ──────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('hamburgerBtn').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebarOverlay').classList.toggle('active');
+  });
+  document.getElementById('sidebarOverlay').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('active');
+  });
+  document.querySelectorAll('.nav-links li').forEach(li => li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); }));
+
+  document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
+  document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
+  document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+  document.getElementById('authModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+  let authMode = 'login';
+  document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
+  document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
+  document.getElementById('authSubmitBtn').addEventListener('click', async () => {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPass').value;
+    const displayName = document.getElementById('authDisplayName').value.trim();
+    try {
+      if (authMode === 'login') await login(email, password);
+      else {
+        if (!displayName) return showToast('Display name required', true);
+        await signUp(email, password, displayName);
+      }
+      closeModal();
+    } catch (err) { showToast(err.message, true); }
+  });
+  document.getElementById('userGreeting').addEventListener('click', logout);
+
+  document.getElementById('postForumBtn').addEventListener('click', () => {
+    const c = document.getElementById('forumContent').value.trim();
+    if (c) { addForumPost(c); document.getElementById('forumContent').value = ''; }
+  });
+  document.getElementById('addRecordBtn').addEventListener('click', () => {
+    const t = document.getElementById('recordTitle').value.trim();
+    const d = document.getElementById('recordDetail').value.trim();
+    if (t) { addRecord(t, d); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
+  });
+  document.getElementById('postJobBtn').addEventListener('click', () => {
+    const t = document.getElementById('jobTitle').value.trim();
+    const d = document.getElementById('jobDesc').value.trim();
+    if (t) { addJob(t, d); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
+  });
+  document.getElementById('addProductBtn').addEventListener('click', () => {
+    const n = document.getElementById('productName').value.trim();
+    const p = document.getElementById('productPrice').value.trim();
+    const cat = document.getElementById('productCategory').value;
+    const img = document.getElementById('productImage').files[0];
+    if (n && p) { addProduct(n, p, cat, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
+  });
+  document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
+  document.getElementById('sendMsgBtn').addEventListener('click', () => {
+    const to = document.getElementById('msgTo').value.trim();
+    const tx = document.getElementById('msgText').value.trim();
+    if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
+  });
+  document.getElementById('doSearchBtn').addEventListener('click', () => {
+    const term = document.getElementById('searchInput').value.trim();
+    const cat = document.getElementById('searchCategory').value;
+    const from = document.getElementById('searchDateFrom').value;
+    const to = document.getElementById('searchDateTo').value;
+    if (term) globalSearch(term, cat, from, to);
+  });
+  document.getElementById('addVideoBtn').addEventListener('click', () => {
+    const t = document.getElementById('videoTitle').value.trim();
+    const u = document.getElementById('videoUrl').value.trim();
+    const d = document.getElementById('videoDesc').value.trim();
+    if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
+  });
+  document.getElementById('addEventBtn').addEventListener('click', addEvent);
+  document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
+
+  // Chat
+  document.getElementById('sendChatBtn').addEventListener('click', async () => {
+    const input = document.getElementById('chatInput').value.trim();
+    if (!input) return;
+    const chat = document.getElementById('chatMessages');
+    chat.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
+    document.getElementById('chatInput').value = '';
+    const reply = await wikiAnswer(input);
+    chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
+    chat.scrollTop = chat.scrollHeight;
+  });
+
+  // Global delegation for dynamic elements
+  document.addEventListener('click', async e => {
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+      if (!currentUser) return showToast('Login to delete', true);
+      const { type, id } = deleteBtn.dataset;
+      if (type === 'forum') await deleteForumPost(id);
+      else if (type === 'record') await deleteRecord(id);
+      else if (type === 'job') await deleteJob(id);
+      else if (type === 'product') await deleteProduct(id);
+      else if (type === 'tutorial') await deleteTutorial(id);
+      else if (type === 'calendar') await deleteCalendarEvent(id);
+      return;
+    }
+    const likeBtn = e.target.closest('.like-btn');
+    if (likeBtn) {
+      const { type, id } = likeBtn.dataset;
+      await toggleLike(type, id);
+      return;
+    }
+    const replyToggle = e.target.closest('.reply-toggle');
+    if (replyToggle) {
+      const postId = replyToggle.dataset.post;
+      const replyDiv = replyToggle.closest('.forum-post').nextElementSibling;
+      replyDiv.style.display = replyDiv.style.display === 'none' ? 'block' : 'none';
+      loadReplies(postId, replyDiv);
+      return;
+    }
+    const sendReply = e.target.closest('.send-reply');
+    if (sendReply) {
+      const postId = sendReply.dataset.post;
+      const input = sendReply.previousElementSibling;
+      const content = input.value.trim();
+      if (content) {
+        await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content });
+        const replyDiv = sendReply.closest('.reply-section');
+        loadReplies(postId, replyDiv);
+      }
+      return;
+    }
+    const applyBtn = e.target.closest('.apply-btn');
+    if (applyBtn) {
+      await applyToJob(applyBtn.dataset.job);
+      return;
+    }
+  });
+
+  checkSession();
+  showPage('dashboard');
+});
