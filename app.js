@@ -3,6 +3,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
+let authMode = 'login';
 
 function showToast(msg, isError = false) {
   const existing = document.querySelector('.toast');
@@ -50,8 +51,8 @@ async function signUp(email, password, displayName) {
   const { data, error } = await db.auth.signUp({ email, password });
   if (error) throw new Error(error.message);
   await db.from('profiles').upsert({ id: data.user.id, display_name: displayName, email: email });
-  await checkSession();
-  showToast(`Welcome, ${displayName}!`);
+  showToast(`Account created! Please log in.`);
+  openModal('login');
 }
 
 async function login(email, password) {
@@ -59,6 +60,7 @@ async function login(email, password) {
   if (error) throw new Error(error.message);
   await checkSession();
   showToast('Welcome back!');
+  closeModal();
 }
 
 async function logout() { await db.auth.signOut(); currentUser = null; updateAuthUI(); showToast('Logged out'); }
@@ -156,12 +158,7 @@ async function loadRecords() {
   c.innerHTML=r.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong><p>${escapeHtml(x.detail||'')}</p>${x.location?`<p>📍 ${escapeHtml(x.location)}</p>`:''}<small>${new Date(x.created_at).toLocaleString()}</small><button class="delete-btn" data-type="record" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
 }
 
-async function addRecord(t,d,l){
-  if(!currentUser)return showToast('Login first',true);
-  await db.from('farm_records').insert({user_id:currentUser.id,title:t,detail:d,location:l});
-  showToast('Saved!');loadRecords();loadDashboardStats();
-}
-
+async function addRecord(t,d,l){if(!currentUser)return showToast('Login first',true);await db.from('farm_records').insert({user_id:currentUser.id,title:t,detail:d,location:l});showToast('Saved!');loadRecords();loadDashboardStats();}
 async function deleteRecord(id){await db.from('farm_records').delete().eq('id',id);loadRecords();loadDashboardStats();}
 
 async function loadJobs() {
@@ -180,12 +177,7 @@ async function loadJobs() {
   }
 }
 
-async function addJob(t,d,l){
-  if(!currentUser)return showToast('Login first',true);
-  await db.from('job_listings').insert({user_id:currentUser.id,title:t,description:d,location:l});
-  showToast('Posted!');loadJobs();loadDashboardStats();
-}
-
+async function addJob(t,d,l){if(!currentUser)return showToast('Login first',true);await db.from('job_listings').insert({user_id:currentUser.id,title:t,description:d,location:l});showToast('Posted!');loadJobs();loadDashboardStats();}
 async function deleteJob(id){await db.from('job_applications').delete().eq('job_id',id);await db.from('job_listings').delete().eq('id',id);loadJobs();loadDashboardStats();}
 
 async function applyToJob(jobId) {
@@ -212,7 +204,7 @@ async function loadApplications() {
         let dn = 'Unknown', em = 'N/A', ph = 'N/A', lo = 'N/A';
         if (a.applicant_id) { const { data: pf } = await db.from('profiles').select('display_name,email,phone,location').eq('id', a.applicant_id).single(); if (pf) { dn = pf.display_name; em = pf.email; ph = pf.phone || 'N/A'; lo = pf.location || 'N/A'; } }
         const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-        c.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(dn)}</strong><br><small>📧 ${escapeHtml(em)}</small>${a.status==='accepted'?`<br><small>📱 ${escapeHtml(ph)}</small><br><small>📍 ${escapeHtml(lo)}</small>`:''}<br><small>${escapeHtml(a.applicant_message||'No message')}</small><br><span style="color:${sc};font-weight:600;">${a.status}</span>${a.status==='pending'?`<div style="margin-top:8px;"><button class="btn-outline accept-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button></div>`:''}${a.status==='accepted'?`<div style="margin-top:8px;"><button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(em)}" data-name="${escapeHtml(dn)}" style="font-size:12px;padding:6px 14px;"><i class="fas fa-envelope"></i> Send Message</button></div>`:''}</div>`;
+        c.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(dn)}</strong><br><small>📧 ${escapeHtml(em)}</small>${a.status==='accepted'?`<br><small>📱 ${escapeHtml(ph)}</small><br><small>📍 ${escapeHtml(lo)}</small>`:''}<br><small>${escapeHtml(a.applicant_message||'No message')}</small><br><span style="color:${sc};font-weight:600;">${a.status}</span>${a.status==='pending'?`<div style="margin-top:8px;"><button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button></div>`:''}${a.status==='accepted'?`<div style="margin-top:8px;"><button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(em)}" data-name="${escapeHtml(dn)}" style="font-size:12px;padding:6px 14px;"><i class="fas fa-envelope"></i> Send Message</button></div>`:''}</div>`;
       }
     }
   }
@@ -248,95 +240,25 @@ async function loadMarket() {
   c.innerHTML = p.map(x => `<div class="product-item">${x.image_url?`<img src="${x.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(x.name)}</strong> - ${escapeHtml(x.price)}${x.location?`<br><small>📍 ${escapeHtml(x.location)}</small>`:''}<br><small>${escapeHtml(x.category)}</small>${currentUser&&currentUser.id===x.user_id?`<button class="delete-btn" data-type="product" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
 }
 
-async function addProduct(n,p,cat,loc,img){
-  if(!currentUser)return showToast('Login first',true);
-  let iu=null;
-  if(img){const fp=`products/${Date.now()}_${img.name}`;const{error}=await db.storage.from('avatars').upload(fp,img);if(!error){const{data}=db.storage.from('avatars').getPublicUrl(fp);if(data)iu=data.publicUrl;}}
-  await db.from('products').insert({user_id:currentUser.id,name:n,price:p,category:cat,location:loc,image_url:iu});
-  showToast('Listed!');loadMarket();
-}
-
+async function addProduct(n,p,cat,loc,img){if(!currentUser)return showToast('Login first',true);let iu=null;if(img){const fp=`products/${Date.now()}_${img.name}`;const{error}=await db.storage.from('avatars').upload(fp,img);if(!error){const{data}=db.storage.from('avatars').getPublicUrl(fp);if(data)iu=data.publicUrl;}}await db.from('products').insert({user_id:currentUser.id,name:n,price:p,category:cat,location:loc,image_url:iu});showToast('Listed!');loadMarket();}
 async function deleteProduct(id){await db.from('products').delete().eq('id',id);loadMarket();}
 
-async function loadMessages(){
-  if(!currentUser)return;
-  const{data:m}=await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at',{ascending:false});
-  const c=document.getElementById('messagesList');
-  if(!m||m.length===0){c.innerHTML='<p>No messages.</p>';return;}
-  c.innerHTML='';
-  for(const x of m){
-    let fn='Unknown',tn='Unknown';
-    if(x.from_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.from_user_id).single();if(p)fn=p.display_name;}
-    if(x.to_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.to_user_id).single();if(p)tn=p.display_name;}
-    c.innerHTML+=`<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(x.text)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`;
-  }
-}
+async function loadMessages(){if(!currentUser)return;const{data:m}=await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at',{ascending:false});const c=document.getElementById('messagesList');if(!m||m.length===0){c.innerHTML='<p>No messages.</p>';return;}c.innerHTML='';for(const x of m){let fn='Unknown',tn='Unknown';if(x.from_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.from_user_id).single();if(p)fn=p.display_name;}if(x.to_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.to_user_id).single();if(p)tn=p.display_name;}c.innerHTML+=`<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(x.text)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`;}}
+async function sendMessage(toEmail,text){if(!currentUser)return showToast('Login first',true);const{data:u}=await db.from('profiles').select('id').eq('email',toEmail).limit(1);if(!u||u.length===0)return showToast('User not found',true);await db.from('messages').insert({from_user_id:currentUser.id,to_user_id:u[0].id,text});showToast('Sent!');loadMessages();}
 
-async function sendMessage(toEmail,text){
-  if(!currentUser)return showToast('Login first',true);
-  const{data:u}=await db.from('profiles').select('id').eq('email',toEmail).limit(1);
-  if(!u||u.length===0)return showToast('User not found',true);
-  await db.from('messages').insert({from_user_id:currentUser.id,to_user_id:u[0].id,text});
-  showToast('Sent!');loadMessages();
-}
-
-async function loadTutorials(){
-  const{data:t}=await db.from('tutorials').select('*').order('created_at',{ascending:false});
-  const c=document.getElementById('videosList');
-  if(!t||t.length===0){c.innerHTML='<p>No tutorials.</p>';return;}
-  c.innerHTML=t.map(x=>`<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(x.title)}</strong><br><a href="${escapeHtml(x.url)}" target="_blank">Watch →</a><p>${escapeHtml(x.description||'')}</p>${currentUser&&currentUser.id===x.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
-}
-
-async function addTutorial(t,u,d){
-  if(!currentUser)return showToast('Login first',true);
-  await db.from('tutorials').insert({user_id:currentUser.id,title:t,url:u,description:d});
-  showToast('Shared!');loadTutorials();loadDashboardStats();
-}
-
+async function loadTutorials(){const{data:t}=await db.from('tutorials').select('*').order('created_at',{ascending:false});const c=document.getElementById('videosList');if(!t||t.length===0){c.innerHTML='<p>No tutorials.</p>';return;}c.innerHTML=t.map(x=>`<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(x.title)}</strong><br><a href="${escapeHtml(x.url)}" target="_blank">Watch →</a><p>${escapeHtml(x.description||'')}</p>${currentUser&&currentUser.id===x.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');}
+async function addTutorial(t,u,d){if(!currentUser)return showToast('Login first',true);await db.from('tutorials').insert({user_id:currentUser.id,title:t,url:u,description:d});showToast('Shared!');loadTutorials();loadDashboardStats();}
 async function deleteTutorial(id){await db.from('tutorials').delete().eq('id',id);loadTutorials();loadDashboardStats();}
 
-async function loadCalendar(){
-  if(!currentUser)return;
-  const{data:e}=await db.from('calendar_events').select('*').eq('user_id',currentUser.id).order('event_date',{ascending:true});
-  const c=document.getElementById('calendarList');
-  if(!e||e.length===0){c.innerHTML='<p>No events.</p>';return;}
-  c.innerHTML=e.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong> - ${x.event_date}<br><small>${escapeHtml(x.notes||'')}</small><button class="delete-btn" data-type="calendar" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
-}
-
-async function addEvent(){
-  if(!currentUser)return;
-  const t=document.getElementById('eventTitle').value.trim();
-  const d=document.getElementById('eventDate').value;
-  const n=document.getElementById('eventNotes').value.trim();
-  if(!t||!d)return showToast('Title and date required',true);
-  await db.from('calendar_events').insert({user_id:currentUser.id,title:t,event_date:d,notes:n});
-  showToast('Added!');['eventTitle','eventDate','eventNotes'].forEach(id=>document.getElementById(id).value='');loadCalendar();
-}
-
+async function loadCalendar(){if(!currentUser)return;const{data:e}=await db.from('calendar_events').select('*').eq('user_id',currentUser.id).order('event_date',{ascending:true});const c=document.getElementById('calendarList');if(!e||e.length===0){c.innerHTML='<p>No events.</p>';return;}c.innerHTML=e.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong> - ${x.event_date}<br><small>${escapeHtml(x.notes||'')}</small><button class="delete-btn" data-type="calendar" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');}
+async function addEvent(){if(!currentUser)return;const t=document.getElementById('eventTitle').value.trim();const d=document.getElementById('eventDate').value;const n=document.getElementById('eventNotes').value.trim();if(!t||!d)return showToast('Title and date required',true);await db.from('calendar_events').insert({user_id:currentUser.id,title:t,event_date:d,notes:n});showToast('Added!');['eventTitle','eventDate','eventNotes'].forEach(id=>document.getElementById(id).value='');loadCalendar();}
 async function deleteCalendarEvent(id){await db.from('calendar_events').delete().eq('id',id);loadCalendar();}
 
-function calculateYield(){
-  const c=document.getElementById('cropType').value;
-  const a=parseFloat(document.getElementById('areaInput').value);
-  const y={maize:3.5,rice:4.2,wheat:2.8,beans:1.2};
-  document.getElementById('yieldResult').textContent=(a>0)?`Estimated: ${(a*y[c]).toFixed(1)} tons`:'Enter valid area.';
-}
+function calculateYield(){const c=document.getElementById('cropType').value;const a=parseFloat(document.getElementById('areaInput').value);const y={maize:3.5,rice:4.2,wheat:2.8,beans:1.2};document.getElementById('yieldResult').textContent=(a>0)?`Estimated: ${(a*y[c]).toFixed(1)} tons`:'Enter valid area.';}
 
-async function globalSearch(term,cat,df,dt){
-  const q=`%${term}%`;let qs=[];
-  if(cat==='all'||cat==='forum')qs.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));
-  if(cat==='all'||cat==='records')qs.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));
-  if(cat==='all'||cat==='jobs')qs.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));
-  if(cat==='all'||cat==='tutorials')qs.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));
-  const ra=await Promise.all(qs);const r=[];
-  ra.forEach(res=>{if(res.data)res.data.forEach(x=>{if((!df||new Date(x.created_at)>=new Date(df))&&(!dt||new Date(x.created_at)<=new Date(dt+'T23:59:59')))r.push(x.content||x.title);});});
-  document.getElementById('searchResults').innerHTML=r.length?r.map(t=>`<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join(''):'<p>No matches.</p>';
-}
+async function globalSearch(term,cat,df,dt){const q=`%${term}%`;let qs=[];if(cat==='all'||cat==='forum')qs.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));if(cat==='all'||cat==='records')qs.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));if(cat==='all'||cat==='jobs')qs.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));if(cat==='all'||cat==='tutorials')qs.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));const ra=await Promise.all(qs);const r=[];ra.forEach(res=>{if(res.data)res.data.forEach(x=>{if((!df||new Date(x.created_at)>=new Date(df))&&(!dt||new Date(x.created_at)<=new Date(dt+'T23:59:59')))r.push(x.content||x.title);});});document.getElementById('searchResults').innerHTML=r.length?r.map(t=>`<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join(''):'<p>No matches.</p>';}
 
-async function wikiAnswer(q){
-  try{const res=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}?redirect=true`);const d=await res.json();return d.extract?d.extract.substring(0,550):'No info.';}
-  catch{return'Connection error.';}
-}
+async function wikiAnswer(q){try{const res=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}?redirect=true`);const d=await res.json();return d.extract?d.extract.substring(0,550):'No info.';}catch{return'Connection error.';}}
 
 async function loadProfile(){
   if(!currentUser){document.getElementById('profileContent').innerHTML='<p>Please login.</p>';return;}
@@ -359,48 +281,52 @@ async function loadProfile(){
   const{count:tc}=await db.from('tutorials').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
   const{count:mc}=await db.from('messages').select('*',{count:'exact',head:true}).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`);
   const{count:fol}=await db.from('follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id);
-  document.getElementById('profileForumCount').textContent=fc||0;
-  document.getElementById('profileRecordsCount').textContent=rc||0;
-  document.getElementById('profileJobsCount').textContent=jc||0;
-  document.getElementById('profileProductsCount').textContent=pc||0;
-  document.getElementById('profileTutorialsCount').textContent=tc||0;
-  document.getElementById('profileMessagesCount').textContent=mc||0;
-  document.getElementById('followerCount').textContent=`${fol||0} followers`;
+  document.getElementById('profileForumCount').textContent=fc||0;document.getElementById('profileRecordsCount').textContent=rc||0;document.getElementById('profileJobsCount').textContent=jc||0;document.getElementById('profileProductsCount').textContent=pc||0;document.getElementById('profileTutorialsCount').textContent=tc||0;document.getElementById('profileMessagesCount').textContent=mc||0;document.getElementById('followerCount').textContent=`${fol||0} followers`;
   document.getElementById('avatarUpload').onchange=async(e)=>{const f=e.target.files[0];if(!f)return;const{error}=await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`,f,{upsert:true});if(!error){document.getElementById('profileAvatar').src=db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;showToast('Updated!');}};
 }
 
 function showPage(pageId){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active-page'));
-  const el=document.getElementById(pageId);
-  if(el)el.classList.add('active-page');
+  const el=document.getElementById(pageId);if(el)el.classList.add('active-page');
   document.querySelectorAll('.nav-links li').forEach(li=>li.classList.remove('active'));
-  const nav=document.querySelector(`.nav-links li[data-page="${pageId}"]`);
-  if(nav)nav.classList.add('active');
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('active');
+  const nav=document.querySelector(`.nav-links li[data-page="${pageId}"]`);if(nav)nav.classList.add('active');
+  document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('active');
   switch(pageId){case'forum':loadForum();break;case'groups':loadGroups();break;case'records':loadRecords();break;case'jobs':loadJobs();break;case'applications':loadApplications();break;case'myapplications':loadMyApplications();break;case'market':loadMarket();break;case'messages':loadMessages();break;case'tutorials':loadTutorials();break;case'profile':loadProfile();break;case'calendar':loadCalendar();break;case'dashboard':loadDashboardStats();break;}
 }
 
-function openModal(mode){document.getElementById('modalTitle').innerText=mode==='login'?'Welcome Back':'Create Account';document.getElementById('authDisplayName').style.display=mode==='login'?'none':'block';document.getElementById('authModal').style.display='flex';}
-function closeModal(){document.getElementById('authModal').style.display='none';['authEmail','authPass','authDisplayName'].forEach(id=>document.getElementById(id).value='');}
+function openModal(mode){
+  authMode = mode;
+  document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
+  document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
+  document.getElementById('authModal').style.display = 'flex';
+}
+
+function closeModal(){
+  document.getElementById('authModal').style.display = 'none';
+  ['authEmail','authPass','authDisplayName'].forEach(id=>document.getElementById(id).value='');
+}
 
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('hamburgerBtn').addEventListener('click',()=>{document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('active');});
   document.getElementById('sidebarOverlay').addEventListener('click',()=>{document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('active');});
   document.querySelectorAll('.nav-links li').forEach(li=>li.addEventListener('click',e=>{e.preventDefault();showPage(li.dataset.page);}));
+
   document.getElementById('loginBtn').addEventListener('click',()=>openModal('login'));
   document.getElementById('signupBtn').addEventListener('click',()=>openModal('signup'));
   document.getElementById('closeModalBtn').addEventListener('click',closeModal);
   document.getElementById('authModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
-  let authMode='login';
-  document.getElementById('loginBtn').addEventListener('click',()=>{authMode='login';});
-  document.getElementById('signupBtn').addEventListener('click',()=>{authMode='signup';});
+
   document.getElementById('authSubmitBtn').addEventListener('click',async()=>{
     const email=document.getElementById('authEmail').value.trim();
     const pass=document.getElementById('authPass').value;
     const dn=document.getElementById('authDisplayName').value.trim();
-    try{if(authMode==='login')await login(email,pass);else{if(!dn)return showToast('Display name required',true);await signUp(email,pass,dn);}closeModal();}catch(err){showToast(err.message,true);}
+    if(!email||!pass)return showToast('Fill all fields',true);
+    try{
+      if(authMode==='login')await login(email,pass);
+      else{if(!dn)return showToast('Display name required',true);await signUp(email,pass,dn);}
+    }catch(err){showToast(err.message,true);}
   });
+
   document.getElementById('userGreeting').addEventListener('click',logout);
   document.getElementById('postForumBtn').addEventListener('click',()=>{const c=document.getElementById('forumContent').value.trim();const img=document.getElementById('forumImage').files[0];if(c){addForumPost(c,img);document.getElementById('forumContent').value='';document.getElementById('forumImage').value='';}});
   document.getElementById('createGroupBtn').addEventListener('click',createGroup);
@@ -419,47 +345,28 @@ document.addEventListener('DOMContentLoaded',()=>{
   
   document.getElementById('saveProfileBtn').addEventListener('click',async()=>{
     if(!currentUser)return;
-    const dn=document.getElementById('editDisplayName').value.trim();
-    const ph=document.getElementById('editPhone').value.trim();
-    const loc=document.getElementById('editLocation').value.trim();
-    const bio=document.getElementById('editBio').value.trim();
+    const dn=document.getElementById('editDisplayName').value.trim();const ph=document.getElementById('editPhone').value.trim();const loc=document.getElementById('editLocation').value.trim();const bio=document.getElementById('editBio').value.trim();
     const{error}=await db.from('profiles').update({display_name:dn,phone:ph,location:loc,bio:bio}).eq('id',currentUser.id);
-    if(error)showToast('Failed',true);
-    else{currentUser.displayName=dn;updateAuthUI();showToast('Profile updated!');loadProfile();}
+    if(error)showToast('Failed',true);else{currentUser.displayName=dn;updateAuthUI();showToast('Profile updated!');loadProfile();}
   });
   
   document.getElementById('sendChatBtn').addEventListener('click',async()=>{
-    const input=document.getElementById('chatInput').value.trim();
-    if(!input)return;
-    const chat=document.getElementById('chatMessages');
-    chat.innerHTML+=`<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
-    document.getElementById('chatInput').value='';
-    const reply=await wikiAnswer(input);
-    chat.innerHTML+=`<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
-    chat.scrollTop=chat.scrollHeight;
+    const input=document.getElementById('chatInput').value.trim();if(!input)return;
+    const chat=document.getElementById('chatMessages');chat.innerHTML+=`<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;document.getElementById('chatInput').value='';
+    const reply=await wikiAnswer(input);chat.innerHTML+=`<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;chat.scrollTop=chat.scrollHeight;
   });
 
   document.addEventListener('click',async function(e){
-    const deleteBtn=e.target.closest('.delete-btn');
-    if(deleteBtn){if(!currentUser)return showToast('Login first',true);if(!confirm('Delete?'))return;const{type,id}=deleteBtn.dataset;if(type==='forum')await deleteForumPost(id);else if(type==='record')await deleteRecord(id);else if(type==='job')await deleteJob(id);else if(type==='product')await deleteProduct(id);else if(type==='tutorial')await deleteTutorial(id);else if(type==='calendar')await deleteCalendarEvent(id);return;}
-    const likeBtn=e.target.closest('.like-btn');
-    if(likeBtn){const{type,id}=likeBtn.dataset;await toggleLike(type,id);return;}
-    const replyToggle=e.target.closest('.reply-toggle');
-    if(replyToggle){const pid=replyToggle.dataset.post;const rd=replyToggle.closest('.forum-post').nextElementSibling;rd.style.display=rd.style.display==='none'?'block':'none';loadReplies(pid,rd);return;}
-    const sendReply=e.target.closest('.send-reply');
-    if(sendReply&&currentUser){const pid=sendReply.dataset.post;const inp=sendReply.previousElementSibling;const ct=inp.value.trim();if(ct){await db.from('forum_replies').insert({post_id:pid,user_id:currentUser.id,content:ct});const rd=sendReply.closest('.reply-section');loadReplies(pid,rd);}return;}
-    const applyBtn=e.target.closest('.apply-btn');
-    if(applyBtn){e.preventDefault();e.stopPropagation();await applyToJob(applyBtn.dataset.job);return;}
-    const acceptBtn=e.target.closest('.accept-app');
-    if(acceptBtn){await updateApplicationStatus(acceptBtn.dataset.id,'accepted');return;}
-    const rejectBtn=e.target.closest('.reject-app');
-    if(rejectBtn){await updateApplicationStatus(rejectBtn.dataset.id,'rejected');return;}
-    const contactApplicant=e.target.closest('.contact-applicant-btn');
-    if(contactApplicant){document.getElementById('msgTo').value=contactApplicant.dataset.email;document.getElementById('msgText').value=`Hello ${contactApplicant.dataset.name}, regarding your application...`;showPage('messages');return;}
-    const contactPoster=e.target.closest('.contact-poster-btn');
-    if(contactPoster){document.getElementById('msgTo').value=contactPoster.dataset.email;document.getElementById('msgText').value=`Hello ${contactPoster.dataset.name}, I'm following up on my application...`;showPage('messages');return;}
+    const deleteBtn=e.target.closest('.delete-btn');if(deleteBtn){if(!currentUser)return showToast('Login first',true);if(!confirm('Delete?'))return;const{type,id}=deleteBtn.dataset;if(type==='forum')await deleteForumPost(id);else if(type==='record')await deleteRecord(id);else if(type==='job')await deleteJob(id);else if(type==='product')await deleteProduct(id);else if(type==='tutorial')await deleteTutorial(id);else if(type==='calendar')await deleteCalendarEvent(id);return;}
+    const likeBtn=e.target.closest('.like-btn');if(likeBtn){const{type,id}=likeBtn.dataset;await toggleLike(type,id);return;}
+    const replyToggle=e.target.closest('.reply-toggle');if(replyToggle){const pid=replyToggle.dataset.post;const rd=replyToggle.closest('.forum-post').nextElementSibling;rd.style.display=rd.style.display==='none'?'block':'none';loadReplies(pid,rd);return;}
+    const sendReply=e.target.closest('.send-reply');if(sendReply&&currentUser){const pid=sendReply.dataset.post;const inp=sendReply.previousElementSibling;const ct=inp.value.trim();if(ct){await db.from('forum_replies').insert({post_id:pid,user_id:currentUser.id,content:ct});const rd=sendReply.closest('.reply-section');loadReplies(pid,rd);}return;}
+    const applyBtn=e.target.closest('.apply-btn');if(applyBtn){e.preventDefault();e.stopPropagation();await applyToJob(applyBtn.dataset.job);return;}
+    const acceptBtn=e.target.closest('.accept-app');if(acceptBtn){await updateApplicationStatus(acceptBtn.dataset.id,'accepted');return;}
+    const rejectBtn=e.target.closest('.reject-app');if(rejectBtn){await updateApplicationStatus(rejectBtn.dataset.id,'rejected');return;}
+    const contactApplicant=e.target.closest('.contact-applicant-btn');if(contactApplicant){document.getElementById('msgTo').value=contactApplicant.dataset.email;document.getElementById('msgText').value=`Hello ${contactApplicant.dataset.name}, regarding your application...`;showPage('messages');return;}
+    const contactPoster=e.target.closest('.contact-poster-btn');if(contactPoster){document.getElementById('msgTo').value=contactPoster.dataset.email;document.getElementById('msgText').value=`Hello ${contactPoster.dataset.name}, I'm following up on my application...`;showPage('messages');return;}
   });
 
-  checkSession();
-  showPage('dashboard');
+  checkSession();showPage('dashboard');
 });
