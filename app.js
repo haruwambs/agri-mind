@@ -37,6 +37,41 @@ themeToggle.addEventListener('click', () => {
   localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
 });
 
+// ────────── Social Auth ──────────
+async function signInWithGoogle() {
+  try {
+    const { data, error } = await db.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.href,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
+    });
+    if (error) throw error;
+    closeModal();
+  } catch (error) {
+    showToast('Google sign in failed: ' + error.message, true);
+  }
+}
+
+async function signInWithFacebook() {
+  try {
+    const { data, error } = await db.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        redirectTo: window.location.href,
+      }
+    });
+    if (error) throw error;
+    closeModal();
+  } catch (error) {
+    showToast('Facebook sign in failed: ' + error.message, true);
+  }
+}
+
 // ────────── Auth (Supabase) ──────────
 async function checkSession() {
   const { data: { session } } = await db.auth.getSession();
@@ -45,7 +80,8 @@ async function checkSession() {
     currentUser = {
       id: session.user.id,
       email: session.user.email,
-      displayName: profile?.display_name || session.user.email
+      displayName: profile?.display_name || session.user.user_metadata?.full_name || session.user.email,
+      provider: session.user.app_metadata?.provider || 'email'
     };
   } else {
     currentUser = null;
@@ -63,7 +99,9 @@ function updateAuthUI() {
   if (currentUser) {
     authSection.style.display = 'none';
     userGreeting.style.display = 'block';
-    userGreeting.innerHTML = `<i class="fas fa-user-check"></i> ${escapeHtml(currentUser.displayName)}`;
+    const providerIcon = currentUser.provider === 'google' ? 'fab fa-google' : 
+                         currentUser.provider === 'facebook' ? 'fab fa-facebook' : 'fas fa-user-check';
+    userGreeting.innerHTML = `<i class="${providerIcon}"></i> ${escapeHtml(currentUser.displayName)}`;
   } else {
     authSection.style.display = 'flex';
     userGreeting.style.display = 'none';
@@ -71,7 +109,15 @@ function updateAuthUI() {
 }
 
 async function signUp(email, password, displayName) {
-  const { data, error } = await db.auth.signUp({ email, password });
+  const { data, error } = await db.auth.signUp({ 
+    email, 
+    password,
+    options: {
+      data: {
+        display_name: displayName
+      }
+    }
+  });
   if (error) throw new Error(error.message);
   await db.from('profiles').insert({ id: data.user.id, display_name: displayName });
   await checkSession();
@@ -92,7 +138,14 @@ async function logout() {
   showToast('Logged out');
 }
 
-db.auth.onAuthStateChange((event, session) => { checkSession(); });
+db.auth.onAuthStateChange((event, session) => { 
+  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    checkSession();
+  } else if (event === 'SIGNED_OUT') {
+    currentUser = null;
+    updateAuthUI();
+  }
+});
 
 // ────────── Weather widget ──────────
 async function loadWeather() {
@@ -422,9 +475,20 @@ async function loadProfile() {
   }
   document.getElementById('profileName').textContent = currentUser.displayName;
   document.getElementById('profileEmail').textContent = currentUser.email;
+  
+  // Show provider info
+  const profileSince = document.getElementById('profileSince');
+  if (currentUser.provider && currentUser.provider !== 'email') {
+    profileSince.textContent = `Signed in with ${currentUser.provider}`;
+  }
+  
   const { data: profile } = await db.from('profiles').select('created_at').eq('id', currentUser.id).single();
-  if (profile) document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
-  const avatarUrl = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
+  if (profile && currentUser.provider === 'email') {
+    profileSince.textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
+  }
+  
+  const avatarUrl = currentUser.user_metadata?.avatar_url || 
+                    db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
   document.getElementById('profileAvatar').src = avatarUrl;
 
   const [
@@ -499,7 +563,8 @@ function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
   document.getElementById(pageId).classList.add('active-page');
   document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
-  document.querySelector(`.nav-links li[data-page="${pageId}"]`).classList.add('active');
+  const navItem = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
+  if (navItem) navItem.classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
   switch (pageId) {
@@ -537,6 +602,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('sidebarOverlay').classList.remove('active');
   });
   document.querySelectorAll('.nav-links li').forEach(li => li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); }));
+
+  // Social login buttons
+  document.getElementById('googleLoginBtn').addEventListener('click', signInWithGoogle);
+  document.getElementById('facebookLoginBtn').addEventListener('click', signInWithFacebook);
 
   document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
   document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
