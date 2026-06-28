@@ -62,9 +62,9 @@
                 </div>
                 <div class="card" style="background:#0a0a0a; margin-top:20px; border-left:4px solid #10B981;">
                     <h4 style="color:#10B981; margin-bottom:8px;"><i class="fas fa-microscope"></i> Offline Pest Detector</h4>
-                    <p style="font-size:0.9rem; color:#aaa; line-height:1.6;">Get our standalone pest detection tool that works <strong>completely offline</strong>. Identifies <strong>102 pest species</strong>.</p>
+                    <p style="font-size:0.9rem; color:#aaa; line-height:1.6;">Get our standalone pest detection tool that works <strong>completely offline</strong> on any device. Identifies <strong>102 pest species</strong> including stalk borer, armyworm, and more — no internet needed.</p>
                     <a href="https://wa.me/260573373146?text=Hi%2C%20I%20would%20like%20to%20get%20the%20AgriMind%20Pest%20Detector%20file." target="_blank" class="btn-primary" style="text-decoration:none; margin-top:12px; display:inline-flex; align-items:center; gap:8px;"><i class="fab fa-whatsapp"></i> Request via WhatsApp</a>
-                    <p style="font-size:0.7rem; color:#666; margin-top:8px;">or contact <strong>+260 573373146</strong></p>
+                    <p style="font-size:0.7rem; color:#666; margin-top:8px;">or contact <strong>+260 573373146</strong> · Works offline · No app install needed</p>
                 </div>
                 <div class="grid-2cols" style="margin-top: 28px;">
                     <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-clipboard-list" style="font-size:28px; color:#10B981;"></i> <strong>Farm Records</strong><br><span id="statRecords">0</span> entries</div>
@@ -79,9 +79,9 @@
         <div id="wikichat" class="page">
             <div class="card">
                 <h2><i class="fas fa-robot"></i> Smart Farming Assistant</h2>
-                <p>Ask any farming-related question.</p>
-                <div id="chatMessages" class="chat-window"><div class="message-bubble bot-msg">Hello! I'm your farming assistant. How can I help you today?</div></div>
-                <div style="display:flex; gap:12px; margin-top:18px;"><input type="text" id="chatInput" placeholder="Ask about crops, pests, soil..."><button id="sendChatBtn" class="btn-primary">Ask</button></div>
+                <p>Ask any farming-related question and get instant, helpful information from our agricultural knowledge base.</p>
+                <div id="chatMessages" class="chat-window"><div class="message-bubble bot-msg">Hello! I'm your farming assistant. Ask me about crop management, pest control, soil health, or any agricultural topic. How can I help you today?</div></div>
+                <div style="display:flex; gap:12px; margin-top:18px;"><input type="text" id="chatInput" placeholder="e.g., how to control aphids naturally, best maize varieties..."><button id="sendChatBtn" class="btn-primary">Ask</button></div>
             </div>
         </div>
 
@@ -89,7 +89,8 @@
         <div id="forum" class="page">
             <div class="card">
                 <h2><i class="fas fa-users"></i> Farmers Community Forum</h2>
-                <textarea id="forumContent" placeholder="Share your farming knowledge..."></textarea>
+                <p>Connect with fellow farmers, share experiences, ask questions, and learn from each other's knowledge.</p>
+                <textarea id="forumContent" placeholder="Share your farming knowledge or ask a question..."></textarea>
                 <input type="file" id="forumImage" accept="image/*" style="margin-bottom:12px;">
                 <button id="postForumBtn" class="btn-primary">Share with Image</button>
                 <div id="forumList" style="margin-top:24px;"></div>
@@ -100,12 +101,13 @@
         <div id="groups" class="page">
             <div class="card">
                 <h2><i class="fas fa-users"></i> Farming Communities</h2>
+                <p>Join groups based on your interests and location.</p>
                 <input id="groupName" placeholder="Group Name">
                 <textarea id="groupDesc" placeholder="Group Description"></textarea>
-                <input id="groupLocation" placeholder="Location">
+                <input id="groupLocation" placeholder="Location (e.g., Northern Region)">
                 <select id="groupCategory"><option value="Crops">Crops</option><option value="Livestock">Livestock</option><option value="Organic">Organic Farming</option><option value="Equipment">Equipment</option><option value="Market">Market</option><option value="General">General</option></select>
                 <button id="createGroupBtn" class="btn-primary">Create Group</button>
-                <input id="groupLocationFilter" placeholder="Filter by location..." style="width:100%; margin-top:12px;">
+                <div style="margin:12px 0;"><input id="groupLocationFilter" placeholder="Filter groups by location..." style="width:100%;"></div>
                 <div id="groupsList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -113,9 +115,10 @@
         <!-- RECORDS -->
         <div id="records" class="page">
             <div class="card">
-                <h2><i class="fas fa-database"></i> Farm Records</h2>
+                <h2><i class="fas fa-database"></i> Farm Management Records</h2>
+                <p>Keep track of your crops, activities, yields, and inputs. Good records lead to better farming decisions.</p>
                 <input id="recordTitle" placeholder="Crop or Activity Name">
-                <input id="recordDetail" placeholder="Details">
+                <input id="recordDetail" placeholder="Details - variety, yield, inputs used, observations">
                 <input id="recordLocation" placeholder="Farm Location">
                 <button id="addRecordBtn" class="btn-primary">Save Record</button>
                 <div id="recordsList" style="margin-top:24px;"></div>
@@ -125,12 +128,13 @@
         <!-- JOBS -->
         <div id="jobs" class="page">
             <div class="card">
-                <h2><i class="fas fa-briefcase"></i> Job Listings</h2>
+                <h2><i class="fas fa-briefcase"></i> Agricultural Job Listings</h2>
+                <p>Find farm workers or post job opportunities in the agricultural sector.</p>
                 <input id="jobTitle" placeholder="Job Title">
-                <input id="jobDesc" placeholder="Description">
-                <input id="jobLocation" placeholder="Location">
-                <button id="postJobBtn" class="btn-primary">Post Job</button>
-                <input id="jobLocationFilter" placeholder="Filter by location..." style="width:100%; margin-top:12px;">
+                <input id="jobDesc" placeholder="Description, requirements, and location">
+                <input id="jobLocation" placeholder="Location (e.g., Lusaka, Nairobi)">
+                <button id="postJobBtn" class="btn-primary">Post Job Opening</button>
+                <div style="margin:12px 0;"><input id="jobLocationFilter" placeholder="Filter by location..." style="width:100%;"></div>
                 <div id="jobsList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -139,7 +143,7 @@
         <div id="applications" class="page">
             <div class="card">
                 <h2><i class="fas fa-clipboard-check"></i> Job Applications</h2>
-                <p>View applicants for your jobs.</p>
+                <p>View all applications for your job listings.</p>
                 <div id="applicationsList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -148,7 +152,7 @@
         <div id="myapplications" class="page">
             <div class="card">
                 <h2><i class="fas fa-file-alt"></i> My Applications</h2>
-                <p>Track jobs you applied to.</p>
+                <p>Track jobs you've applied to.</p>
                 <div id="myApplicationsList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -156,15 +160,16 @@
         <!-- MARKETPLACE -->
         <div id="market" class="page">
             <div class="card">
-                <h2><i class="fas fa-store"></i> Marketplace</h2>
+                <h2><i class="fas fa-store"></i> Farmers Marketplace</h2>
+                <p>Buy and sell agricultural products directly with other farmers in your community.</p>
                 <input id="productName" placeholder="Product Name">
-                <input id="productPrice" placeholder="Price">
+                <input id="productPrice" placeholder="Price (in your local currency)">
                 <input id="productLocation" placeholder="Location">
-                <select id="productCategory"><option value="General">General</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option></select>
-                <input type="file" id="productImage" accept="image/*">
+                <select id="productCategory" style="background:var(--input-bg); border:1px solid var(--border); padding:12px 18px; border-radius:34px; color:var(--text-color); width:100%; margin:8px 0 16px; font-family:'Inter',sans-serif;"><option value="General">General</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option><option value="Other">Other</option></select>
+                <input type="file" id="productImage" accept="image/*" style="margin-bottom:16px;">
                 <button id="addProductBtn" class="btn-primary">List Product</button>
-                <select id="marketCategoryFilter" style="margin:8px 0;"><option value="All">All</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option></select>
-                <input id="marketLocationFilter" placeholder="Filter by location..." style="width:100%;">
+                <div><label>Filter by category:</label><select id="marketCategoryFilter" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:auto; margin:8px 0;"><option value="All">All</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option><option value="Other">Other</option></select></div>
+                <input id="marketLocationFilter" placeholder="Filter by location..." style="width:100%; margin-bottom:8px;">
                 <div id="marketList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -172,33 +177,36 @@
         <!-- MESSAGES -->
         <div id="messages" class="page">
             <div class="card">
-                <h2><i class="fas fa-envelope"></i> Messages</h2>
-                <input id="msgTo" placeholder="Recipient email">
-                <textarea id="msgText" placeholder="Type message..."></textarea>
-                <button id="sendMsgBtn" class="btn-primary">Send</button>
+                <h2><i class="fas fa-envelope"></i> Private Messages</h2>
+                <p>Communicate directly with other farmers and agricultural professionals.</p>
+                <input id="msgTo" placeholder="Recipient Username (email)">
+                <textarea id="msgText" placeholder="Type your message here..."></textarea>
+                <button id="sendMsgBtn" class="btn-primary">Send Message</button>
                 <div id="messagesList" style="margin-top:24px;"></div>
             </div>
         </div>
 
-        <!-- CALENDAR -->
+        <!-- CROP CALENDAR -->
         <div id="calendar" class="page">
             <div class="card">
                 <h2><i class="fas fa-calendar-alt"></i> Crop Calendar</h2>
+                <p>Plan your planting, harvesting, and other important farm events.</p>
                 <input type="text" id="eventTitle" placeholder="Event title">
                 <input type="date" id="eventDate">
-                <textarea id="eventNotes" placeholder="Notes"></textarea>
+                <textarea id="eventNotes" placeholder="Notes (optional)"></textarea>
                 <button id="addEventBtn" class="btn-primary">Add Event</button>
                 <div id="calendarList" style="margin-top:24px;"></div>
             </div>
         </div>
 
-        <!-- CALCULATOR -->
+        <!-- YIELD CALCULATOR -->
         <div id="calculator" class="page">
             <div class="card">
                 <h2><i class="fas fa-calculator"></i> Yield Calculator</h2>
-                <select id="cropType"><option value="maize">Maize</option><option value="rice">Rice</option><option value="wheat">Wheat</option><option value="beans">Beans</option></select>
-                <input type="number" id="areaInput" placeholder="Hectares" step="0.1">
-                <button id="calcYieldBtn" class="btn-primary">Calculate</button>
+                <p>Estimate your crop yield based on area and crop type.</p>
+                <label>Crop: <select id="cropType" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:100%; margin:8px 0;"><option value="maize">Maize</option><option value="rice">Rice</option><option value="wheat">Wheat</option><option value="beans">Beans</option></select></label>
+                <label>Area (hectares): <input type="number" id="areaInput" placeholder="e.g. 2.5" step="0.1" min="0"></label>
+                <button id="calcYieldBtn" class="btn-primary">Calculate Yield</button>
                 <div id="yieldResult" style="margin-top:12px; font-weight:bold;"></div>
             </div>
         </div>
@@ -206,10 +214,11 @@
         <!-- SEARCH -->
         <div id="search" class="page">
             <div class="card">
-                <h2><i class="fas fa-search"></i> Search</h2>
-                <input id="searchInput" placeholder="Search...">
-                <select id="searchCategory"><option value="all">All</option><option value="forum">Forum</option><option value="records">Records</option><option value="jobs">Jobs</option><option value="tutorials">Tutorials</option></select>
-                <input type="date" id="searchDateFrom"> to <input type="date" id="searchDateTo">
+                <h2><i class="fas fa-search"></i> Search Everything</h2>
+                <p>Find information across forums, records, jobs, and tutorials all in one place.</p>
+                <input id="searchInput" placeholder="Search all content...">
+                <select id="searchCategory" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:auto; margin:8px 0;"><option value="all">All Categories</option><option value="forum">Forum</option><option value="records">Records</option><option value="jobs">Jobs</option><option value="tutorials">Tutorials</option></select>
+                <input type="date" id="searchDateFrom" style="width:auto; display:inline; margin:0 8px;"> to <input type="date" id="searchDateTo" style="width:auto; display:inline; margin:0 8px;">
                 <button id="doSearchBtn" class="btn-primary">Search</button>
                 <div id="searchResults" style="margin-top:24px;"></div>
             </div>
@@ -218,32 +227,34 @@
         <!-- TUTORIALS -->
         <div id="tutorials" class="page">
             <div class="card">
-                <h2><i class="fas fa-video"></i> Tutorials</h2>
-                <input id="videoTitle" placeholder="Title">
-                <input id="videoUrl" placeholder="Video URL">
-                <textarea id="videoDesc" placeholder="Description"></textarea>
-                <button id="addVideoBtn" class="btn-primary">Share</button>
+                <h2><i class="fas fa-video"></i> Farming Tutorials & Educational Videos</h2>
+                <p>Learn new farming techniques, best practices, and innovative methods from video tutorials shared by the community.</p>
+                <input id="videoTitle" placeholder="Tutorial Title">
+                <input id="videoUrl" placeholder="Video Link">
+                <textarea id="videoDesc" placeholder="Brief description of what this tutorial covers"></textarea>
+                <button id="addVideoBtn" class="btn-primary">Share Tutorial</button>
                 <div id="videosList" style="margin-top:24px;"></div>
             </div>
         </div>
-                <!-- PROFILE -->
+
+        <!-- PROFILE -->
         <div id="profile" class="page">
             <div class="card">
                 <h2><i class="fas fa-user-circle"></i> Your Profile</h2>
-                <div id="profileContent" style="margin-top:20px;">
-                    <div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap;">
-                        <div style="position:relative;">
-                            <img id="profileAvatar" src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:2px solid #10B981;">
-                            <label for="avatarUpload" style="position:absolute;bottom:0;right:0;background:#10B981;color:black;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;"><i class="fas fa-camera"></i></label>
-                            <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
+                <div id="profileContent" style="margin-top: 20px;">
+                    <div style="display:flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                        <div style="position: relative;">
+                            <img id="profileAvatar" src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981;">
+                            <label for="avatarUpload" style="position: absolute; bottom: 0; right: 0; background: #10B981; color: black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px;"><i class="fas fa-camera"></i></label>
+                            <input type="file" id="avatarUpload" accept="image/*" style="display: none;">
                         </div>
                         <div>
-                            <h3 id="profileName">...</h3>
-                            <p id="profileEmail">...</p>
-                            <p id="profilePhone">📱 Phone: Not set</p>
-                            <p id="profileLocation">📍 Location: Not set</p>
-                            <p id="profileBio">💬 Bio: Not set</p>
-                            <p id="profileSince">Member since: ...</p>
+                            <h3 id="profileName" style="margin:0;">...</h3>
+                            <p id="profileEmail" style="color:#aaa; margin:5px 0;">...</p>
+                            <p id="profilePhone" style="color:#aaa; margin:5px 0;">📱 Phone: Not set</p>
+                            <p id="profileLocation" style="color:#aaa; margin:5px 0;">📍 Location: Not set</p>
+                            <p id="profileBio" style="color:#aaa; margin:5px 0;">💬 Bio: Not set</p>
+                            <p id="profileSince" style="color:#aaa; margin:5px 0;">Member since: ...</p>
                             <span id="followerCount">0 followers</span>
                         </div>
                     </div>
@@ -257,27 +268,27 @@
                     </div>
                     <hr style="border-color:#2c2c2c; margin:20px 0;">
                     <h4>Your Contributions</h4>
-                    <div class="grid-2cols" style="margin-top:10px;">
-                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-comments" style="color:#10B981;"></i> <strong>Forum Posts</strong><br><span id="profileForumCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-database" style="color:#10B981;"></i> <strong>Records</strong><br><span id="profileRecordsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-briefcase" style="color:#10B981;"></i> <strong>Jobs</strong><br><span id="profileJobsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-store" style="color:#10B981;"></i> <strong>Products</strong><br><span id="profileProductsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-video" style="color:#10B981;"></i> <strong>Tutorials</strong><br><span id="profileTutorialsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-paper-plane" style="color:#10B981;"></i> <strong>Messages</strong><br><span id="profileMessagesCount">0</span></div>
+                    <div class="grid-2cols" style="margin-top: 10px;">
+                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-comments" style="color:#10B981;"></i> <strong>Forum Posts</strong><br><span id="profileForumCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-database" style="color:#10B981;"></i> <strong>Farm Records</strong><br><span id="profileRecordsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-briefcase" style="color:#10B981;"></i> <strong>Jobs Posted</strong><br><span id="profileJobsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-store" style="color:#10B981;"></i> <strong>Products Listed</strong><br><span id="profileProductsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-video" style="color:#10B981;"></i> <strong>Tutorials Shared</strong><br><span id="profileTutorialsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-paper-plane" style="color:#10B981;"></i> <strong>Messages</strong><br><span id="profileMessagesCount">0</span></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- DOCS -->
+        <!-- DOCUMENTATION -->
         <div id="docs" class="page">
             <div class="card">
                 <h2><i class="fas fa-book-open"></i> Agricultural Documentation & Guides</h2>
                 <div class="doc-section"><h3><i class="fas fa-seedling"></i> Getting Started with AgriMind</h3><p>AgriMind is designed to be your complete farming companion. Here's how to make the most of each feature:</p><ul><li><strong>Dashboard:</strong> View statistics of all your farming activities at a glance</li><li><strong>Pest Detector:</strong> Download our offline pest detection tool via WhatsApp</li><li><strong>Farming Assistant:</strong> Get instant answers to your agricultural questions</li><li><strong>Forum:</strong> Connect with other farmers and share knowledge</li><li><strong>Records:</strong> Maintain detailed logs of your farming activities</li><li><strong>Communities:</strong> Join location-based farming groups</li></ul></div>
-                <div class="doc-section"><h3><i class="fas fa-leaf"></i> Organic Farming Best Practices</h3><ul><li><strong>Crop Rotation:</strong> Rotate crops annually to maintain soil fertility</li><li><strong>Composting:</strong> Create rich organic fertilizer from farm waste</li><li><strong>Natural Pest Control:</strong> Use companion planting and neem oil</li><li><strong>Water Conservation:</strong> Implement drip irrigation and mulching</li><li><strong>Soil Health:</strong> Test soil regularly and maintain proper pH levels</li></ul></div>
-                <div class="doc-section"><h3><i class="fas fa-bug"></i> Common Pest Management Guide</h3><ul><li><strong>Aphids:</strong> Use neem oil spray or introduce ladybugs</li><li><strong>Armyworms:</strong> Apply Bacillus thuringiensis (Bt)</li><li><strong>Whiteflies:</strong> Use yellow sticky traps</li><li><strong>Fungal Diseases:</strong> Ensure proper spacing for air circulation</li><li><strong>Bacterial Blight:</strong> Remove infected plants, practice crop rotation</li></ul></div>
-                <div class="doc-section"><h3><i class="fas fa-cloud-sun-rain"></i> Seasonal Farming Calendar</h3><ul><li><strong>Pre-Planting:</strong> Soil preparation, seed selection</li><li><strong>Planting Season:</strong> Optimal planting dates, proper spacing</li><li><strong>Growing Season:</strong> Regular monitoring, weeding, pest control</li><li><strong>Harvest Time:</strong> Proper harvesting techniques, storage</li><li><strong>Post-Harvest:</strong> Soil regeneration, cover cropping</li></ul></div>
-                <div class="doc-section"><h3><i class="fas fa-store-alt"></i> Marketplace Guidelines</h3><ul><li>List products with clear descriptions and fair prices</li><li>Include harvest dates and organic certification if applicable</li><li>Communicate clearly with buyers about quantities and delivery</li><li>Build trust through honest dealings and quality products</li><li>Report any fraudulent activities to community moderators</li></ul></div>
+                <div class="doc-section"><h3><i class="fas fa-leaf"></i> Organic Farming Best Practices</h3><ul><li><strong>Crop Rotation:</strong> Rotate crops annually to maintain soil fertility and reduce pest buildup</li><li><strong>Composting:</strong> Create rich organic fertilizer from farm waste and kitchen scraps</li><li><strong>Natural Pest Control:</strong> Use companion planting, neem oil, and beneficial insects</li><li><strong>Water Conservation:</strong> Implement drip irrigation and mulching techniques</li><li><strong>Soil Health:</strong> Test soil regularly and maintain proper pH levels</li></ul></div>
+                <div class="doc-section"><h3><i class="fas fa-bug"></i> Common Pest Management Guide</h3><ul><li><strong>Aphids:</strong> Use neem oil spray or introduce ladybugs as natural predators</li><li><strong>Armyworms:</strong> Apply Bacillus thuringiensis (Bt) for organic control</li><li><strong>Whiteflies:</strong> Use yellow sticky traps and reflective mulches</li><li><strong>Fungal Diseases:</strong> Ensure proper spacing for air circulation, apply copper-based fungicides</li><li><strong>Bacterial Blight:</strong> Remove infected plants, practice crop rotation</li></ul></div>
+                <div class="doc-section"><h3><i class="fas fa-cloud-sun-rain"></i> Seasonal Farming Calendar</h3><ul><li><strong>Pre-Planting:</strong> Soil preparation, seed selection, equipment maintenance</li><li><strong>Planting Season:</strong> Optimal planting dates, proper spacing, initial fertilization</li><li><strong>Growing Season:</strong> Regular monitoring, weeding, pest control, irrigation management</li><li><strong>Harvest Time:</strong> Proper harvesting techniques, post-harvest handling, storage preparation</li><li><strong>Post-Harvest:</strong> Soil regeneration, cover cropping, planning for next season</li></ul></div>
+                <div class="doc-section"><h3><i class="fas fa-store-alt"></i> Marketplace Guidelines</h3><ul><li>List your products with clear descriptions and fair prices</li><li>Include harvest dates and organic certification status if applicable</li><li>Communicate clearly with buyers about quantities and delivery</li><li>Build trust through honest dealings and quality products</li><li>Report any fraudulent activities to community moderators</li></ul></div>
                 <div class="doc-section"><h3><i class="fas fa-users"></i> Community Guidelines</h3><ul><li>Be respectful and supportive of fellow farmers</li><li>Share accurate and helpful information</li><li>Join groups based on your location and interests</li><li>Report inappropriate content to maintain a safe environment</li><li>Help newcomers learn and grow</li></ul></div>
             </div>
         </div>
@@ -288,33 +299,9 @@
                 <h2><i class="fas fa-leaf"></i> About AgriMind</h2>
                 <p style="font-size: 1.1rem; line-height: 1.8;">AgriMind is a comprehensive farming platform built to empower smallholder farmers and agricultural communities. Our mission is to make smart farming accessible to everyone, providing tools for pest identification, community knowledge sharing, farm management, and marketplace access - all in one place.</p>
                 <p style="margin-top: 16px; line-height: 1.8;">We believe that every farmer deserves access to technology that can improve their yields, protect their crops, and connect them with markets. AgriMind is designed to work offline and process data locally on your device, ensuring privacy and accessibility even in areas with limited internet connectivity.</p>
-                <div class="contact-card">
-                    <h3 style="color: white;"><i class="fas fa-user-circle"></i> Developer Information</h3>
-                    <div class="contact-info">
-                        <p style="font-size: 1.2rem; margin-bottom: 12px;"><strong>Developed by:</strong> Wambulawae Daniel</p>
-                        <p style="margin-bottom: 8px;"><i class="fas fa-phone"></i> <strong>Contact:</strong> +260 573373146</p>
-                        <p style="margin-bottom: 8px;"><i class="fas fa-envelope"></i> <strong>Email:</strong> wambsharu0@gmail.com</p>
-                        <p style="margin-top: 16px; font-size: 0.9rem;">For technical support, feature requests, or collaboration opportunities, please reach out through the contact information above.</p>
-                    </div>
-                </div>
-                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;">
-                    <h3 style="color: #10B981; margin-bottom: 12px;"><i class="fas fa-heart"></i> Our Commitment</h3>
-                    <p style="line-height: 1.8;">AgriMind is committed to supporting sustainable agriculture and food security. We continuously work to improve our platform based on feedback from the farming community. Together, we can build a smarter, more sustainable future for agriculture.</p>
-                </div>
-                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;">
-                    <h3 style="color: #10B981; margin-bottom: 12px;"><i class="fas fa-bullseye"></i> Our Features</h3>
-                    <ul style="list-style: none; line-height: 2;">
-                        <li>🌱 <strong>Smart Farming Assistant</strong> - Get instant answers to your farming questions</li>
-                        <li>🔬 <strong>Offline Pest Detector</strong> - Identify 102+ pest species without internet</li>
-                        <li>👥 <strong>Farmers Forum</strong> - Connect and share knowledge with fellow farmers</li>
-                        <li>💼 <strong>Job Listings</strong> - Find agricultural jobs or post opportunities</li>
-                        <li>🏪 <strong>Marketplace</strong> - Buy and sell farm products directly</li>
-                        <li>📊 <strong>Farm Records</strong> - Track your farming activities and yields</li>
-                        <li>📅 <strong>Crop Calendar</strong> - Plan your planting and harvesting schedule</li>
-                        <li>🧮 <strong>Yield Calculator</strong> - Estimate your crop yields</li>
-                        <li>🌐 <strong>Communities</strong> - Join location-based farming groups</li>
-                    </ul>
-                </div>
+                <div class="contact-card"><h3 style="color: white;"><i class="fas fa-user-circle"></i> Developer Information</h3><div class="contact-info"><p style="font-size: 1.2rem; margin-bottom: 12px;"><strong>Developed by:</strong> Wambulawae Daniel</p><p style="margin-bottom: 8px;"><i class="fas fa-phone"></i> <strong>Contact:</strong> +260 573373146</p><p style="margin-bottom: 8px;"><i class="fas fa-envelope"></i> <strong>Email:</strong> wambsharu0@gmail.com</p><p style="margin-top: 16px; font-size: 0.9rem;">For technical support, feature requests, or collaboration opportunities, please reach out through the contact information above.</p></div></div>
+                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;"><h3 style="color: #10B981; margin-bottom: 12px;"><i class="fas fa-heart"></i> Our Commitment</h3><p style="line-height: 1.8;">AgriMind is committed to supporting sustainable agriculture and food security. We continuously work to improve our platform based on feedback from the farming community. Together, we can build a smarter, more sustainable future for agriculture.</p></div>
+                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;"><h3 style="color: #10B981; margin-bottom: 12px;"><i class="fas fa-bullseye"></i> Our Features</h3><ul style="list-style: none; line-height: 2;"><li>🌱 <strong>Smart Farming Assistant</strong> - Get instant answers to your farming questions</li><li>🔬 <strong>Offline Pest Detector</strong> - Identify 102+ pest species without internet</li><li>👥 <strong>Farmers Forum</strong> - Connect and share knowledge with fellow farmers</li><li>💼 <strong>Job Listings</strong> - Find agricultural jobs or post opportunities</li><li>🏪 <strong>Marketplace</strong> - Buy and sell farm products directly</li><li>📊 <strong>Farm Records</strong> - Track your farming activities and yields</li><li>📅 <strong>Crop Calendar</strong> - Plan your planting and harvesting schedule</li><li>🧮 <strong>Yield Calculator</strong> - Estimate your crop yields</li><li>🌐 <strong>Communities</strong> - Join location-based farming groups</li></ul></div>
             </div>
         </div>
         
