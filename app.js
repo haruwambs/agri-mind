@@ -223,31 +223,77 @@ async function loadJobs() {
   if (locFilter) query = query.ilike('location', `%${locFilter}%`);
   const { data: jobs } = await query;
   const container = document.getElementById('jobsList');
-  if (!jobs || jobs.length === 0) { container.innerHTML = '<p>No jobs.</p>'; return; }
+  if (!jobs || jobs.length === 0) { container.innerHTML = '<p>No jobs available.</p>'; return; }
   container.innerHTML = '';
   for (const j of jobs) {
     let dn = 'Anonymous';
     if (j.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', j.user_id).single(); if (pf) dn = pf.display_name; }
     const { count: ac } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
-    container.innerHTML += `<div class="job-item"><strong>${escapeHtml(j.title)}</strong><p>${escapeHtml(j.description||'')}</p>${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}<small>By ${escapeHtml(dn)}</small> <span>👤 ${ac||0}</span>${currentUser&&currentUser.id===j.user_id?`<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>`:''}${currentUser&&currentUser.id!==j.user_id?`<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>`:''}</div>`;
+    const isOwner = currentUser && currentUser.id === j.user_id;
+    const hasApplied = currentUser && !isOwner;
+    container.innerHTML += `<div class="job-item" id="job-${j.id}">
+      <strong>${escapeHtml(j.title)}</strong>
+      <p>${escapeHtml(j.description||'')}</p>
+      ${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}
+      <small>Posted by ${escapeHtml(dn)}</small>
+      <span>👤 ${ac||0} applicants</span>
+      ${isOwner ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+      ${hasApplied ? `<button class="btn-outline apply-btn" data-job="${j.id}" style="margin-left:8px;">Apply Now</button>` : ''}
+    </div>`;
   }
 }
 
 async function addJob(title, description, location) {
-  if (!currentUser) return showToast('Login first', true);
+  if (!currentUser) return showToast('Please login', true);
   await db.from('job_listings').insert({ user_id: currentUser.id, title, description, location });
-  showToast('Posted!'); loadJobs(); loadDashboardStats();
+  showToast('Job posted!'); loadJobs(); loadDashboardStats();
 }
 
-async function deleteJob(id) { await db.from('job_applications').delete().eq('job_id', id); await db.from('job_listings').delete().eq('id', id); loadJobs(); loadDashboardStats(); }
+async function deleteJob(id) { 
+  await db.from('job_applications').delete().eq('job_id', id); 
+  await db.from('job_listings').delete().eq('id', id); 
+  showToast('Job deleted');
+  loadJobs(); 
+  loadDashboardStats(); 
+}
 
 async function applyToJob(jobId) {
-  if (!currentUser) return showToast('Login first', true);
-  const msg = prompt('Add a message (optional):');
-  const { data: ex } = await db.from('job_applications').select('*').match({ job_id: jobId, applicant_id: currentUser.id });
-  if (ex && ex.length) return showToast('Already applied', true);
-  await db.from('job_applications').insert({ job_id: jobId, applicant_id: currentUser.id, applicant_message: msg });
-  showToast('Applied!'); loadJobs();
+  console.log('applyToJob called with jobId:', jobId);
+  
+  if (!currentUser) {
+    showToast('Please login first', true);
+    return;
+  }
+  
+  // Check if already applied
+  const { data: existing } = await db.from('job_applications')
+    .select('*')
+    .match({ job_id: jobId, applicant_id: currentUser.id });
+  
+  if (existing && existing.length > 0) {
+    showToast('You already applied to this job', true);
+    return;
+  }
+  
+  // Ask for optional message
+  const msg = prompt('Add a message with your application (optional):');
+  
+  // Insert application
+  const { error } = await db.from('job_applications').insert({ 
+    job_id: jobId, 
+    applicant_id: currentUser.id, 
+    applicant_message: msg || null,
+    status: 'pending'
+  });
+  
+  if (error) {
+    console.error('Apply error:', error);
+    showToast('Failed to apply: ' + error.message, true);
+    return;
+  }
+  
+  showToast('Application submitted successfully!');
+  loadJobs();
 }
 
 // ────────── Applications ──────────
@@ -255,33 +301,49 @@ async function loadApplications() {
   if (!currentUser) return;
   const container = document.getElementById('applicationsList');
   const { data: myJobs } = await db.from('job_listings').select('id,title').eq('user_id', currentUser.id);
-  if (!myJobs || myJobs.length === 0) { container.innerHTML = '<p>No jobs posted.</p>'; return; }
+  if (!myJobs || myJobs.length === 0) { container.innerHTML = '<p>No jobs posted yet.</p>'; return; }
   container.innerHTML = '';
   for (const job of myJobs) {
     const { data: apps } = await db.from('job_applications').select('*').eq('job_id', job.id).order('created_at', { ascending: false });
     if (apps && apps.length > 0) {
-      container.innerHTML += `<h4 style="color:var(--accent);">📋 ${escapeHtml(job.title)} (${apps.length})</h4>`;
+      container.innerHTML += `<h4 style="color:var(--accent);">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
       for (const a of apps) {
         let dn = 'Unknown', em = 'N/A';
         if (a.applicant_id) { const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', a.applicant_id).single(); if (pf) { dn = pf.display_name; em = pf.email; } }
         const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(dn)}</strong><br><small>📧 ${escapeHtml(em)}</small><br><small>${escapeHtml(a.applicant_message||'No message')}</small><br><span style="color:${sc};">${a.status}</span>${a.status==='pending'?`<button class="btn-outline accept-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>`:''}</div>`;
+        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
+          <strong>${escapeHtml(dn)}</strong>
+          <br><small>📧 ${escapeHtml(em)}</small>
+          <br><small>Message: ${escapeHtml(a.applicant_message||'No message')}</small>
+          <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
+          <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
+          ${a.status==='pending'?`<div style="margin-top:8px;">
+            <button class="btn-outline accept-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button>
+            <button class="btn-outline reject-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
+          </div>`:''}
+        </div>`;
       }
     }
   }
-  if (container.innerHTML === '') container.innerHTML = '<p>No applications yet.</p>';
+  if (container.innerHTML === '') container.innerHTML = '<p>No applications received yet.</p>';
 }
 
 async function loadMyApplications() {
   if (!currentUser) return;
   const container = document.getElementById('myApplicationsList');
   const { data: apps } = await db.from('job_applications').select('*').eq('applicant_id', currentUser.id).order('created_at', { ascending: false });
-  if (!apps || apps.length === 0) { container.innerHTML = '<p>No applications yet.</p>'; return; }
+  if (!apps || apps.length === 0) { container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; return; }
   container.innerHTML = '';
   for (const a of apps) {
-    const { data: job } = await db.from('job_listings').select('title,description').eq('id', a.job_id).single();
+    const { data: job } = await db.from('job_listings').select('title,description,location').eq('id', a.job_id).single();
     const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-    container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(job?.title||'Unknown')}</strong><p>${escapeHtml(job?.description||'')}</p><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small><br><span style="color:${sc};">${a.status}</span></div>`;
+    container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
+      <strong>${escapeHtml(job?.title||'Unknown Job')}</strong>
+      ${job?.location?`<p>📍 ${escapeHtml(job.location)}</p>`:''}
+      <p>${escapeHtml(job?.description||'')}</p>
+      <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
+      <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
+    </div>`;
   }
 }
 
@@ -300,12 +362,12 @@ async function loadMarket() {
   if (locFilter) q = q.ilike('location', `%${locFilter}%`);
   const { data: products } = await q;
   const container = document.getElementById('marketList');
-  if (!products || products.length === 0) { container.innerHTML = '<p>No products.</p>'; return; }
+  if (!products || products.length === 0) { container.innerHTML = '<p>No products listed.</p>'; return; }
   container.innerHTML = products.map(p => `<div class="product-item">${p.image_url?`<img src="${p.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}${p.location?`<br><small>📍 ${escapeHtml(p.location)}</small>`:''}<br><small>${escapeHtml(p.category)}</small>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
 }
 
 async function addProduct(name, price, category, location, imageFile) {
-  if (!currentUser) return showToast('Login first', true);
+  if (!currentUser) return showToast('Please login', true);
   let imageUrl = null;
   if (imageFile) {
     const fp = `products/${Date.now()}_${imageFile.name}`;
@@ -313,17 +375,17 @@ async function addProduct(name, price, category, location, imageFile) {
     if (!error) { const { data } = db.storage.from('avatars').getPublicUrl(fp); if (data) imageUrl = data.publicUrl; }
   }
   await db.from('products').insert({ user_id: currentUser.id, name, price, category, location, image_url: imageUrl });
-  showToast('Listed!'); loadMarket();
+  showToast('Product listed!'); loadMarket();
 }
 
-async function deleteProduct(id) { await db.from('products').delete().eq('id', id); loadMarket(); }
+async function deleteProduct(id) { await db.from('products').delete().eq('id', id); showToast('Deleted'); loadMarket(); }
 
 // ────────── Messages ──────────
 async function loadMessages() {
   if (!currentUser) return;
   const { data: msgs } = await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
   const container = document.getElementById('messagesList');
-  if (!msgs || msgs.length === 0) { container.innerHTML = '<p>No messages.</p>'; return; }
+  if (!msgs || msgs.length === 0) { container.innerHTML = '<p>No messages yet.</p>'; return; }
   container.innerHTML = '';
   for (const m of msgs) {
     let fn = 'Unknown', tn = 'Unknown';
@@ -334,35 +396,35 @@ async function loadMessages() {
 }
 
 async function sendMessage(toEmail, text) {
-  if (!currentUser) return showToast('Login first', true);
+  if (!currentUser) return showToast('Please login', true);
   const { data: users } = await db.from('profiles').select('id').eq('email', toEmail).limit(1);
   if (!users || users.length === 0) return showToast('User not found', true);
   await db.from('messages').insert({ from_user_id: currentUser.id, to_user_id: users[0].id, text });
-  showToast('Sent!'); loadMessages();
+  showToast('Message sent!'); loadMessages();
 }
 
 // ────────── Tutorials ──────────
 async function loadTutorials() {
   const { data: tuts } = await db.from('tutorials').select('*').order('created_at', { ascending: false });
   const container = document.getElementById('videosList');
-  if (!tuts || tuts.length === 0) { container.innerHTML = '<p>No tutorials.</p>'; return; }
-  container.innerHTML = tuts.map(t => `<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(t.title)}</strong><br><a href="${escapeHtml(t.url)}" target="_blank">Watch →</a><p>${escapeHtml(t.description||'')}</p>${currentUser&&currentUser.id===t.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
+  if (!tuts || tuts.length === 0) { container.innerHTML = '<p>No tutorials shared yet.</p>'; return; }
+  container.innerHTML = tuts.map(t => `<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(t.title)}</strong><br><a href="${escapeHtml(t.url)}" target="_blank">Watch Tutorial →</a><p>${escapeHtml(t.description||'')}</p>${currentUser&&currentUser.id===t.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
 }
 
 async function addTutorial(title, url, description) {
-  if (!currentUser) return showToast('Login first', true);
+  if (!currentUser) return showToast('Please login', true);
   await db.from('tutorials').insert({ user_id: currentUser.id, title, url, description });
-  showToast('Shared!'); loadTutorials(); loadDashboardStats();
+  showToast('Tutorial shared!'); loadTutorials(); loadDashboardStats();
 }
 
-async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); loadTutorials(); loadDashboardStats(); }
+async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); showToast('Deleted'); loadTutorials(); loadDashboardStats(); }
 
 // ────────── Calendar ──────────
 async function loadCalendar() {
   if (!currentUser) return;
   const { data: events } = await db.from('calendar_events').select('*').eq('user_id', currentUser.id).order('event_date', { ascending: true });
   const container = document.getElementById('calendarList');
-  if (!events || events.length === 0) { container.innerHTML = '<p>No events.</p>'; return; }
+  if (!events || events.length === 0) { container.innerHTML = '<p>No events yet.</p>'; return; }
   container.innerHTML = events.map(e => `<div class="record-item"><strong>${escapeHtml(e.title)}</strong> - ${e.event_date}<br><small>${escapeHtml(e.notes||'')}</small><button class="delete-btn" data-type="calendar" data-id="${e.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
 }
 
@@ -373,11 +435,14 @@ async function addEvent() {
   const notes = document.getElementById('eventNotes').value.trim();
   if (!title || !date) return showToast('Title and date required', true);
   await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes });
-  showToast('Added!'); document.getElementById('eventTitle').value=''; document.getElementById('eventDate').value=''; document.getElementById('eventNotes').value='';
+  showToast('Event added!');
+  document.getElementById('eventTitle').value='';
+  document.getElementById('eventDate').value='';
+  document.getElementById('eventNotes').value='';
   loadCalendar();
 }
 
-async function deleteCalendarEvent(id) { await db.from('calendar_events').delete().eq('id', id); loadCalendar(); }
+async function deleteCalendarEvent(id) { await db.from('calendar_events').delete().eq('id', id); showToast('Deleted'); loadCalendar(); }
 
 // ────────── Calculator ──────────
 function calculateYield() {
@@ -402,7 +467,7 @@ async function globalSearch(term, category, dateFrom, dateTo) {
       if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push(r.content||r.title);
     });
   });
-  document.getElementById('searchResults').innerHTML = results.length ? results.map(t => `<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join('') : '<p>No matches.</p>';
+  document.getElementById('searchResults').innerHTML = results.length ? results.map(t => `<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join('') : '<p>No matches found.</p>';
 }
 
 // ────────── Chat ──────────
@@ -416,7 +481,7 @@ async function wikiAnswer(question) {
 
 // ────────── Profile ──────────
 async function loadProfile() {
-  if (!currentUser) { document.getElementById('profileContent').innerHTML='<p>Please login.</p>'; return; }
+  if (!currentUser) { document.getElementById('profileContent').innerHTML='<p>Please login to see your profile.</p>'; return; }
   document.getElementById('profileName').textContent = currentUser.displayName;
   document.getElementById('profileEmail').textContent = currentUser.email;
   
@@ -448,7 +513,7 @@ async function loadProfile() {
     const file = e.target.files[0];
     if (!file) return;
     const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
-    if (!error) { document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl; showToast('Updated!'); }
+    if (!error) { document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl; showToast('Profile picture updated!'); }
   };
 }
 
@@ -483,6 +548,7 @@ function openModal(mode) {
   document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
   document.getElementById('authModal').style.display = 'flex';
 }
+
 function closeModal() {
   document.getElementById('authModal').style.display = 'none';
   ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value='');
@@ -490,6 +556,7 @@ function closeModal() {
 
 // ────────── DOM Ready ──────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Sidebar
   document.getElementById('hamburgerBtn').addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('open');
     document.getElementById('sidebarOverlay').classList.toggle('active');
@@ -500,6 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.querySelectorAll('.nav-links li').forEach(li => li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); }));
 
+  // Auth modal
   document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
   document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
   document.getElementById('closeModalBtn').addEventListener('click', closeModal);
@@ -520,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('userGreeting').addEventListener('click', logout);
 
+  // Buttons
   document.getElementById('postForumBtn').addEventListener('click', () => {
     const c = document.getElementById('forumContent').value.trim();
     const img = document.getElementById('forumImage').files[0];
@@ -584,6 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Location updated!');
   });
 
+  // Chat
   document.getElementById('sendChatBtn').addEventListener('click', async () => {
     const input = document.getElementById('chatInput').value.trim();
     if (!input) return;
@@ -595,12 +665,13 @@ document.addEventListener('DOMContentLoaded', () => {
     chat.scrollTop = chat.scrollHeight;
   });
 
-  // Global click handler
-  document.addEventListener('click', async e => {
+  // ────────── GLOBAL CLICK HANDLER ──────────
+  document.addEventListener('click', async function(e) {
+    // Delete button
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
       if (!currentUser) return showToast('Login to delete', true);
-      if (!confirm('Delete?')) return;
+      if (!confirm('Delete this item?')) return;
       const { type, id } = deleteBtn.dataset;
       if (type==='forum') await deleteForumPost(id);
       else if (type==='record') await deleteRecord(id);
@@ -610,8 +681,16 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (type==='calendar') await deleteCalendarEvent(id);
       return;
     }
+    
+    // Like button
     const likeBtn = e.target.closest('.like-btn');
-    if (likeBtn) { const { type, id } = likeBtn.dataset; await toggleLike(type, id); return; }
+    if (likeBtn) { 
+      const { type, id } = likeBtn.dataset; 
+      await toggleLike(type, id); 
+      return; 
+    }
+    
+    // Reply toggle
     const replyToggle = e.target.closest('.reply-toggle');
     if (replyToggle) {
       const postId = replyToggle.dataset.post;
@@ -620,22 +699,50 @@ document.addEventListener('DOMContentLoaded', () => {
       loadReplies(postId, replyDiv);
       return;
     }
+    
+    // Send reply
     const sendReply = e.target.closest('.send-reply');
     if (sendReply && currentUser) {
       const postId = sendReply.dataset.post;
       const input = sendReply.previousElementSibling;
       const content = input.value.trim();
-      if (content) { await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content }); const replyDiv = sendReply.closest('.reply-section'); loadReplies(postId, replyDiv); }
+      if (content) { 
+        await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content }); 
+        const replyDiv = sendReply.closest('.reply-section'); 
+        loadReplies(postId, replyDiv); 
+      }
       return;
     }
+    
+    // APPLY BUTTON - FIXED
     const applyBtn = e.target.closest('.apply-btn');
-    if (applyBtn) { await applyToJob(applyBtn.dataset.job); return; }
+    if (applyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const jobId = applyBtn.dataset.job;
+      console.log('✅ Apply button clicked for job:', jobId);
+      await applyToJob(jobId);
+      return;
+    }
+    
+    // Accept application
     const acceptBtn = e.target.closest('.accept-app');
-    if (acceptBtn) { const { id, job } = acceptBtn.dataset; await updateApplicationStatus(id, 'accepted', job); return; }
+    if (acceptBtn) { 
+      const { id, job } = acceptBtn.dataset; 
+      await updateApplicationStatus(id, 'accepted', job); 
+      return; 
+    }
+    
+    // Reject application
     const rejectBtn = e.target.closest('.reject-app');
-    if (rejectBtn) { const { id, job } = rejectBtn.dataset; await updateApplicationStatus(id, 'rejected', job); return; }
+    if (rejectBtn) { 
+      const { id, job } = rejectBtn.dataset; 
+      await updateApplicationStatus(id, 'rejected', job); 
+      return; 
+    }
   });
 
+  // Initialize
   checkSession();
   showPage('dashboard');
 });
