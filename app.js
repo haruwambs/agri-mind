@@ -85,7 +85,6 @@ async function loadDashboardStats() {
   loadWeather();
 }
 
-// ────────── Forum ──────────
 async function loadForum() {
   const c = document.getElementById('forumList');
   const { data: posts } = await db.from('forum_posts').select('*').order('created_at', { ascending: false });
@@ -131,7 +130,6 @@ async function toggleLike(type, id) {
   if (type === 'forum') loadForum(); else if (type === 'job') loadJobs(); else if (type === 'product') loadMarket(); else if (type === 'tutorial') loadTutorials();
 }
 
-// ────────── Groups ──────────
 async function loadGroups() {
   const lf = document.getElementById('groupLocationFilter')?.value?.trim() || '';
   let q = db.from('groups').select('*').order('created_at', { ascending: false });
@@ -150,12 +148,22 @@ async function createGroup() {
   showToast('Created!'); ['groupName','groupDesc','groupLocation'].forEach(id => document.getElementById(id).value=''); loadGroups();
 }
 
-// ────────── Records ──────────
-async function loadRecords() { if(!currentUser)return; const {data:r}=await db.from('farm_records').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false}); const c=document.getElementById('recordsList'); if(!r||r.length===0){c.innerHTML='<p>No records.</p>';return;} c.innerHTML=r.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong><p>${escapeHtml(x.detail||'')}</p>${x.location?`<p>📍 ${escapeHtml(x.location)}</p>`:''}<small>${new Date(x.created_at).toLocaleString()}</small><button class="delete-btn" data-type="record" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join(''); }
-async function addRecord(t,d,l){if(!currentUser)return showToast('Login first',true);await db.from('farm_records').insert({user_id:currentUser.id,title:t,detail:d,location:l});showToast('Saved!');loadRecords();loadDashboardStats();}
+async function loadRecords() {
+  if(!currentUser)return;
+  const{data:r}=await db.from('farm_records').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  const c=document.getElementById('recordsList');
+  if(!r||r.length===0){c.innerHTML='<p>No records.</p>';return;}
+  c.innerHTML=r.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong><p>${escapeHtml(x.detail||'')}</p>${x.location?`<p>📍 ${escapeHtml(x.location)}</p>`:''}<small>${new Date(x.created_at).toLocaleString()}</small><button class="delete-btn" data-type="record" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
+}
+
+async function addRecord(t,d,l){
+  if(!currentUser)return showToast('Login first',true);
+  await db.from('farm_records').insert({user_id:currentUser.id,title:t,detail:d,location:l});
+  showToast('Saved!');loadRecords();loadDashboardStats();
+}
+
 async function deleteRecord(id){await db.from('farm_records').delete().eq('id',id);loadRecords();loadDashboardStats();}
 
-// ────────── Jobs ──────────
 async function loadJobs() {
   const lf = document.getElementById('jobLocationFilter')?.value?.trim() || '';
   let q = db.from('job_listings').select('*').order('created_at', { ascending: false });
@@ -171,7 +179,13 @@ async function loadJobs() {
     c.innerHTML += `<div class="job-item"><strong>${escapeHtml(j.title)}</strong><p>${escapeHtml(j.description||'')}</p>${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}<small>By ${escapeHtml(dn)}</small> <span>👤 ${ac||0}</span>${currentUser&&currentUser.id===j.user_id?`<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>`:''}${currentUser&&currentUser.id!==j.user_id?`<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>`:''}</div>`;
   }
 }
-async function addJob(t,d,l){if(!currentUser)return showToast('Login first',true);await db.from('job_listings').insert({user_id:currentUser.id,title:t,description:d,location:l});showToast('Posted!');loadJobs();loadDashboardStats();}
+
+async function addJob(t,d,l){
+  if(!currentUser)return showToast('Login first',true);
+  await db.from('job_listings').insert({user_id:currentUser.id,title:t,description:d,location:l});
+  showToast('Posted!');loadJobs();loadDashboardStats();
+}
+
 async function deleteJob(id){await db.from('job_applications').delete().eq('job_id',id);await db.from('job_listings').delete().eq('id',id);loadJobs();loadDashboardStats();}
 
 async function applyToJob(jobId) {
@@ -184,7 +198,6 @@ async function applyToJob(jobId) {
   showToast('Applied!'); loadJobs();
 }
 
-// ────────── Applications ──────────
 async function loadApplications() {
   if (!currentUser) return;
   const c = document.getElementById('applicationsList');
@@ -223,7 +236,6 @@ async function loadMyApplications() {
 
 async function updateApplicationStatus(appId, status) { await db.from('job_applications').update({ status }).eq('id', appId); showToast(`Application ${status}!`); loadApplications(); }
 
-// ────────── Market ──────────
 async function loadMarket() {
   const cat = document.getElementById('marketCategoryFilter')?.value || 'All';
   const lf = document.getElementById('marketLocationFilter')?.value?.trim() || '';
@@ -235,30 +247,97 @@ async function loadMarket() {
   if (!p || p.length === 0) { c.innerHTML = '<p>No products.</p>'; return; }
   c.innerHTML = p.map(x => `<div class="product-item">${x.image_url?`<img src="${x.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(x.name)}</strong> - ${escapeHtml(x.price)}${x.location?`<br><small>📍 ${escapeHtml(x.location)}</small>`:''}<br><small>${escapeHtml(x.category)}</small>${currentUser&&currentUser.id===x.user_id?`<button class="delete-btn" data-type="product" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
 }
-async function addProduct(n,p,cat,loc,img){if(!currentUser)return showToast('Login first',true);let iu=null;if(img){const fp=`products/${Date.now()}_${img.name}`;const{error}=await db.storage.from('avatars').upload(fp,img);if(!error){const{data}=db.storage.from('avatars').getPublicUrl(fp);if(data)iu=data.publicUrl;}}await db.from('products').insert({user_id:currentUser.id,name:n,price:p,category:cat,location:loc,image_url:iu});showToast('Listed!');loadMarket();}
+
+async function addProduct(n,p,cat,loc,img){
+  if(!currentUser)return showToast('Login first',true);
+  let iu=null;
+  if(img){const fp=`products/${Date.now()}_${img.name}`;const{error}=await db.storage.from('avatars').upload(fp,img);if(!error){const{data}=db.storage.from('avatars').getPublicUrl(fp);if(data)iu=data.publicUrl;}}
+  await db.from('products').insert({user_id:currentUser.id,name:n,price:p,category:cat,location:loc,image_url:iu});
+  showToast('Listed!');loadMarket();
+}
+
 async function deleteProduct(id){await db.from('products').delete().eq('id',id);loadMarket();}
 
-// ────────── Messages ──────────
-async function loadMessages(){if(!currentUser)return;const{data:m}=await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at',{ascending:false});const c=document.getElementById('messagesList');if(!m||m.length===0){c.innerHTML='<p>No messages.</p>';return;}c.innerHTML='';for(const x of m){let fn='Unknown',tn='Unknown';if(x.from_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.from_user_id).single();if(p)fn=p.display_name;}if(x.to_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.to_user_id).single();if(p)tn=p.display_name;}c.innerHTML+=`<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(x.text)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`;}}
-async function sendMessage(toEmail,text){if(!currentUser)return showToast('Login first',true);const{data:u}=await db.from('profiles').select('id').eq('email',toEmail).limit(1);if(!u||u.length===0)return showToast('User not found',true);await db.from('messages').insert({from_user_id:currentUser.id,to_user_id:u[0].id,text});showToast('Sent!');loadMessages();}
+async function loadMessages(){
+  if(!currentUser)return;
+  const{data:m}=await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at',{ascending:false});
+  const c=document.getElementById('messagesList');
+  if(!m||m.length===0){c.innerHTML='<p>No messages.</p>';return;}
+  c.innerHTML='';
+  for(const x of m){
+    let fn='Unknown',tn='Unknown';
+    if(x.from_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.from_user_id).single();if(p)fn=p.display_name;}
+    if(x.to_user_id){const{data:p}=await db.from('profiles').select('display_name').eq('id',x.to_user_id).single();if(p)tn=p.display_name;}
+    c.innerHTML+=`<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(x.text)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`;
+  }
+}
 
-// ────────── Tutorials ──────────
-async function loadTutorials(){const{data:t}=await db.from('tutorials').select('*').order('created_at',{ascending:false});const c=document.getElementById('videosList');if(!t||t.length===0){c.innerHTML='<p>No tutorials.</p>';return;}c.innerHTML=t.map(x=>`<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(x.title)}</strong><br><a href="${escapeHtml(x.url)}" target="_blank">Watch →</a><p>${escapeHtml(x.description||'')}</p>${currentUser&&currentUser.id===x.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');}
-async function addTutorial(t,u,d){if(!currentUser)return showToast('Login first',true);await db.from('tutorials').insert({user_id:currentUser.id,title:t,url:u,description:d});showToast('Shared!');loadTutorials();loadDashboardStats();}
+async function sendMessage(toEmail,text){
+  if(!currentUser)return showToast('Login first',true);
+  const{data:u}=await db.from('profiles').select('id').eq('email',toEmail).limit(1);
+  if(!u||u.length===0)return showToast('User not found',true);
+  await db.from('messages').insert({from_user_id:currentUser.id,to_user_id:u[0].id,text});
+  showToast('Sent!');loadMessages();
+}
+
+async function loadTutorials(){
+  const{data:t}=await db.from('tutorials').select('*').order('created_at',{ascending:false});
+  const c=document.getElementById('videosList');
+  if(!t||t.length===0){c.innerHTML='<p>No tutorials.</p>';return;}
+  c.innerHTML=t.map(x=>`<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(x.title)}</strong><br><a href="${escapeHtml(x.url)}" target="_blank">Watch →</a><p>${escapeHtml(x.description||'')}</p>${currentUser&&currentUser.id===x.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
+}
+
+async function addTutorial(t,u,d){
+  if(!currentUser)return showToast('Login first',true);
+  await db.from('tutorials').insert({user_id:currentUser.id,title:t,url:u,description:d});
+  showToast('Shared!');loadTutorials();loadDashboardStats();
+}
+
 async function deleteTutorial(id){await db.from('tutorials').delete().eq('id',id);loadTutorials();loadDashboardStats();}
 
-// ────────── Calendar ──────────
-async function loadCalendar(){if(!currentUser)return;const{data:e}=await db.from('calendar_events').select('*').eq('user_id',currentUser.id).order('event_date',{ascending:true});const c=document.getElementById('calendarList');if(!e||e.length===0){c.innerHTML='<p>No events.</p>';return;}c.innerHTML=e.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong> - ${x.event_date}<br><small>${escapeHtml(x.notes||'')}</small><button class="delete-btn" data-type="calendar" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');}
-async function addEvent(){if(!currentUser)return;const t=document.getElementById('eventTitle').value.trim();const d=document.getElementById('eventDate').value;const n=document.getElementById('eventNotes').value.trim();if(!t||!d)return showToast('Title and date required',true);await db.from('calendar_events').insert({user_id:currentUser.id,title:t,event_date:d,notes:n});showToast('Added!');['eventTitle','eventDate','eventNotes'].forEach(id=>document.getElementById(id).value='');loadCalendar();}
+async function loadCalendar(){
+  if(!currentUser)return;
+  const{data:e}=await db.from('calendar_events').select('*').eq('user_id',currentUser.id).order('event_date',{ascending:true});
+  const c=document.getElementById('calendarList');
+  if(!e||e.length===0){c.innerHTML='<p>No events.</p>';return;}
+  c.innerHTML=e.map(x=>`<div class="record-item"><strong>${escapeHtml(x.title)}</strong> - ${x.event_date}<br><small>${escapeHtml(x.notes||'')}</small><button class="delete-btn" data-type="calendar" data-id="${x.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
+}
+
+async function addEvent(){
+  if(!currentUser)return;
+  const t=document.getElementById('eventTitle').value.trim();
+  const d=document.getElementById('eventDate').value;
+  const n=document.getElementById('eventNotes').value.trim();
+  if(!t||!d)return showToast('Title and date required',true);
+  await db.from('calendar_events').insert({user_id:currentUser.id,title:t,event_date:d,notes:n});
+  showToast('Added!');['eventTitle','eventDate','eventNotes'].forEach(id=>document.getElementById(id).value='');loadCalendar();
+}
+
 async function deleteCalendarEvent(id){await db.from('calendar_events').delete().eq('id',id);loadCalendar();}
 
-function calculateYield(){const c=document.getElementById('cropType').value;const a=parseFloat(document.getElementById('areaInput').value);const y={maize:3.5,rice:4.2,wheat:2.8,beans:1.2};document.getElementById('yieldResult').textContent=(a>0)?`Estimated: ${(a*y[c]).toFixed(1)} tons`:'Enter valid area.';}
+function calculateYield(){
+  const c=document.getElementById('cropType').value;
+  const a=parseFloat(document.getElementById('areaInput').value);
+  const y={maize:3.5,rice:4.2,wheat:2.8,beans:1.2};
+  document.getElementById('yieldResult').textContent=(a>0)?`Estimated: ${(a*y[c]).toFixed(1)} tons`:'Enter valid area.';
+}
 
-async function globalSearch(term,cat,df,dt){const q=`%${term}%`;let qs=[];if(cat==='all'||cat==='forum')qs.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));if(cat==='all'||cat==='records')qs.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));if(cat==='all'||cat==='jobs')qs.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));if(cat==='all'||cat==='tutorials')qs.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));const ra=await Promise.all(qs);const r=[];ra.forEach(res=>{if(res.data)res.data.forEach(x=>{if((!df||new Date(x.created_at)>=new Date(df))&&(!dt||new Date(x.created_at)<=new Date(dt+'T23:59:59')))r.push(x.content||x.title);});});document.getElementById('searchResults').innerHTML=r.length?r.map(t=>`<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join(''):'<p>No matches.</p>';}
+async function globalSearch(term,cat,df,dt){
+  const q=`%${term}%`;let qs=[];
+  if(cat==='all'||cat==='forum')qs.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));
+  if(cat==='all'||cat==='records')qs.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));
+  if(cat==='all'||cat==='jobs')qs.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));
+  if(cat==='all'||cat==='tutorials')qs.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));
+  const ra=await Promise.all(qs);const r=[];
+  ra.forEach(res=>{if(res.data)res.data.forEach(x=>{if((!df||new Date(x.created_at)>=new Date(df))&&(!dt||new Date(x.created_at)<=new Date(dt+'T23:59:59')))r.push(x.content||x.title);});});
+  document.getElementById('searchResults').innerHTML=r.length?r.map(t=>`<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join(''):'<p>No matches.</p>';
+}
 
-async function wikiAnswer(q){try{const res=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}?redirect=true`);const d=await res.json();return d.extract?d.extract.substring(0,550):'No info.';}catch{return'Connection error.';}}
+async function wikiAnswer(q){
+  try{const res=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(q)}?redirect=true`);const d=await res.json();return d.extract?d.extract.substring(0,550):'No info.';}
+  catch{return'Connection error.';}
+}
 
-// ────────── Profile ──────────
 async function loadProfile(){
   if(!currentUser){document.getElementById('profileContent').innerHTML='<p>Please login.</p>';return;}
   const{data:pd}=await db.from('profiles').select('*').eq('id',currentUser.id).single();
@@ -338,7 +417,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('addEventBtn').addEventListener('click',addEvent);
   document.getElementById('calcYieldBtn').addEventListener('click',calculateYield);
   
-  // Save profile
   document.getElementById('saveProfileBtn').addEventListener('click',async()=>{
     if(!currentUser)return;
     const dn=document.getElementById('editDisplayName').value.trim();
@@ -361,7 +439,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     chat.scrollTop=chat.scrollHeight;
   });
 
-  // Global click handler
   document.addEventListener('click',async function(e){
     const deleteBtn=e.target.closest('.delete-btn');
     if(deleteBtn){if(!currentUser)return showToast('Login first',true);if(!confirm('Delete?'))return;const{type,id}=deleteBtn.dataset;if(type==='forum')await deleteForumPost(id);else if(type==='record')await deleteRecord(id);else if(type==='job')await deleteJob(id);else if(type==='product')await deleteProduct(id);else if(type==='tutorial')await deleteTutorial(id);else if(type==='calendar')await deleteCalendarEvent(id);return;}
