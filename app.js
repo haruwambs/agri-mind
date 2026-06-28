@@ -98,59 +98,30 @@ async function loadWeather() {
 // ────────── Dashboard ──────────
 async function loadDashboardStats() {
   if (!currentUser) return;
-  const { count: forumCount } = await db.from('forum_posts').select('*', { count: 'exact', head: true });
-  const { count: recordsCount } = await db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
-  const { count: jobsCount } = await db.from('job_listings').select('*', { count: 'exact', head: true });
-  const { count: tutsCount } = await db.from('tutorials').select('*', { count: 'exact', head: true });
-  document.getElementById('statRecords').textContent = recordsCount || 0;
-  document.getElementById('statJobs').textContent = jobsCount || 0;
-  document.getElementById('statTuts').textContent = tutsCount || 0;
-  document.getElementById('statForum').textContent = forumCount || 0;
+  const { count: fc } = await db.from('forum_posts').select('*', { count: 'exact', head: true });
+  const { count: rc } = await db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: jc } = await db.from('job_listings').select('*', { count: 'exact', head: true });
+  const { count: tc } = await db.from('tutorials').select('*', { count: 'exact', head: true });
+  document.getElementById('statRecords').textContent = rc || 0;
+  document.getElementById('statJobs').textContent = jc || 0;
+  document.getElementById('statTuts').textContent = tc || 0;
+  document.getElementById('statForum').textContent = fc || 0;
   loadWeather();
 }
 
-// ────────── Forum (with images) ──────────
-async function addForumPost(content, imageFile) {
-  if (!currentUser) return showToast('Please login', true);
-  let imageUrl = null;
-  if (imageFile) {
-    const filePath = `forum/${Date.now()}_${imageFile.name}`;
-    const { error } = await db.storage.from('avatars').upload(filePath, imageFile);
-    if (!error) {
-      const { data } = db.storage.from('avatars').getPublicUrl(filePath);
-      if (data) imageUrl = data.publicUrl;
-    }
-  }
-  const { error } = await db.from('forum_posts').insert({ user_id: currentUser.id, content, image_url: imageUrl });
-  if (error) return showToast('Failed to post', true);
-  showToast('Post shared!');
-  loadForum();
-  loadDashboardStats();
-}
-
+// ────────── Forum ──────────
 async function loadForum() {
   const container = document.getElementById('forumList');
   const { data: posts } = await db.from('forum_posts').select('*').order('created_at', { ascending: false });
   if (!posts || posts.length === 0) { container.innerHTML = '<div style="text-align:center;padding:20px;">No posts yet.</div>'; return; }
   container.innerHTML = '';
   for (const p of posts) {
-    let displayName = 'Anonymous';
-    if (p.user_id) {
-      const { data: profile } = await db.from('profiles').select('display_name').eq('id', p.user_id).single();
-      if (profile) displayName = profile.display_name;
-    }
-    const { count: likeCount } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'forum', target_id: p.id });
+    let dn = 'Anonymous';
+    if (p.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', p.user_id).single(); if (pf) dn = pf.display_name; }
+    const { count: lc } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'forum', target_id: p.id });
     const postDiv = document.createElement('div');
     postDiv.className = 'forum-post';
-    postDiv.innerHTML = `
-      <strong>${escapeHtml(displayName)}</strong>
-      <small>${new Date(p.created_at).toLocaleString()}</small>
-      <p>${escapeHtml(p.content)}</p>
-      ${p.image_url ? `<img src="${p.image_url}" style="max-width:100%; border-radius:12px; margin:8px 0;">` : ''}
-      <span class="like-btn" data-type="forum" data-id="${p.id}">❤️ ${likeCount || 0}</span>
-      ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-      <button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>
-    `;
+    postDiv.innerHTML = `<strong>${escapeHtml(dn)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}<span class="like-btn" data-type="forum" data-id="${p.id}">❤️ ${lc||0}</span>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}<button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>`;
     const replyDiv = document.createElement('div');
     replyDiv.className = 'reply-section';
     replyDiv.style.display = 'none';
@@ -165,20 +136,30 @@ async function loadReplies(postId, container) {
   if (replies) {
     for (const r of replies) {
       let dn = 'Anonymous';
-      if (r.user_id) { const { data: p } = await db.from('profiles').select('display_name').eq('id', r.user_id).single(); if (p) dn = p.display_name; }
+      if (r.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', r.user_id).single(); if (pf) dn = pf.display_name; }
       container.innerHTML += `<div style="padding:4px 0;"><strong>${escapeHtml(dn)}:</strong> ${escapeHtml(r.content)}</div>`;
     }
   }
   container.innerHTML += `<input type="text" class="reply-input" placeholder="Write reply..." style="width:70%;display:inline;"><button class="btn-outline send-reply" data-post="${postId}">Send</button>`;
 }
 
+async function addForumPost(content, imageFile) {
+  if (!currentUser) return showToast('Please login', true);
+  let imageUrl = null;
+  if (imageFile) {
+    const fp = `forum/${Date.now()}_${imageFile.name}`;
+    const { error } = await db.storage.from('avatars').upload(fp, imageFile);
+    if (!error) { const { data } = db.storage.from('avatars').getPublicUrl(fp); if (data) imageUrl = data.publicUrl; }
+  }
+  await db.from('forum_posts').insert({ user_id: currentUser.id, content, image_url: imageUrl });
+  showToast('Post shared!'); loadForum(); loadDashboardStats();
+}
+
 async function deleteForumPost(id) {
   await db.from('forum_replies').delete().eq('post_id', id);
   await db.from('likes').delete().match({ target_type: 'forum', target_id: id });
   await db.from('forum_posts').delete().eq('id', id);
-  showToast('Deleted');
-  loadForum();
-  loadDashboardStats();
+  showToast('Deleted'); loadForum(); loadDashboardStats();
 }
 
 async function toggleLike(type, id) {
@@ -194,13 +175,13 @@ async function toggleLike(type, id) {
 
 // ────────── Groups ──────────
 async function loadGroups() {
+  const locFilter = document.getElementById('groupLocationFilter')?.value?.trim() || '';
+  let query = db.from('groups').select('*').order('created_at', { ascending: false });
+  if (locFilter) query = query.ilike('location', `%${locFilter}%`);
+  const { data: groups } = await query;
   const container = document.getElementById('groupsList');
-  const { data: groups } = await db.from('groups').select('*').order('created_at', { ascending: false });
-  if (!groups || groups.length === 0) { container.innerHTML = '<p style="text-align:center;">No groups yet. Create one!</p>'; return; }
-  container.innerHTML = groups.map(g => {
-    return `<div class="forum-post"><strong>${escapeHtml(g.name)}</strong> <small>${escapeHtml(g.category)}</small><p>${escapeHtml(g.description||'')}</p>
-    <button class="btn-outline join-group-btn" data-group="${g.id}">Join Group</button></div>`;
-  }).join('');
+  if (!groups || groups.length === 0) { container.innerHTML = '<p>No groups yet. Create one!</p>'; return; }
+  container.innerHTML = groups.map(g => `<div class="forum-post"><strong>${escapeHtml(g.name)}</strong> <small>${escapeHtml(g.category)}</small>${g.location?`<br><small>📍 ${escapeHtml(g.location)}</small>`:''}<p>${escapeHtml(g.description||'')}</p><button class="btn-outline join-group-btn" data-group="${g.id}">Join Group</button></div>`).join('');
 }
 
 async function createGroup() {
@@ -208,11 +189,13 @@ async function createGroup() {
   const name = document.getElementById('groupName').value.trim();
   const desc = document.getElementById('groupDesc').value.trim();
   const cat = document.getElementById('groupCategory').value;
+  const loc = document.getElementById('groupLocation').value.trim();
   if (!name) return showToast('Group name required', true);
-  await db.from('groups').insert({ name, description: desc, category: cat, created_by: currentUser.id });
+  await db.from('groups').insert({ name, description: desc, category: cat, location: loc, created_by: currentUser.id });
   showToast('Group created!');
   document.getElementById('groupName').value = '';
   document.getElementById('groupDesc').value = '';
+  document.getElementById('groupLocation').value = '';
   loadGroups();
 }
 
@@ -222,36 +205,42 @@ async function loadRecords() {
   const { data: records } = await db.from('farm_records').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
   const container = document.getElementById('recordsList');
   if (!records || records.length === 0) { container.innerHTML = '<p>No records yet.</p>'; return; }
-  container.innerHTML = records.map(r => `<div class="record-item"><strong>${escapeHtml(r.title)}</strong><p>${escapeHtml(r.detail||'')}</p><small>${new Date(r.created_at).toLocaleString()}</small><button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
+  container.innerHTML = records.map(r => `<div class="record-item"><strong>${escapeHtml(r.title)}</strong><p>${escapeHtml(r.detail||'')}</p>${r.location?`<p>📍 ${escapeHtml(r.location)}</p>`:''}<small>${new Date(r.created_at).toLocaleString()}</small><button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
 }
-async function addRecord(title, detail) {
+
+async function addRecord(title, detail, location) {
   if (!currentUser) return showToast('Please login', true);
-  await db.from('farm_records').insert({ user_id: currentUser.id, title, detail });
+  await db.from('farm_records').insert({ user_id: currentUser.id, title, detail, location });
   showToast('Saved!'); loadRecords(); loadDashboardStats();
 }
+
 async function deleteRecord(id) { await db.from('farm_records').delete().eq('id', id); showToast('Deleted'); loadRecords(); loadDashboardStats(); }
 
 // ────────── Jobs ──────────
 async function loadJobs() {
-  const { data: jobs } = await db.from('job_listings').select('*').order('created_at', { ascending: false });
+  const locFilter = document.getElementById('jobLocationFilter')?.value?.trim() || '';
+  let query = db.from('job_listings').select('*').order('created_at', { ascending: false });
+  if (locFilter) query = query.ilike('location', `%${locFilter}%`);
+  const { data: jobs } = await query;
   const container = document.getElementById('jobsList');
   if (!jobs || jobs.length === 0) { container.innerHTML = '<p>No jobs.</p>'; return; }
   container.innerHTML = '';
   for (const j of jobs) {
     let dn = 'Anonymous';
-    if (j.user_id) { const { data: p } = await db.from('profiles').select('display_name').eq('id', j.user_id).single(); if (p) dn = p.display_name; }
-    const { count: appCount } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
-    container.innerHTML += `<div class="job-item"><strong>${escapeHtml(j.title)}</strong><p>${escapeHtml(j.description||'')}</p><small>By ${escapeHtml(dn)}</small> <span>👤 ${appCount||0}</span>
-    ${currentUser&&currentUser.id===j.user_id?`<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>`:''}
-    ${currentUser&&currentUser.id!==j.user_id?`<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>`:''}</div>`;
+    if (j.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', j.user_id).single(); if (pf) dn = pf.display_name; }
+    const { count: ac } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
+    container.innerHTML += `<div class="job-item"><strong>${escapeHtml(j.title)}</strong><p>${escapeHtml(j.description||'')}</p>${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}<small>By ${escapeHtml(dn)}</small> <span>👤 ${ac||0}</span>${currentUser&&currentUser.id===j.user_id?`<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>`:''}${currentUser&&currentUser.id!==j.user_id?`<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>`:''}</div>`;
   }
 }
-async function addJob(title, description) {
+
+async function addJob(title, description, location) {
   if (!currentUser) return showToast('Login first', true);
-  await db.from('job_listings').insert({ user_id: currentUser.id, title, description });
+  await db.from('job_listings').insert({ user_id: currentUser.id, title, description, location });
   showToast('Posted!'); loadJobs(); loadDashboardStats();
 }
+
 async function deleteJob(id) { await db.from('job_applications').delete().eq('job_id', id); await db.from('job_listings').delete().eq('id', id); loadJobs(); loadDashboardStats(); }
+
 async function applyToJob(jobId) {
   if (!currentUser) return showToast('Login first', true);
   const msg = prompt('Add a message (optional):');
@@ -274,10 +263,9 @@ async function loadApplications() {
       container.innerHTML += `<h4 style="color:var(--accent);">📋 ${escapeHtml(job.title)} (${apps.length})</h4>`;
       for (const a of apps) {
         let dn = 'Unknown', em = 'N/A';
-        if (a.applicant_id) { const { data: p } = await db.from('profiles').select('display_name,email').eq('id', a.applicant_id).single(); if (p) { dn = p.display_name; em = p.email; } }
+        if (a.applicant_id) { const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', a.applicant_id).single(); if (pf) { dn = pf.display_name; em = pf.email; } }
         const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(dn)}</strong><br><small>📧 ${escapeHtml(em)}</small><br><small>${escapeHtml(a.applicant_message||'No message')}</small><br><span style="color:${sc};">${a.status}</span>
-        ${a.status==='pending'?`<button class="btn-outline accept-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>`:''}</div>`;
+        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(dn)}</strong><br><small>📧 ${escapeHtml(em)}</small><br><small>${escapeHtml(a.applicant_message||'No message')}</small><br><span style="color:${sc};">${a.status}</span>${a.status==='pending'?`<button class="btn-outline accept-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" data-job="${job.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>`:''}</div>`;
       }
     }
   }
@@ -306,14 +294,17 @@ async function updateApplicationStatus(appId, status, jobId) {
 // ────────── Market ──────────
 async function loadMarket() {
   const cat = document.getElementById('marketCategoryFilter')?.value || 'All';
+  const locFilter = document.getElementById('marketLocationFilter')?.value?.trim() || '';
   let q = db.from('products').select('*').order('created_at', { ascending: false });
   if (cat !== 'All') q = q.eq('category', cat);
+  if (locFilter) q = q.ilike('location', `%${locFilter}%`);
   const { data: products } = await q;
   const container = document.getElementById('marketList');
   if (!products || products.length === 0) { container.innerHTML = '<p>No products.</p>'; return; }
-  container.innerHTML = products.map(p => `<div class="product-item">${p.image_url?`<img src="${p.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}<br><small>${escapeHtml(p.category)}</small>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
+  container.innerHTML = products.map(p => `<div class="product-item">${p.image_url?`<img src="${p.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}${p.location?`<br><small>📍 ${escapeHtml(p.location)}</small>`:''}<br><small>${escapeHtml(p.category)}</small>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
 }
-async function addProduct(name, price, category, imageFile) {
+
+async function addProduct(name, price, category, location, imageFile) {
   if (!currentUser) return showToast('Login first', true);
   let imageUrl = null;
   if (imageFile) {
@@ -321,9 +312,10 @@ async function addProduct(name, price, category, imageFile) {
     const { error } = await db.storage.from('avatars').upload(fp, imageFile);
     if (!error) { const { data } = db.storage.from('avatars').getPublicUrl(fp); if (data) imageUrl = data.publicUrl; }
   }
-  await db.from('products').insert({ user_id: currentUser.id, name, price, category, image_url: imageUrl });
+  await db.from('products').insert({ user_id: currentUser.id, name, price, category, location, image_url: imageUrl });
   showToast('Listed!'); loadMarket();
 }
+
 async function deleteProduct(id) { await db.from('products').delete().eq('id', id); loadMarket(); }
 
 // ────────── Messages ──────────
@@ -335,11 +327,12 @@ async function loadMessages() {
   container.innerHTML = '';
   for (const m of msgs) {
     let fn = 'Unknown', tn = 'Unknown';
-    if (m.from_user_id) { const { data: p } = await db.from('profiles').select('display_name').eq('id', m.from_user_id).single(); if (p) fn = p.display_name; }
-    if (m.to_user_id) { const { data: p } = await db.from('profiles').select('display_name').eq('id', m.to_user_id).single(); if (p) tn = p.display_name; }
+    if (m.from_user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', m.from_user_id).single(); if (pf) fn = pf.display_name; }
+    if (m.to_user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', m.to_user_id).single(); if (pf) tn = pf.display_name; }
     container.innerHTML += `<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
   }
 }
+
 async function sendMessage(toEmail, text) {
   if (!currentUser) return showToast('Login first', true);
   const { data: users } = await db.from('profiles').select('id').eq('email', toEmail).limit(1);
@@ -355,11 +348,13 @@ async function loadTutorials() {
   if (!tuts || tuts.length === 0) { container.innerHTML = '<p>No tutorials.</p>'; return; }
   container.innerHTML = tuts.map(t => `<div class="tutorial-item"><i class="fas fa-play-circle" style="color:#10B981;"></i> <strong>${escapeHtml(t.title)}</strong><br><a href="${escapeHtml(t.url)}" target="_blank">Watch →</a><p>${escapeHtml(t.description||'')}</p>${currentUser&&currentUser.id===t.user_id?`<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
 }
+
 async function addTutorial(title, url, description) {
   if (!currentUser) return showToast('Login first', true);
   await db.from('tutorials').insert({ user_id: currentUser.id, title, url, description });
   showToast('Shared!'); loadTutorials(); loadDashboardStats();
 }
+
 async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); loadTutorials(); loadDashboardStats(); }
 
 // ────────── Calendar ──────────
@@ -370,6 +365,7 @@ async function loadCalendar() {
   if (!events || events.length === 0) { container.innerHTML = '<p>No events.</p>'; return; }
   container.innerHTML = events.map(e => `<div class="record-item"><strong>${escapeHtml(e.title)}</strong> - ${e.event_date}<br><small>${escapeHtml(e.notes||'')}</small><button class="delete-btn" data-type="calendar" data-id="${e.id}"><i class="fas fa-trash-alt"></i></button></div>`).join('');
 }
+
 async function addEvent() {
   if (!currentUser) return;
   const title = document.getElementById('eventTitle').value.trim();
@@ -380,6 +376,7 @@ async function addEvent() {
   showToast('Added!'); document.getElementById('eventTitle').value=''; document.getElementById('eventDate').value=''; document.getElementById('eventNotes').value='';
   loadCalendar();
 }
+
 async function deleteCalendarEvent(id) { await db.from('calendar_events').delete().eq('id', id); loadCalendar(); }
 
 // ────────── Calculator ──────────
@@ -422,9 +419,15 @@ async function loadProfile() {
   if (!currentUser) { document.getElementById('profileContent').innerHTML='<p>Please login.</p>'; return; }
   document.getElementById('profileName').textContent = currentUser.displayName;
   document.getElementById('profileEmail').textContent = currentUser.email;
-  const { data: profile } = await db.from('profiles').select('created_at').eq('id', currentUser.id).single();
-  if (profile) document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
+  
+  const { data: pd } = await db.from('profiles').select('created_at,location').eq('id', currentUser.id).single();
+  if (pd) {
+    document.getElementById('profileSince').textContent = 'Member since: ' + new Date(pd.created_at).toLocaleDateString();
+    document.getElementById('profileLocation').textContent = pd.location ? '📍 ' + pd.location : '📍 Location: Not set';
+  }
+  
   document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
+  
   const { count: fc } = await db.from('forum_posts').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
   const { count: rc } = await db.from('farm_records').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
   const { count: jc } = await db.from('job_listings').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
@@ -432,6 +435,7 @@ async function loadProfile() {
   const { count: tc } = await db.from('tutorials').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
   const { count: mc } = await db.from('messages').select('*',{count:'exact',head:true}).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`);
   const { count: fol } = await db.from('follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id);
+  
   document.getElementById('profileForumCount').textContent=fc||0;
   document.getElementById('profileRecordsCount').textContent=rc||0;
   document.getElementById('profileJobsCount').textContent=jc||0;
@@ -439,6 +443,7 @@ async function loadProfile() {
   document.getElementById('profileTutorialsCount').textContent=tc||0;
   document.getElementById('profileMessagesCount').textContent=mc||0;
   document.getElementById('followerCount').textContent=`${fol||0} followers`;
+  
   document.getElementById('avatarUpload').onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -521,24 +526,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (c) { addForumPost(c, img); document.getElementById('forumContent').value = ''; document.getElementById('forumImage').value = ''; }
   });
   document.getElementById('createGroupBtn').addEventListener('click', createGroup);
+  document.getElementById('groupLocationFilter').addEventListener('input', loadGroups);
+  
   document.getElementById('addRecordBtn').addEventListener('click', () => {
     const t = document.getElementById('recordTitle').value.trim();
     const d = document.getElementById('recordDetail').value.trim();
-    if (t) { addRecord(t, d); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; }
+    const l = document.getElementById('recordLocation').value.trim();
+    if (t) { addRecord(t, d, l); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; document.getElementById('recordLocation').value = ''; }
   });
+  
   document.getElementById('postJobBtn').addEventListener('click', () => {
     const t = document.getElementById('jobTitle').value.trim();
     const d = document.getElementById('jobDesc').value.trim();
-    if (t) { addJob(t, d); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; }
+    const l = document.getElementById('jobLocation').value.trim();
+    if (t) { addJob(t, d, l); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; document.getElementById('jobLocation').value = ''; }
   });
+  document.getElementById('jobLocationFilter').addEventListener('input', loadJobs);
+  
   document.getElementById('addProductBtn').addEventListener('click', () => {
     const n = document.getElementById('productName').value.trim();
     const p = document.getElementById('productPrice').value.trim();
     const cat = document.getElementById('productCategory').value;
+    const loc = document.getElementById('productLocation').value.trim();
     const img = document.getElementById('productImage').files[0];
-    if (n && p) { addProduct(n, p, cat, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; }
+    if (n && p) { addProduct(n, p, cat, loc, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; document.getElementById('productLocation').value = ''; }
   });
   document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
+  document.getElementById('marketLocationFilter').addEventListener('input', loadMarket);
+  
   document.getElementById('sendMsgBtn').addEventListener('click', () => {
     const to = document.getElementById('msgTo').value.trim();
     const tx = document.getElementById('msgText').value.trim();
@@ -559,6 +574,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('addEventBtn').addEventListener('click', addEvent);
   document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
+  
+  document.getElementById('updateLocationBtn').addEventListener('click', async () => {
+    const loc = document.getElementById('updateLocation').value.trim();
+    if (!loc || !currentUser) return;
+    await db.from('profiles').update({ location: loc }).eq('id', currentUser.id);
+    document.getElementById('profileLocation').textContent = '📍 ' + loc;
+    document.getElementById('updateLocation').value = '';
+    showToast('Location updated!');
+  });
 
   document.getElementById('sendChatBtn').addEventListener('click', async () => {
     const input = document.getElementById('chatInput').value.trim();
