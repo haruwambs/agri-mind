@@ -7,6 +7,8 @@
   --toast-bg: #10B981;
   --accent: #10B981;
   --danger: #ff6b6b;
+  --google-blue: #4285F4;
+  --facebook-blue: #1877F2;
 }
 body.light {
   --bg-color: #f5f5f5;
@@ -15,6 +17,8 @@ body.light {
   --input-bg: #e0e0e0;
   --border: #ddd;
   --toast-bg: #059669;
+  --google-blue: #4285F4;
+  --facebook-blue: #1877F2;
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
@@ -38,7 +42,8 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,rgba(0,0,0
 .auth-buttons{display:flex;gap:14px}
 .btn-outline{background:transparent;border:1.5px solid var(--accent);padding:8px 22px;border-radius:40px;color:var(--accent);font-weight:600;cursor:pointer;transition:0.2s}
 .btn-outline:hover{background:var(--accent);color:#000}
-.user-greeting{background:#10B98120;padding:8px 20px;border-radius:40px;font-weight:600;border-left:3px solid var(--accent)}
+.user-greeting{background:#10B98120;padding:8px 20px;border-radius:40px;font-weight:600;border-left:3px solid var(--accent);cursor:pointer;transition:0.2s}
+.user-greeting:hover{background:#10B98140}
 .page{display:none;animation:fadeSlide 0.25s ease}
 .active-page{display:block}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -74,4 +79,142 @@ footer{margin-top:55px;text-align:center;font-size:0.8rem;color:#aaa}
 .reply-section{margin-top:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:16px}
 .reply-input{width:70%!important;display:inline}
 .apply-btn{margin-left:8px}
-@media(max-width:680px){.main-content{padding:16px}.card{padding:20px}}
+
+/* ═══════════════════════════════════════════ */
+/*  SOCIAL AUTH BUTTONS                      */
+/* ═══════════════════════════════════════════ */
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border: 2px solid var(--border);
+  border-radius: 34px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: 'Inter', sans-serif;
+  margin-bottom: 10px;
+  background: var(--input-bg);
+  color: var(--text-color);
+}
+
+.social-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+}
+
+.social-btn img {
+  width: 20px;
+  height: 20px;
+}
+
+/* Google Button */
+.google-btn {
+  border-color: var(--border);
+  background: white;
+  color: #333;
+}
+
+.google-btn:hover {
+  border-color: var(--google-blue);
+  background: #f8fbff;
+  box-shadow: 0 8px 25px rgba(66,133,244,0.2);
+}
+
+body.light .google-btn {
+  background: white;
+  color: #333;
+  border-color: #ddd;
+}
+
+body.light .google-btn:hover {
+  border-color: var(--google-blue);
+}
+
+/* Facebook Button */
+.facebook-btn {
+  border-color: var(--facebook-blue);
+  background: var(--facebook-blue);
+  color: white;
+}
+
+.facebook-btn:hover {
+  background: #1666d9;
+  border-color: #1666d9;
+  box-shadow: 0 8px 25px rgba(24,119,242,0.3);
+}
+
+body.light .facebook-btn {
+  background: var(--facebook-blue);
+  color: white;
+}
+
+/* Social Icon in Facebook button */
+.social-icon-fb {
+  font-size: 18px;
+}
+
+/* Auth Modal Divider */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0;
+  color: #666;
+  font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+.auth-divider span {
+  padding: 0 16px;
+  font-weight: 500;
+}
+
+/* Auth Modal Social Buttons Container */
+.auth-social-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+/* Provider Icon in User Greeting */
+.user-greeting i.fa-google {
+  color: #4285F4;
+}
+
+.user-greeting i.fa-facebook {
+  color: #1877F2;
+}
+
+/* Light mode overrides for auth modal */
+body.light .google-btn {
+  background: white;
+  color: #333;
+  border: 2px solid #ddd;
+}
+
+body.light .google-btn:hover {
+  border-color: var(--google-blue);
+  background: #f8fbff;
+}
+
+/* Responsive */
+@media(max-width:680px){
+  .main-content{padding:16px}
+  .card{padding:20px}
+  .social-btn {
+    padding: 12px;
+    font-size: 13px;
+  }
+}
