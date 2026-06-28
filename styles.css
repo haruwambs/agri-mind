@@ -9,9 +9,6 @@
   --danger: #ff6b6b;
 }
 
-/* ═══════════════════════════════════════════ */
-/*  BLUE & WHITE LIGHT MODE                  */
-/* ═══════════════════════════════════════════ */
 body.light {
   --bg-color: #f0f4ff;
   --card-bg: rgba(255,255,255,0.92);
@@ -485,6 +482,10 @@ body.light .card[style*="border-left:4px solid #10B981"] p {
 body.light .card[style*="border-left:4px solid #10B981"] .btn-primary {
   background: #2563eb !important;
   color: white !important;
+}
+
+body.light .card[style*="background:#0a0a0a"] h4 {
+  color: #0f172a !important;
 }
 
 body.light .card p,
