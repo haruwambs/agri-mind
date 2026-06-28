@@ -29,7 +29,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// ────────── Dark/Light mode ──────────
+// ────────── Theme ──────────
 const themeToggle = document.getElementById('themeToggle');
 if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
 themeToggle.addEventListener('click', () => {
@@ -53,7 +53,6 @@ async function checkSession() {
   updateAuthUI();
   if (currentUser) {
     loadDashboardStats();
-    checkNotifications();
   }
 }
 
@@ -92,14 +91,7 @@ async function logout() {
   showToast('Logged out');
 }
 
-db.auth.onAuthStateChange((event, session) => { 
-  if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-    checkSession();
-  } else if (event === 'SIGNED_OUT') {
-    currentUser = null;
-    updateAuthUI();
-  }
-});
+db.auth.onAuthStateChange((event, session) => { checkSession(); });
 
 // ────────── Weather ──────────
 async function loadWeather() {
@@ -117,7 +109,7 @@ async function loadWeather() {
   }
 }
 
-// ────────── Dashboard Stats ──────────
+// ────────── Dashboard ──────────
 async function loadDashboardStats() {
   if (!currentUser) return;
   try {
@@ -131,7 +123,7 @@ async function loadDashboardStats() {
     document.getElementById('statTuts').textContent = tutsCount || 0;
     document.getElementById('statForum').textContent = forumCount || 0;
   } catch (err) {
-    console.error('Dashboard stats error:', err);
+    console.error('Stats error:', err);
   }
   loadWeather();
 }
@@ -140,13 +132,10 @@ async function loadDashboardStats() {
 async function loadForum() {
   const container = document.getElementById('forumList');
   try {
-    const { data: posts, error } = await db.from('forum_posts')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { data: posts, error } = await db.from('forum_posts').select('*').order('created_at', { ascending: false });
     
     if (error) {
-      console.error('Forum query error:', error);
-      container.innerHTML = `<div style="text-align:center;padding:20px;">Error loading posts.</div>`;
+      container.innerHTML = `<div style="text-align:center;padding:20px;">Error: ${error.message}</div>`;
       return;
     }
     
@@ -183,22 +172,13 @@ async function loadForum() {
       container.appendChild(replyDiv);
     }
   } catch (err) {
-    console.error('Forum load error:', err);
-    container.innerHTML = '<div style="text-align:center;padding:20px;">Error loading posts. Check console.</div>';
+    container.innerHTML = '<div style="text-align:center;padding:20px;">Error loading posts.</div>';
   }
 }
 
 async function loadReplies(postId, container) {
   try {
-    const { data: replies, error } = await db.from('forum_replies')
-      .select('*')
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true });
-    
-    if (error) {
-      console.error('Replies error:', error);
-      return;
-    }
+    const { data: replies } = await db.from('forum_replies').select('*').eq('post_id', postId).order('created_at', { ascending: true });
     
     container.innerHTML = '';
     
@@ -218,403 +198,286 @@ async function loadReplies(postId, container) {
       <button class="btn-outline send-reply" data-post="${postId}">Send</button>
     `;
   } catch (err) {
-    console.error('Replies load error:', err);
+    console.error('Replies error:', err);
   }
 }
 
 async function addForumPost(content) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    const { error } = await db.from('forum_posts').insert({ user_id: currentUser.id, content });
-    if (error) throw error;
-    showToast('Post shared!');
-    loadForum();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to post: ' + err.message, true);
-  }
+  const { error } = await db.from('forum_posts').insert({ user_id: currentUser.id, content });
+  if (error) return showToast('Failed to post', true);
+  showToast('Post shared!');
+  loadForum();
+  loadDashboardStats();
 }
 
 async function deleteForumPost(id) {
-  try {
-    await db.from('forum_replies').delete().eq('post_id', id);
-    await db.from('likes').delete().match({ target_type: 'forum', target_id: id });
-    await db.from('forum_posts').delete().eq('id', id);
-    showToast('Post deleted');
-    loadForum();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to delete', true);
-  }
+  await db.from('forum_replies').delete().eq('post_id', id);
+  await db.from('likes').delete().match({ target_type: 'forum', target_id: id });
+  await db.from('forum_posts').delete().eq('id', id);
+  showToast('Post deleted');
+  loadForum();
+  loadDashboardStats();
 }
 
 async function toggleLike(type, id) {
   if (!currentUser) return showToast('Login first', true);
-  try {
-    const { data: existing } = await db.from('likes').select('*').match({ user_id: currentUser.id, target_type: type, target_id: id });
-    if (existing && existing.length) {
-      await db.from('likes').delete().eq('id', existing[0].id);
-    } else {
-      await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
-    }
-    if (type === 'forum') loadForum();
-    else if (type === 'job') loadJobs();
-    else if (type === 'product') loadMarket();
-    else if (type === 'tutorial') loadTutorials();
-  } catch (err) {
-    console.error('Like error:', err);
+  const { data: existing } = await db.from('likes').select('*').match({ user_id: currentUser.id, target_type: type, target_id: id });
+  if (existing && existing.length) {
+    await db.from('likes').delete().eq('id', existing[0].id);
+  } else {
+    await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
   }
+  if (type === 'forum') loadForum();
+  else if (type === 'job') loadJobs();
+  else if (type === 'product') loadMarket();
+  else if (type === 'tutorial') loadTutorials();
 }
 
 // ────────── Records ──────────
 async function loadRecords() {
   if (!currentUser) return;
   const container = document.getElementById('recordsList');
-  try {
-    const { data: records, error } = await db.from('farm_records')
-      .select('*')
-      .eq('user_id', currentUser.id)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    if (!records || records.length === 0) {
-      container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
-      return;
-    }
-    container.innerHTML = records.map(r => `
-      <div class="record-item">
-        <strong>${escapeHtml(r.title)}</strong>
-        <p>${escapeHtml(r.detail || '')}</p>
-        <small>${new Date(r.created_at).toLocaleString()}</small>
-        <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
-      </div>`).join('');
-  } catch (err) {
-    console.error('Records load error:', err);
+  const { data: records } = await db.from('farm_records').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  
+  if (!records || records.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">No farm records yet.</p>';
+    return;
   }
+  container.innerHTML = records.map(r => `
+    <div class="record-item">
+      <strong>${escapeHtml(r.title)}</strong>
+      <p>${escapeHtml(r.detail || '')}</p>
+      <small>${new Date(r.created_at).toLocaleString()}</small>
+      <button class="delete-btn" data-type="record" data-id="${r.id}"><i class="fas fa-trash-alt"></i></button>
+    </div>`).join('');
 }
 
 async function addRecord(title, detail) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    const { error } = await db.from('farm_records').insert({ user_id: currentUser.id, title, detail });
-    if (error) throw error;
-    showToast('Record saved!');
-    loadRecords();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to save: ' + err.message, true);
-  }
+  await db.from('farm_records').insert({ user_id: currentUser.id, title, detail });
+  showToast('Record saved!');
+  loadRecords();
+  loadDashboardStats();
 }
 
 async function deleteRecord(id) {
-  try {
-    await db.from('farm_records').delete().eq('id', id);
-    showToast('Record deleted');
-    loadRecords();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to delete', true);
-  }
+  await db.from('farm_records').delete().eq('id', id);
+  showToast('Record deleted');
+  loadRecords();
+  loadDashboardStats();
 }
 
 // ────────── Jobs ──────────
 async function loadJobs() {
   const container = document.getElementById('jobsList');
-  try {
-    const { data: jobs, error } = await db.from('job_listings')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Jobs error:', error);
-      container.innerHTML = `<div style="text-align:center;padding:20px;">Error loading jobs.</div>`;
-      return;
+  const { data: jobs } = await db.from('job_listings').select('*').order('created_at', { ascending: false });
+  
+  if (!jobs || jobs.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  for (const j of jobs) {
+    let displayName = 'Anonymous';
+    if (j.user_id) {
+      const { data: profile } = await db.from('profiles').select('display_name').eq('id', j.user_id).single();
+      if (profile) displayName = profile.display_name;
     }
     
-    if (!jobs || jobs.length === 0) {
-      container.innerHTML = '<p style="text-align:center;">No job listings available.</p>';
-      return;
-    }
+    const { count: appCount } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
     
-    container.innerHTML = '';
-    for (const j of jobs) {
-      let displayName = 'Anonymous';
-      if (j.user_id) {
-        const { data: profile } = await db.from('profiles').select('display_name').eq('id', j.user_id).single();
-        if (profile) displayName = profile.display_name;
-      }
-      
-      const { count: likeCount } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'job', target_id: j.id });
-      const { count: appCount } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
-      
-      container.innerHTML += `
-        <div class="job-item">
-          <strong>${escapeHtml(j.title)}</strong>
-          <p>${escapeHtml(j.description || '')}</p>
-          <small>Posted by ${escapeHtml(displayName)}</small>
-          <span class="like-btn" data-type="job" data-id="${j.id}">❤️ ${likeCount || 0}</span>
-          <span>👤 ${appCount || 0} applicants</span>
-          ${currentUser && currentUser.id === j.user_id ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-          ${currentUser && currentUser.id !== j.user_id ? `<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>` : ''}
-        </div>`;
-    }
-  } catch (err) {
-    console.error('Jobs load error:', err);
-    container.innerHTML = '<div style="text-align:center;padding:20px;">Error loading jobs.</div>';
+    container.innerHTML += `
+      <div class="job-item">
+        <strong>${escapeHtml(j.title)}</strong>
+        <p>${escapeHtml(j.description || '')}</p>
+        <small>Posted by ${escapeHtml(displayName)}</small>
+        <span>👤 ${appCount || 0} applicants</span>
+        ${currentUser && currentUser.id === j.user_id ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+        ${currentUser && currentUser.id !== j.user_id ? `<button class="btn-outline apply-btn" data-job="${j.id}">Apply</button>` : ''}
+      </div>`;
   }
 }
 
 async function addJob(title, description) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    const { error } = await db.from('job_listings').insert({ user_id: currentUser.id, title, description });
-    if (error) throw error;
-    showToast('Job posted!');
-    loadJobs();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to post: ' + err.message, true);
-  }
+  await db.from('job_listings').insert({ user_id: currentUser.id, title, description });
+  showToast('Job posted!');
+  loadJobs();
+  loadDashboardStats();
 }
 
 async function deleteJob(id) {
-  try {
-    await db.from('job_applications').delete().eq('job_id', id);
-    await db.from('likes').delete().match({ target_type: 'job', target_id: id });
-    await db.from('job_listings').delete().eq('id', id);
-    showToast('Job deleted');
-    loadJobs();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to delete', true);
-  }
+  await db.from('job_applications').delete().eq('job_id', id);
+  await db.from('job_listings').delete().eq('id', id);
+  showToast('Job deleted');
+  loadJobs();
+  loadDashboardStats();
 }
 
 async function applyToJob(jobId) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    const { data: existing } = await db.from('job_applications').select('*').match({ job_id: jobId, applicant_id: currentUser.id });
-    if (existing && existing.length) return showToast('You already applied', true);
-    const { error } = await db.from('job_applications').insert({ job_id: jobId, applicant_id: currentUser.id, message: 'I am interested in this position.' });
-    if (error) throw error;
-    showToast('Application submitted!');
-    loadJobs();
-  } catch (err) {
-    showToast('Failed to apply: ' + err.message, true);
-  }
+  const { data: existing } = await db.from('job_applications').select('*').match({ job_id: jobId, applicant_id: currentUser.id });
+  if (existing && existing.length) return showToast('You already applied', true);
+  await db.from('job_applications').insert({ job_id: jobId, applicant_id: currentUser.id });
+  showToast('Application submitted!');
+  loadJobs();
 }
 
 // ────────── Marketplace ──────────
 async function loadMarket() {
   const category = document.getElementById('marketCategoryFilter')?.value || 'All';
   const container = document.getElementById('marketList');
-  try {
-    let query = db.from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (category !== 'All') query = query.eq('category', category);
-    
-    const { data: products, error } = await query;
-    if (error) throw error;
-    
-    if (!products || products.length === 0) {
-      container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
-      return;
+  
+  let query = db.from('products').select('*').order('created_at', { ascending: false });
+  if (category !== 'All') query = query.eq('category', category);
+  
+  const { data: products } = await query;
+  
+  if (!products || products.length === 0) {
+    container.innerHTML = '<p style="text-align:center;">No products listed.</p>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  for (const p of products) {
+    let displayName = 'Anonymous';
+    if (p.user_id) {
+      const { data: profile } = await db.from('profiles').select('display_name').eq('id', p.user_id).single();
+      if (profile) displayName = profile.display_name;
     }
-    container.innerHTML = '';
-    for (const p of products) {
-      let displayName = 'Anonymous';
-      if (p.user_id) {
-        const { data: profile } = await db.from('profiles').select('display_name').eq('id', p.user_id).single();
-        if (profile) displayName = profile.display_name;
-      }
-      container.innerHTML += `
-        <div class="product-item">
-          ${p.image_url ? `<img src="${p.image_url}" style="max-width:100px; border-radius:10px; margin-right:10px;">` : ''}
-          <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
-          <br><small>Category: ${escapeHtml(p.category)} | Seller: ${escapeHtml(displayName)}</small>
-          <span class="like-btn" data-type="product" data-id="${p.id}">❤️ 0</span>
-          ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-        </div>`;
-    }
-  } catch (err) {
-    console.error('Market load error:', err);
+    container.innerHTML += `
+      <div class="product-item">
+        ${p.image_url ? `<img src="${p.image_url}" style="max-width:100px; border-radius:10px; margin-right:10px;">` : ''}
+        <strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}
+        <br><small>Category: ${escapeHtml(p.category)} | Seller: ${escapeHtml(displayName)}</small>
+        ${currentUser && currentUser.id === p.user_id ? `<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+      </div>`;
   }
 }
 
 async function addProduct(name, price, category, imageFile) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    let imageUrl = null;
-    if (imageFile) {
-      const filePath = `products/${Date.now()}_${imageFile.name}`;
-      const { error } = await db.storage.from('avatars').upload(filePath, imageFile);
-      if (!error) {
-        const { data } = db.storage.from('avatars').getPublicUrl(filePath);
-        if (data) imageUrl = data.publicUrl;
-      }
+  let imageUrl = null;
+  if (imageFile) {
+    const filePath = `products/${Date.now()}_${imageFile.name}`;
+    const { error } = await db.storage.from('avatars').upload(filePath, imageFile);
+    if (!error) {
+      const { data } = db.storage.from('avatars').getPublicUrl(filePath);
+      if (data) imageUrl = data.publicUrl;
     }
-    const { error } = await db.from('products').insert({ user_id: currentUser.id, name, price, category, image_url: imageUrl });
-    if (error) throw error;
-    showToast('Product listed!');
-    loadMarket();
-  } catch (err) {
-    showToast('Failed to list: ' + err.message, true);
   }
+  await db.from('products').insert({ user_id: currentUser.id, name, price, category, image_url: imageUrl });
+  showToast('Product listed!');
+  loadMarket();
 }
 
 async function deleteProduct(id) {
-  try {
-    await db.from('likes').delete().match({ target_type: 'product', target_id: id });
-    await db.from('products').delete().eq('id', id);
-    showToast('Product deleted');
-    loadMarket();
-  } catch (err) {
-    showToast('Failed to delete', true);
-  }
+  await db.from('products').delete().eq('id', id);
+  showToast('Product deleted');
+  loadMarket();
 }
 
 // ────────── Messages ──────────
 async function loadMessages() {
   if (!currentUser) return;
   const container = document.getElementById('messagesList');
-  try {
-    const { data: msgs, error } = await db.from('messages')
-      .select('*')
-      .or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    if (!msgs || msgs.length === 0) {
-      container.innerHTML = '<p>Your messages will appear here.</p>';
-      return;
+  const { data: msgs } = await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
+  
+  if (!msgs || msgs.length === 0) {
+    container.innerHTML = '<p>Your messages will appear here.</p>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  for (const m of msgs) {
+    let fromName = 'Unknown', toName = 'Unknown';
+    if (m.from_user_id) {
+      const { data: p } = await db.from('profiles').select('display_name').eq('id', m.from_user_id).single();
+      if (p) fromName = p.display_name;
     }
-    container.innerHTML = '';
-    for (const m of msgs) {
-      let fromName = 'Unknown';
-      let toName = 'Unknown';
-      if (m.from_user_id) {
-        const { data: fromProfile } = await db.from('profiles').select('display_name').eq('id', m.from_user_id).single();
-        if (fromProfile) fromName = fromProfile.display_name;
-      }
-      if (m.to_user_id) {
-        const { data: toProfile } = await db.from('profiles').select('display_name').eq('id', m.to_user_id).single();
-        if (toProfile) toName = toProfile.display_name;
-      }
-      container.innerHTML += `
-        <div class="msg-item">
-          <strong>${escapeHtml(fromName)}</strong> → ${escapeHtml(toName)}: ${escapeHtml(m.text)}
-          <br><small>${new Date(m.created_at).toLocaleString()}</small>
-        </div>`;
+    if (m.to_user_id) {
+      const { data: p } = await db.from('profiles').select('display_name').eq('id', m.to_user_id).single();
+      if (p) toName = p.display_name;
     }
-  } catch (err) {
-    console.error('Messages load error:', err);
+    container.innerHTML += `
+      <div class="msg-item">
+        <strong>${escapeHtml(fromName)}</strong> → ${escapeHtml(toName)}: ${escapeHtml(m.text)}
+        <br><small>${new Date(m.created_at).toLocaleString()}</small>
+      </div>`;
   }
 }
 
 async function sendMessage(toEmail, text) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    const { data: users } = await db.from('profiles').select('id').eq('email', toEmail).limit(1);
-    if (!users || users.length === 0) return showToast('User not found', true);
-    const { error } = await db.from('messages').insert({ from_user_id: currentUser.id, to_user_id: users[0].id, text });
-    if (error) throw error;
-    showToast('Message sent!');
-    loadMessages();
-  } catch (err) {
-    showToast('Failed to send: ' + err.message, true);
-  }
+  const { data: users } = await db.from('profiles').select('id').eq('email', toEmail).limit(1);
+  if (!users || users.length === 0) return showToast('User not found', true);
+  await db.from('messages').insert({ from_user_id: currentUser.id, to_user_id: users[0].id, text });
+  showToast('Message sent!');
+  loadMessages();
 }
 
 // ────────── Tutorials ──────────
 async function loadTutorials() {
   const container = document.getElementById('videosList');
-  try {
-    const { data: tutorials, error } = await db.from('tutorials')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    
-    if (!tutorials || tutorials.length === 0) {
-      container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
-      return;
+  const { data: tutorials } = await db.from('tutorials').select('*').order('created_at', { ascending: false });
+  
+  if (!tutorials || tutorials.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;">No tutorials shared yet.</div>';
+    return;
+  }
+  
+  container.innerHTML = '';
+  for (const t of tutorials) {
+    let displayName = 'Anonymous';
+    if (t.user_id) {
+      const { data: profile } = await db.from('profiles').select('display_name').eq('id', t.user_id).single();
+      if (profile) displayName = profile.display_name;
     }
-    container.innerHTML = '';
-    for (const t of tutorials) {
-      let displayName = 'Anonymous';
-      if (t.user_id) {
-        const { data: profile } = await db.from('profiles').select('display_name').eq('id', t.user_id).single();
-        if (profile) displayName = profile.display_name;
-      }
-      container.innerHTML += `
-        <div class="tutorial-item">
-          <i class="fas fa-play-circle" style="color:#10B981;"></i> 
-          <strong>${escapeHtml(t.title)}</strong>
-          <br><a href="${escapeHtml(t.url)}" target="_blank" style="color:#10B981;">Watch Tutorial →</a>
-          <p>${escapeHtml(t.description || '')}</p>
-          <small>Shared by ${escapeHtml(displayName)}</small>
-          <span class="like-btn" data-type="tutorial" data-id="${t.id}">❤️ 0</span>
-          ${currentUser && currentUser.id === t.user_id ? `<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-        </div>`;
-    }
-  } catch (err) {
-    console.error('Tutorials load error:', err);
+    container.innerHTML += `
+      <div class="tutorial-item">
+        <i class="fas fa-play-circle" style="color:#10B981;"></i> 
+        <strong>${escapeHtml(t.title)}</strong>
+        <br><a href="${escapeHtml(t.url)}" target="_blank" style="color:#10B981;">Watch Tutorial →</a>
+        <p>${escapeHtml(t.description || '')}</p>
+        <small>Shared by ${escapeHtml(displayName)}</small>
+        ${currentUser && currentUser.id === t.user_id ? `<button class="delete-btn" data-type="tutorial" data-id="${t.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
+      </div>`;
   }
 }
 
 async function addTutorial(title, url, description) {
   if (!currentUser) return showToast('Please login', true);
-  try {
-    const { error } = await db.from('tutorials').insert({ user_id: currentUser.id, title, url, description });
-    if (error) throw error;
-    showToast('Tutorial shared!');
-    loadTutorials();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to share: ' + err.message, true);
-  }
+  await db.from('tutorials').insert({ user_id: currentUser.id, title, url, description });
+  showToast('Tutorial shared!');
+  loadTutorials();
+  loadDashboardStats();
 }
 
 async function deleteTutorial(id) {
-  try {
-    await db.from('likes').delete().match({ target_type: 'tutorial', target_id: id });
-    await db.from('tutorials').delete().eq('id', id);
-    showToast('Tutorial deleted');
-    loadTutorials();
-    loadDashboardStats();
-  } catch (err) {
-    showToast('Failed to delete', true);
-  }
+  await db.from('tutorials').delete().eq('id', id);
+  showToast('Tutorial deleted');
+  loadTutorials();
+  loadDashboardStats();
 }
 
-// ────────── Crop Calendar ──────────
+// ────────── Calendar ──────────
 async function loadCalendar() {
   if (!currentUser) return;
   const container = document.getElementById('calendarList');
-  try {
-    const { data: events, error } = await db.from('calendar_events')
-      .select('*')
-      .eq('user_id', currentUser.id)
-      .order('event_date', { ascending: true });
-    
-    if (error) throw error;
-    
-    if (!events || events.length === 0) {
-      container.innerHTML = '<p>No events yet.</p>';
-      return;
-    }
-    container.innerHTML = events.map(e => `
-      <div class="record-item">
-        <strong>${escapeHtml(e.title)}</strong> - ${e.event_date}
-        <br><small>${escapeHtml(e.notes || '')}</small>
-        <button class="delete-btn" data-type="calendar" data-id="${e.id}"><i class="fas fa-trash-alt"></i></button>
-      </div>`).join('');
-  } catch (err) {
-    console.error('Calendar load error:', err);
+  const { data: events } = await db.from('calendar_events').select('*').eq('user_id', currentUser.id).order('event_date', { ascending: true });
+  
+  if (!events || events.length === 0) {
+    container.innerHTML = '<p>No events yet.</p>';
+    return;
   }
+  container.innerHTML = events.map(e => `
+    <div class="record-item">
+      <strong>${escapeHtml(e.title)}</strong> - ${e.event_date}
+      <br><small>${escapeHtml(e.notes || '')}</small>
+      <button class="delete-btn" data-type="calendar" data-id="${e.id}"><i class="fas fa-trash-alt"></i></button>
+    </div>`).join('');
 }
 
 async function addEvent() {
@@ -623,119 +486,26 @@ async function addEvent() {
   const date = document.getElementById('eventDate').value;
   const notes = document.getElementById('eventNotes').value.trim();
   if (!title || !date) return showToast('Title and date required', true);
-  try {
-    const { error } = await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes });
-    if (error) throw error;
-    showToast('Event added!');
-    document.getElementById('eventTitle').value = '';
-    document.getElementById('eventDate').value = '';
-    document.getElementById('eventNotes').value = '';
-    loadCalendar();
-  } catch (err) {
-    showToast('Failed to add: ' + err.message, true);
-  }
+  await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes });
+  showToast('Event added!');
+  document.getElementById('eventTitle').value = '';
+  document.getElementById('eventDate').value = '';
+  document.getElementById('eventNotes').value = '';
+  loadCalendar();
 }
 
 async function deleteCalendarEvent(id) {
-  try {
-    await db.from('calendar_events').delete().eq('id', id);
-    showToast('Event deleted');
-    loadCalendar();
-  } catch (err) {
-    showToast('Failed to delete', true);
-  }
+  await db.from('calendar_events').delete().eq('id', id);
+  showToast('Event deleted');
+  loadCalendar();
 }
 
-// ────────── Yield Calculator ──────────
+// ────────── Calculator ──────────
 function calculateYield() {
   const crop = document.getElementById('cropType').value;
   const area = parseFloat(document.getElementById('areaInput').value);
   const yields = { maize: 3.5, rice: 4.2, wheat: 2.8, beans: 1.2 };
   document.getElementById('yieldResult').textContent = (area > 0) ? `Estimated yield: ${(area * yields[crop]).toFixed(1)} tons` : 'Please enter a valid area.';
-}
-
-// ────────── Notifications ──────────
-async function checkNotifications() {
-  if (!currentUser) return;
-  try {
-    const { count } = await db.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id).eq('read', false);
-    if (count > 0) showToast(`You have ${count} new notifications`);
-  } catch (err) {
-    console.error('Notifications error:', err);
-  }
-}
-
-// ────────── Follows ──────────
-async function toggleFollow(userId) {
-  if (!currentUser) return showToast('Login first', true);
-  try {
-    const { data } = await db.from('follows').select('*').match({ follower_id: currentUser.id, following_id: userId });
-    if (data && data.length) await db.from('follows').delete().eq('id', data[0].id);
-    else await db.from('follows').insert({ follower_id: currentUser.id, following_id: userId });
-    loadProfile();
-  } catch (err) {
-    console.error('Follow error:', err);
-  }
-}
-
-// ────────── Profile ──────────
-async function loadProfile() {
-  if (!currentUser) {
-    document.getElementById('profileContent').innerHTML = '<p>Please log in to see your profile.</p>';
-    return;
-  }
-  document.getElementById('profileName').textContent = currentUser.displayName;
-  document.getElementById('profileEmail').textContent = currentUser.email;
-  
-  try {
-    const { data: profile } = await db.from('profiles').select('created_at').eq('id', currentUser.id).single();
-    if (profile) document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
-  } catch (err) {
-    console.error('Profile fetch error:', err);
-  }
-  
-  const avatarUrl = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
-  document.getElementById('profileAvatar').src = avatarUrl;
-
-  try {
-    const { count: forumCount } = await db.from('forum_posts').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
-    const { count: recordsCount } = await db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
-    const { count: jobsCount } = await db.from('job_listings').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
-    const { count: productsCount } = await db.from('products').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
-    const { count: tutorialsCount } = await db.from('tutorials').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
-    const { count: messagesCount } = await db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`);
-    const { count: followers } = await db.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', currentUser.id);
-    const { data: isFollowing } = await db.from('follows').select('*').eq('follower_id', currentUser.id).eq('following_id', currentUser.id);
-
-    document.getElementById('profileForumCount').textContent = forumCount || 0;
-    document.getElementById('profileRecordsCount').textContent = recordsCount || 0;
-    document.getElementById('profileJobsCount').textContent = jobsCount || 0;
-    document.getElementById('profileProductsCount').textContent = productsCount || 0;
-    document.getElementById('profileTutorialsCount').textContent = tutorialsCount || 0;
-    document.getElementById('profileMessagesCount').textContent = messagesCount || 0;
-    document.getElementById('followerCount').textContent = `${followers || 0} followers`;
-    const followBtn = document.getElementById('followBtn');
-    followBtn.textContent = (isFollowing && isFollowing.length) ? 'Unfollow' : 'Follow';
-    followBtn.onclick = () => toggleFollow(currentUser.id);
-  } catch (err) {
-    console.error('Profile stats error:', err);
-  }
-
-  document.getElementById('avatarUpload').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
-      if (!error) {
-        document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
-        showToast('Profile picture updated!');
-      } else {
-        showToast('Upload failed', true);
-      }
-    } catch (err) {
-      showToast('Upload failed', true);
-    }
-  };
 }
 
 // ────────── Search ──────────
@@ -747,35 +517,70 @@ async function globalSearch(term, category, dateFrom, dateTo) {
   if (category === 'all' || category === 'jobs') queries.push(db.from('job_listings').select('title, created_at').ilike('title', q).limit(5));
   if (category === 'all' || category === 'tutorials') queries.push(db.from('tutorials').select('title, created_at').ilike('title', q).limit(5));
   
-  try {
-    const resultsArr = await Promise.all(queries);
-    const results = [];
-    resultsArr.forEach(res => {
-      if (res.data) res.data.forEach(r => {
-        if ((!dateFrom || new Date(r.created_at) >= new Date(dateFrom)) && (!dateTo || new Date(r.created_at) <= new Date(dateTo + 'T23:59:59'))) {
-          results.push(r.content || r.title);
-        }
-      });
+  const resultsArr = await Promise.all(queries);
+  const results = [];
+  resultsArr.forEach(res => {
+    if (res.data) res.data.forEach(r => {
+      if ((!dateFrom || new Date(r.created_at) >= new Date(dateFrom)) && (!dateTo || new Date(r.created_at) <= new Date(dateTo + 'T23:59:59'))) {
+        results.push(r.content || r.title);
+      }
     });
-    const container = document.getElementById('searchResults');
-    container.innerHTML = results.length ? results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('') : '<p style="padding:20px;">No matches found.</p>';
-  } catch (err) {
-    console.error('Search error:', err);
-  }
+  });
+  document.getElementById('searchResults').innerHTML = results.length ? results.map(t => `<div style="padding:12px; border-bottom:1px solid var(--border);"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0, 100))}</div>`).join('') : '<p style="padding:20px;">No matches found.</p>';
 }
 
-// ────────── Farming Assistant ──────────
+// ────────── Chat ──────────
 async function wikiAnswer(question) {
   try {
     const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(question)}?redirect=true`);
     const data = await res.json();
     return data.extract ? data.extract.substring(0, 550) : 'No info found.';
-  } catch { 
-    return 'Connection error. Please try again.'; 
-  }
+  } catch { return 'Connection error.'; }
 }
 
-// ────────── Page Navigation ──────────
+// ────────── Profile ──────────
+async function loadProfile() {
+  if (!currentUser) {
+    document.getElementById('profileContent').innerHTML = '<p>Please log in to see your profile.</p>';
+    return;
+  }
+  document.getElementById('profileName').textContent = currentUser.displayName;
+  document.getElementById('profileEmail').textContent = currentUser.email;
+  
+  const { data: profile } = await db.from('profiles').select('created_at').eq('id', currentUser.id).single();
+  if (profile) document.getElementById('profileSince').textContent = 'Member since: ' + new Date(profile.created_at).toLocaleDateString();
+  
+  const avatarUrl = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
+  document.getElementById('profileAvatar').src = avatarUrl;
+
+  const { count: forumCount } = await db.from('forum_posts').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: recordsCount } = await db.from('farm_records').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: jobsCount } = await db.from('job_listings').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: productsCount } = await db.from('products').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: tutorialsCount } = await db.from('tutorials').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  const { count: messagesCount } = await db.from('messages').select('*', { count: 'exact', head: true }).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`);
+  const { count: followers } = await db.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', currentUser.id);
+
+  document.getElementById('profileForumCount').textContent = forumCount || 0;
+  document.getElementById('profileRecordsCount').textContent = recordsCount || 0;
+  document.getElementById('profileJobsCount').textContent = jobsCount || 0;
+  document.getElementById('profileProductsCount').textContent = productsCount || 0;
+  document.getElementById('profileTutorialsCount').textContent = tutorialsCount || 0;
+  document.getElementById('profileMessagesCount').textContent = messagesCount || 0;
+  document.getElementById('followerCount').textContent = `${followers || 0} followers`;
+
+  document.getElementById('avatarUpload').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
+    if (!error) {
+      document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
+      showToast('Profile picture updated!');
+    }
+  };
+}
+
+// ────────── Navigation ──────────
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
   const pageElement = document.getElementById(pageId);
@@ -785,6 +590,7 @@ function showPage(pageId) {
   if (navItem) navItem.classList.add('active');
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
+  
   switch (pageId) {
     case 'forum': loadForum(); break;
     case 'records': loadRecords(); break;
@@ -887,7 +693,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('addEventBtn').addEventListener('click', addEvent);
   document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
 
-  // Chat
   document.getElementById('sendChatBtn').addEventListener('click', async () => {
     const input = document.getElementById('chatInput').value.trim();
     if (!input) return;
@@ -899,12 +704,12 @@ document.addEventListener('DOMContentLoaded', () => {
     chat.scrollTop = chat.scrollHeight;
   });
 
-  // Global delegation for dynamic elements
+  // Global click handler
   document.addEventListener('click', async e => {
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
       if (!currentUser) return showToast('Login to delete', true);
-      if (!confirm('Are you sure you want to delete this?')) return;
+      if (!confirm('Delete this?')) return;
       const { type, id } = deleteBtn.dataset;
       if (type === 'forum') await deleteForumPost(id);
       else if (type === 'record') await deleteRecord(id);
@@ -915,11 +720,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const likeBtn = e.target.closest('.like-btn');
-    if (likeBtn) {
-      const { type, id } = likeBtn.dataset;
-      await toggleLike(type, id);
-      return;
-    }
+    if (likeBtn) { const { type, id } = likeBtn.dataset; await toggleLike(type, id); return; }
+    
     const replyToggle = e.target.closest('.reply-toggle');
     if (replyToggle) {
       const postId = replyToggle.dataset.post;
@@ -929,24 +731,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const sendReply = e.target.closest('.send-reply');
-    if (sendReply) {
+    if (sendReply && currentUser) {
       const postId = sendReply.dataset.post;
       const input = sendReply.previousElementSibling;
       const content = input.value.trim();
-      if (content && currentUser) {
-        const { error } = await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content });
-        if (!error) {
-          const replyDiv = sendReply.closest('.reply-section');
-          loadReplies(postId, replyDiv);
-        }
+      if (content) {
+        await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content });
+        const replyDiv = sendReply.closest('.reply-section');
+        loadReplies(postId, replyDiv);
       }
       return;
     }
     const applyBtn = e.target.closest('.apply-btn');
-    if (applyBtn) {
-      await applyToJob(applyBtn.dataset.job);
-      return;
-    }
+    if (applyBtn) { await applyToJob(applyBtn.dataset.job); return; }
   });
 
   checkSession();
