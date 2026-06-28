@@ -56,23 +56,18 @@
             <div class="card">
                 <h2><i class="fas fa-charging-station"></i> Smart Farming Dashboard</h2>
                 <p style="margin-top: 8px;">Your complete agricultural companion.</p>
-                
                 <div class="card" style="background:#0a0a0a; margin-top:20px;">
                     <h4><i class="fas fa-cloud-sun"></i> Weather</h4>
                     <div id="weatherWidget">Loading weather...</div>
                 </div>
-
                 <div class="card" style="background:#0a0a0a; margin-top:20px; border-left:4px solid #10B981;">
                     <h4 style="color:#10B981; margin-bottom:8px;"><i class="fas fa-microscope"></i> Offline Pest Detector</h4>
-                    <p style="font-size:0.9rem; color:#aaa; line-height:1.6;">
-                        Get our standalone pest detection tool that works <strong>completely offline</strong>. Identifies <strong>102 pest species</strong>.
-                    </p>
+                    <p style="font-size:0.9rem; color:#aaa;">Identifies <strong>102 pest species</strong> completely offline.</p>
                     <a href="https://wa.me/260573373146?text=Hi%2C%20I%20would%20like%20to%20get%20the%20AgriMind%20Pest%20Detector%20file." target="_blank" class="btn-primary" style="text-decoration:none; margin-top:12px; display:inline-flex; align-items:center; gap:8px;">
                         <i class="fab fa-whatsapp"></i> Request via WhatsApp
                     </a>
                     <p style="font-size:0.7rem; color:#666; margin-top:8px;">or contact <strong>+260 573373146</strong></p>
                 </div>
-
                 <div class="grid-2cols" style="margin-top: 28px;">
                     <div class="card" style="background:#0a0a0a; text-align:center;">
                         <i class="fas fa-clipboard-list" style="font-size:28px; color:#10B981;"></i> 
@@ -125,9 +120,10 @@
         <div id="groups" class="page">
             <div class="card">
                 <h2><i class="fas fa-users"></i> Farming Communities</h2>
-                <p>Join groups based on your interests.</p>
+                <p>Join groups based on your interests and location.</p>
                 <input id="groupName" placeholder="Group Name">
                 <textarea id="groupDesc" placeholder="Group Description"></textarea>
+                <input id="groupLocation" placeholder="Location (e.g., Northern Region)">
                 <select id="groupCategory">
                     <option value="Crops">Crops</option>
                     <option value="Livestock">Livestock</option>
@@ -137,6 +133,9 @@
                     <option value="General">General</option>
                 </select>
                 <button id="createGroupBtn" class="btn-primary">Create Group</button>
+                <div style="margin:12px 0;">
+                    <input id="groupLocationFilter" placeholder="Filter groups by location..." style="width:100%;">
+                </div>
                 <div id="groupsList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -147,6 +146,7 @@
                 <h2><i class="fas fa-database"></i> Farm Records</h2>
                 <input id="recordTitle" placeholder="Crop or Activity Name">
                 <input id="recordDetail" placeholder="Details">
+                <input id="recordLocation" placeholder="Farm Location">
                 <button id="addRecordBtn" class="btn-primary">Save Record</button>
                 <div id="recordsList" style="margin-top:24px;"></div>
             </div>
@@ -158,7 +158,11 @@
                 <h2><i class="fas fa-briefcase"></i> Job Listings</h2>
                 <input id="jobTitle" placeholder="Job Title">
                 <input id="jobDesc" placeholder="Description">
+                <input id="jobLocation" placeholder="Location (e.g., Lusaka, Nairobi)">
                 <button id="postJobBtn" class="btn-primary">Post Job</button>
+                <div style="margin:12px 0;">
+                    <input id="jobLocationFilter" placeholder="Filter by location..." style="width:100%;">
+                </div>
                 <div id="jobsList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -187,6 +191,7 @@
                 <h2><i class="fas fa-store"></i> Marketplace</h2>
                 <input id="productName" placeholder="Product Name">
                 <input id="productPrice" placeholder="Price">
+                <input id="productLocation" placeholder="Location">
                 <select id="productCategory">
                     <option value="General">General</option>
                     <option value="Seeds">Seeds</option>
@@ -203,6 +208,7 @@
                     <option value="Produce">Produce</option>
                     <option value="Livestock">Livestock</option>
                 </select>
+                <input id="marketLocationFilter" placeholder="Filter by location..." style="width:100%; margin-bottom:8px;">
                 <div id="marketList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -290,9 +296,14 @@
                         <div>
                             <h3 id="profileName">...</h3>
                             <p id="profileEmail">...</p>
+                            <p id="profileLocation">📍 Location: Not set</p>
                             <p id="profileSince">Member since: ...</p>
                             <span id="followerCount">0 followers</span>
                         </div>
+                    </div>
+                    <div style="margin-top:16px; display:flex; gap:8px;">
+                        <input id="updateLocation" placeholder="Update your location" style="flex:1;">
+                        <button id="updateLocationBtn" class="btn-outline">Update</button>
                     </div>
                     <hr style="border-color:#2c2c2c; margin:20px 0;">
                     <h4>Your Contributions</h4>
