@@ -28,6 +28,15 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function cleanDisplayName(email) {
+    if (!email) return 'User';
+    let name = email.split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase())
+        .trim();
+    return name || 'User';
+}
+
 // ────────── Theme ──────────
 const themeToggle = document.getElementById('themeToggle');
 if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
@@ -40,48 +49,18 @@ themeToggle.addEventListener('click', () => {
 async function checkSession() {
     const { data: { session } } = await db.auth.getSession();
     if (session && session.user) {
-        const { data: profile } = await db.from('profiles')
-            .select('display_name,email,phone,location,bio,created_at')
-            .eq('id', session.user.id)
-            .single();
-        
+        const { data: profile } = await db.from('profiles').select('*').eq('id', session.user.id).single();
         let displayName = 'Farmer';
-        
         if (profile?.display_name && profile.display_name.trim() !== '') {
             displayName = profile.display_name.trim();
-        } 
-        else if (session.user.email) {
-            let emailPrefix = session.user.email.split('@')[0];
-            let cleanName = emailPrefix
-                .replace(/[._-]/g, ' ')
-                .replace(/\b\w/g, l => l.toUpperCase())
-                .trim();
-            
-            if (cleanName.length > 20 || cleanName.includes('_') || cleanName.includes('-')) {
-                cleanName = 'Farmer';
-            }
-            
-            displayName = cleanName || 'Farmer';
+        } else if (session.user.email) {
+            displayName = cleanDisplayName(session.user.email);
         }
-        
         currentUser = { 
             id: session.user.id, 
             email: session.user.email, 
             displayName: displayName 
         };
-        
-        // CRITICAL: Always update profile with email on login
-        try {
-            await db.from('profiles')
-                .update({ 
-                    display_name: displayName,
-                    email: session.user.email 
-                })
-                .eq('id', session.user.id);
-            console.log('Updated profile with email for user:', session.user.id);
-        } catch (err) {
-            console.log('Could not update profile:', err);
-        }
     } else { 
         currentUser = null; 
     }
@@ -106,18 +85,13 @@ async function signUp(email, password, displayName) {
     const { data, error } = await db.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
     
-    const nameToSave = displayName?.trim() || email.split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase())
-        .trim() || 'Farmer';
+    const nameToSave = displayName?.trim() || cleanDisplayName(email);
+    console.log('Saving display_name:', nameToSave);
     
     const { error: upsertError } = await db.from('profiles').upsert({ 
         id: data.user.id, 
         display_name: nameToSave, 
-        email: email,
-        phone: '',
-        location: '',
-        bio: ''
+        email: email 
     });
     
     if (upsertError) console.log('Error saving profile:', upsertError);
@@ -148,7 +122,7 @@ db.auth.onAuthStateChange((event, session) => {
 // ────────── Weather ──────────
 async function loadWeather() {
     try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-15.38&longitude=28.32&current_weather=true');
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-1.28&longitude=36.82&current_weather=true');
         const data = await res.json();
         if (data.current_weather) {
             document.getElementById('weatherWidget').innerHTML = `<p>🌡️ Temp: ${data.current_weather.temperature}°C</p><p>💨 Wind: ${data.current_weather.windspeed} km/h</p>`;
@@ -170,7 +144,7 @@ async function loadDashboardStats() {
     loadWeather();
 }
 
-// ────────── Forum with Likes & Replies ──────────
+// ────────── Forum ──────────
 async function loadForum() {
     const container = document.getElementById('forumList');
     const { data: posts } = await db.from('forum_posts').select('*').order('created_at', { ascending: false });
@@ -181,35 +155,13 @@ async function loadForum() {
         if (p.user_id) { 
             const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', p.user_id).single(); 
             if (pf?.display_name && pf.display_name.trim() !== '') dn = pf.display_name.trim();
-            else if (pf?.email) dn = pf.email.split('@')[0];
+            else if (pf?.email) dn = cleanDisplayName(pf.email);
         }
-        const { count: lc } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'forum', target_id: p.id });
         const postDiv = document.createElement('div');
         postDiv.className = 'forum-post';
-        postDiv.innerHTML = `<strong>${escapeHtml(dn)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}<span class="like-btn" data-type="forum" data-id="${p.id}">❤️ ${lc||0}</span>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}<button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>`;
-        const replyDiv = document.createElement('div');
-        replyDiv.className = 'reply-section';
-        replyDiv.style.display = 'none';
+        postDiv.innerHTML = `<strong>${escapeHtml(dn)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}`;
         container.appendChild(postDiv);
-        container.appendChild(replyDiv);
     }
-}
-
-async function loadReplies(postId, container) {
-    const { data: replies } = await db.from('forum_replies').select('*').eq('post_id', postId).order('created_at', { ascending: true });
-    container.innerHTML = '';
-    if (replies) {
-        for (const r of replies) {
-            let dn = 'Anonymous';
-            if (r.user_id) { 
-                const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', r.user_id).single(); 
-                if (pf?.display_name && pf.display_name.trim() !== '') dn = pf.display_name.trim();
-                else if (pf?.email) dn = pf.email.split('@')[0];
-            }
-            container.innerHTML += `<div style="padding:4px 0;"><strong>${escapeHtml(dn)}:</strong> ${escapeHtml(r.content)}</div>`;
-        }
-    }
-    container.innerHTML += `<input type="text" class="reply-input" placeholder="Write reply..." style="width:70%;display:inline;"><button class="btn-outline send-reply" data-post="${postId}">Send</button>`;
 }
 
 async function addForumPost(content, imageFile) {
@@ -225,46 +177,25 @@ async function addForumPost(content, imageFile) {
 }
 
 async function deleteForumPost(id) {
-    await db.from('forum_replies').delete().eq('post_id', id);
-    await db.from('likes').delete().match({ target_type: 'forum', target_id: id });
     await db.from('forum_posts').delete().eq('id', id);
     showToast('Deleted'); loadForum(); loadDashboardStats();
 }
 
-async function toggleLike(type, id) {
-    if (!currentUser) return showToast('Login first', true);
-    const { data: ex } = await db.from('likes').select('*').match({ user_id: currentUser.id, target_type: type, target_id: id });
-    if (ex && ex.length) await db.from('likes').delete().eq('id', ex[0].id);
-    else await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
-    if (type === 'forum') loadForum();
-    else if (type === 'job') loadJobs();
-    else if (type === 'product') loadMarket();
-    else if (type === 'tutorial') loadTutorials();
-}
-
 // ────────── Groups ──────────
 async function loadGroups() {
-    const locFilter = document.getElementById('groupLocationFilter')?.value?.trim() || '';
-    let query = db.from('groups').select('*').order('created_at', { ascending: false });
-    if (locFilter) query = query.ilike('location', `%${locFilter}%`);
-    const { data: groups } = await query;
+    const { data: groups } = await db.from('groups').select('*').order('created_at', { ascending: false });
     const container = document.getElementById('groupsList');
-    if (!groups || groups.length === 0) { container.innerHTML = '<p>No groups yet. Create one!</p>'; return; }
-    container.innerHTML = groups.map(g => `<div class="forum-post"><strong>${escapeHtml(g.name)}</strong> <small>${escapeHtml(g.category)}</small>${g.location?`<br><small>📍 ${escapeHtml(g.location)}</small>`:''}<p>${escapeHtml(g.description||'')}</p><button class="btn-outline join-group-btn" data-group="${g.id}">Join Group</button></div>`).join('');
+    if (!groups || groups.length === 0) { container.innerHTML = '<p>No groups yet.</p>'; return; }
+    container.innerHTML = groups.map(g => `<div class="forum-post"><strong>${escapeHtml(g.name)}</strong> <small>${escapeHtml(g.category)}</small><p>${escapeHtml(g.description||'')}</p></div>`).join('');
 }
 
 async function createGroup() {
     if (!currentUser) return showToast('Please login', true);
     const name = document.getElementById('groupName').value.trim();
-    const desc = document.getElementById('groupDesc').value.trim();
-    const cat = document.getElementById('groupCategory').value;
-    const loc = document.getElementById('groupLocation').value.trim();
     if (!name) return showToast('Group name required', true);
-    await db.from('groups').insert({ name, description: desc, category: cat, location: loc, created_by: currentUser.id });
+    await db.from('groups').insert({ name, description: document.getElementById('groupDesc').value, category: document.getElementById('groupCategory').value, location: document.getElementById('groupLocation').value, created_by: currentUser.id });
     showToast('Group created!');
     document.getElementById('groupName').value = '';
-    document.getElementById('groupDesc').value = '';
-    document.getElementById('groupLocation').value = '';
     loadGroups();
 }
 
@@ -285,33 +216,28 @@ async function addRecord(title, detail, location) {
 
 async function deleteRecord(id) { await db.from('farm_records').delete().eq('id', id); showToast('Deleted'); loadRecords(); loadDashboardStats(); }
 
-// ────────── Jobs ──────────
+// ────────── JOBS ──────────
 async function loadJobs() {
-    const locFilter = document.getElementById('jobLocationFilter')?.value?.trim() || '';
-    let query = db.from('job_listings').select('*').order('created_at', { ascending: false });
-    if (locFilter) query = query.ilike('location', `%${locFilter}%`);
-    const { data: jobs } = await query;
+    const { data: jobs } = await db.from('job_listings').select('*').order('created_at', { ascending: false });
     const container = document.getElementById('jobsList');
     if (!jobs || jobs.length === 0) { container.innerHTML = '<p>No jobs available.</p>'; return; }
     container.innerHTML = '';
     for (const j of jobs) {
         let posterName = 'Anonymous';
-        let posterEmail = 'N/A';
         if (j.user_id) {
             const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', j.user_id).single();
-            if (pf?.display_name && pf.display_name.trim() !== '') posterName = pf.display_name.trim();
-            else if (pf?.email) posterName = pf.email.split('@')[0];
-            posterEmail = pf?.email || 'N/A';
+            if (pf?.display_name && pf.display_name.trim() !== '') {
+                posterName = pf.display_name.trim();
+            } else if (pf?.email) {
+                posterName = cleanDisplayName(pf.email);
+            }
         }
-        const { count: ac } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
         const isOwner = currentUser && currentUser.id === j.user_id;
         container.innerHTML += `<div class="job-item">
             <strong>${escapeHtml(j.title)}</strong>
             <p>${escapeHtml(j.description||'')}</p>
             ${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}
             <small>Posted by: ${escapeHtml(posterName)}</small>
-            ${!isOwner && currentUser ? `<br><small>📧 ${escapeHtml(posterEmail)}</small>` : ''}
-            <span>👤 ${ac||0} applicants</span>
             ${isOwner ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
             ${!isOwner && currentUser ? `<button class="btn-outline apply-btn" data-job="${j.id}" style="margin-left:8px;">Apply Now</button>` : ''}
         </div>`;
@@ -321,330 +247,224 @@ async function loadJobs() {
 async function addJob(title, description, location) {
     if (!currentUser) return showToast('Please login', true);
     await db.from('job_listings').insert({ user_id: currentUser.id, title, description, location });
-    showToast('Job posted!'); loadJobs(); loadDashboardStats();
+    showToast('Job posted!'); 
+    loadJobs(); 
+    if (typeof loadDashboardStats === 'function') loadDashboardStats();
 }
 
 async function deleteJob(id) { 
-    await db.from('job_applications').delete().eq('job_id', id); 
+    // Also delete all applications for this job
+    await db.from('job_applications').delete().eq('job_id', id);
     await db.from('job_listings').delete().eq('id', id); 
-    showToast('Job deleted'); loadJobs(); loadDashboardStats(); 
+    showToast('Job deleted'); 
+    loadJobs(); 
+    if (typeof loadDashboardStats === 'function') loadDashboardStats();
 }
 
 async function applyToJob(jobId) {
     if (!currentUser) { showToast('Please login first', true); return; }
     
-    const { data: existing } = await db.from('job_applications').select('*').match({ job_id: parseInt(jobId), applicant_id: currentUser.id });
-    if (existing && existing.length > 0) { showToast('You already applied', true); return; }
+    // Check if already applied
+    const { data: existing } = await db.from('job_applications')
+        .select('*')
+        .match({ job_id: parseInt(jobId), applicant_id: currentUser.id });
+    if (existing && existing.length > 0) { 
+        showToast('You already applied to this job', true); 
+        return; 
+    }
     
-    const msg = prompt('Add a message (optional):');
+    const msg = prompt('Add a message with your application (optional):');
+    if (msg === null) return; // User cancelled
+    
     const { error } = await db.from('job_applications').insert({ 
         job_id: parseInt(jobId), 
         applicant_id: currentUser.id, 
-        applicant_message: msg || 'I am interested.',
-        message: msg || 'I am interested.',
+        applicant_message: msg || 'I am interested in this position.',
+        message: msg || 'I am interested in this position.',
         status: 'pending' 
     });
-    if (error) { showToast('Failed to apply: ' + error.message, true); return; }
-    showToast('Applied!');
+    
+    if (error) {
+        showToast('Failed to apply: ' + error.message, true);
+        return;
+    }
+    
+    showToast('Application submitted successfully!');
     loadJobs();
 }
 
-// ────────── Applications ──────────
+// ────────── APPLICATIONS ──────────
 async function loadApplications() {
-    if (!currentUser) {
-        document.getElementById('applicationsList').innerHTML = '<p>Please login to view applications.</p>';
-        return;
-    }
-    
+    if (!currentUser) return;
     const container = document.getElementById('applicationsList');
-    container.innerHTML = '<p>Loading applications...</p>';
     
-    try {
-        const { data: myJobs, error: jobsError } = await db.from('job_listings')
-            .select('id, title')
-            .eq('user_id', currentUser.id);
-        
-        if (jobsError) {
-            console.error('Error fetching jobs:', jobsError);
-            container.innerHTML = '<p>Error loading jobs.</p>';
-            return;
-        }
-        
-        if (!myJobs || myJobs.length === 0) {
-            container.innerHTML = '<p>You haven\'t posted any jobs yet.</p>';
-            return;
-        }
-        
-        container.innerHTML = '';
-        
-        for (const job of myJobs) {
-            const { data: apps, error: appsError } = await db.from('job_applications')
-                .select('*')
-                .eq('job_id', job.id)
-                .order('created_at', { ascending: false });
-            
-            if (appsError) {
-                console.error('Error fetching applications:', appsError);
-                continue;
-            }
-            
-            if (!apps || apps.length === 0) continue;
-            
-            const jobHeader = document.createElement('h4');
-            jobHeader.style.cssText = 'color:var(--accent);margin-bottom:10px;margin-top:15px;';
-            jobHeader.textContent = `📋 ${job.title} (${apps.length} applicants)`;
-            container.appendChild(jobHeader);
-            
-            for (const app of apps) {
-                const appDiv = document.createElement('div');
-                appDiv.className = 'job-item';
-                
-                let applicantEmail = 'N/A';
-                let applicantName = 'Unknown';
-                let applicantPhone = 'N/A';
-                let applicantLocation = 'N/A';
-                
-                if (app.applicant_id) {
-                    try {
-                        const { data: profile, error: profileError } = await db.from('profiles')
-                            .select('display_name, email, phone, location')
-                            .eq('id', app.applicant_id)
-                            .single();
-                        
-                        if (profileError) {
-                            console.error('Error fetching profile for applicant:', app.applicant_id, profileError);
-                        } else if (profile) {
-                            applicantEmail = profile.email || 'N/A';
-                            applicantName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
-                            applicantPhone = profile.phone || 'N/A';
-                            applicantLocation = profile.location || 'N/A';
-                        }
-                    } catch (err) {
-                        console.error('Exception fetching profile:', err);
-                    }
-                }
-                
-                const statusColor = app.status === 'accepted' ? '#10B981' : 
-                                   app.status === 'rejected' ? '#dc2626' : '#f59e0b';
-                
-                let html = `<div style="border-left:5px solid ${statusColor};padding-left:12px;">
-                    <strong>${escapeHtml(applicantName)}</strong>
-                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>`;
-                
-                if (app.status === 'accepted') {
-                    html += `
-                        <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
-                        <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>`;
-                }
-                
-                html += `
-                    <p><strong>💬 Message:</strong> ${escapeHtml(app.applicant_message || 'No message')}</p>
-                    <small>Applied: ${new Date(app.created_at).toLocaleDateString()}</small>
-                    <br><span style="color:${statusColor};font-weight:600;">Status: ${app.status}</span>`;
-                
-                if (app.status === 'pending') {
-                    html += `
-                        <div style="margin-top:8px;display:flex;gap:8px;">
-                            <button class="btn-outline accept-app" data-id="${app.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
-                            <button class="btn-outline reject-app" data-id="${app.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
-                        </div>`;
-                }
-                
-                if (app.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A') {
-                    html += `
-                        <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                            <button class="btn-primary contact-applicant-btn" 
-                                data-email="${escapeHtml(applicantEmail)}" 
-                                data-name="${escapeHtml(applicantName)}" 
-                                data-phone="${escapeHtml(applicantPhone)}"
-                                data-applicantid="${app.applicant_id}"
-                                style="font-size:12px;padding:6px 14px;width:100%;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
-                            </button>
-                        </div>`;
-                }
-                
-                html += '</div>';
-                appDiv.innerHTML = html;
-                container.appendChild(appDiv);
-            }
-        }
-        
-        if (container.innerHTML === '') {
-            container.innerHTML = '<p>No applications received yet.</p>';
-        }
-    } catch (err) {
-        console.error('Error in loadApplications:', err);
-        container.innerHTML = '<p>Error loading applications. Please try again.</p>';
-    }
-}
-
-// ────────── My Applications (FIXED - uses direct email from current user) ──────────
-async function loadMyApplications() {
-    if (!currentUser) {
-        document.getElementById('myApplicationsList').innerHTML = '<p>Please login to view your applications.</p>';
-        return;
+    const { data: myJobs } = await db.from('job_listings')
+        .select('id,title')
+        .eq('user_id', currentUser.id);
+    
+    if (!myJobs || myJobs.length === 0) { 
+        container.innerHTML = '<p>No jobs posted yet.</p>'; 
+        return; 
     }
     
-    const container = document.getElementById('myApplicationsList');
-    container.innerHTML = '<p>Loading your applications...</p>';
+    container.innerHTML = '';
     
-    try {
-        const { data: apps, error: appsError } = await db.from('job_applications')
+    for (const job of myJobs) {
+        const { data: apps } = await db.from('job_applications')
             .select('*')
-            .eq('applicant_id', currentUser.id)
+            .eq('job_id', job.id)
             .order('created_at', { ascending: false });
         
-        if (appsError) {
-            console.error('Error fetching applications:', appsError);
-            container.innerHTML = '<p>Error loading your applications.</p>';
-            return;
-        }
-        
-        if (!apps || apps.length === 0) {
-            container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>';
-            return;
-        }
-        
-        container.innerHTML = '';
-        
-        for (const app of apps) {
-            const appDiv = document.createElement('div');
-            appDiv.className = 'job-item';
+        if (apps && apps.length > 0) {
+            container.innerHTML += `<h4 style="color:var(--accent);margin-bottom:10px;">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
             
-            let jobTitle = 'Unknown Job';
-            let jobLocation = '';
-            let jobDescription = '';
-            let employerId = null;
-            let employerEmail = 'N/A';
-            let employerName = 'Unknown';
-            let employerPhone = 'N/A';
-            
-            try {
-                const { data: job, error: jobError } = await db.from('job_listings')
-                    .select('title, description, location, user_id')
-                    .eq('id', app.job_id)
-                    .single();
+            for (const a of apps) {
+                let applicantEmail = 'N/A';
+                let applicantName = 'Applicant';
                 
-                if (jobError) {
-                    console.error('Error fetching job:', jobError);
-                } else if (job) {
-                    jobTitle = job.title || 'Unknown Job';
-                    jobLocation = job.location || '';
-                    jobDescription = job.description || '';
-                    employerId = job.user_id;
-                    
-                    // Fetch employer profile
-                    if (employerId) {
-                        const { data: profile } = await db.from('profiles')
-                            .select('display_name, email, phone')
-                            .eq('id', employerId)
-                            .single();
-                        
-                        if (profile) {
-                            employerEmail = profile.email || 'N/A';
-                            employerName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
-                            employerPhone = profile.phone || 'N/A';
+                if (a.applicant_id) {
+                    const { data: pf } = await db.from('profiles')
+                        .select('display_name,email')
+                        .eq('id', a.applicant_id)
+                        .single();
+                    if (pf) {
+                        applicantEmail = pf.email || 'N/A';
+                        if (pf.display_name && pf.display_name.trim() !== '') {
+                            applicantName = pf.display_name.trim();
+                        } else if (pf.email) {
+                            applicantName = cleanDisplayName(pf.email);
                         }
                     }
                 }
-            } catch (err) {
-                console.error('Exception fetching job:', err);
+                
+                const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
+                const showContactBtn = a.status === 'accepted' && applicantEmail !== 'N/A' && applicantEmail !== '';
+                
+                container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
+                    <strong>${escapeHtml(applicantName)}</strong>
+                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
+                    <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
+                    <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
+                    <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
+                    ${a.status === 'pending' ? `
+                        <div style="margin-top:8px;display:flex;gap:8px;">
+                            <button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
+                            <button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
+                        </div>
+                    ` : ''}
+                    ${showContactBtn ? `
+                        <div style="margin-top:8px;">
+                            <button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantEmail)}" data-name="${escapeHtml(applicantName)}" style="font-size:12px;padding:6px 14px;">
+                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
+                            </button>
+                        </div>
+                    ` : ''}
+                    ${a.status === 'accepted' && !showContactBtn ? `
+                        <div style="margin-top:8px;color:var(--text-secondary,#aaa);font-size:0.8rem;">
+                            <i class="fas fa-info-circle"></i> No email available to contact
+                        </div>
+                    ` : ''}
+                </div>`;
             }
-            
-            const statusColor = app.status === 'accepted' ? '#10B981' : 
-                               app.status === 'rejected' ? '#dc2626' : '#f59e0b';
-            
-            let html = `<div style="border-left:5px solid ${statusColor};padding-left:12px;">
-                <strong>${escapeHtml(jobTitle)}</strong>`;
-            
-            if (jobLocation) {
-                html += `<p>📍 ${escapeHtml(jobLocation)}</p>`;
-            }
-            
-            if (jobDescription) {
-                html += `<p>${escapeHtml(jobDescription)}</p>`;
-            }
-            
-            html += `
-                <small>Employer: ${escapeHtml(employerName)}</small>`;
-            
-            // Always show employer email if available
-            if (employerEmail && employerEmail !== 'N/A') {
-                html += `<br><small>📧 ${escapeHtml(employerEmail)}</small>`;
-            }
-            
-            if (employerPhone && employerPhone !== 'N/A') {
-                html += `<br><small>📱 ${escapeHtml(employerPhone)}</small>`;
-            }
-            
-            html += `
-                <br><small>Applied: ${new Date(app.created_at).toLocaleDateString()}</small>
-                <br><span style="color:${statusColor};font-weight:600;">Status: ${app.status}</span>`;
-            
-            // Show contact button if employer has email
-            if (employerEmail && employerEmail !== 'N/A') {
-                html += `
-                    <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                        <button class="btn-primary contact-poster-btn" 
-                            data-email="${escapeHtml(employerEmail)}" 
-                            data-name="${escapeHtml(employerName)}" 
-                            data-phone="${escapeHtml(employerPhone)}"
-                            data-employerid="${employerId}"
-                            data-jobtitle="${escapeHtml(jobTitle)}"
-                            style="font-size:12px;padding:8px 16px;width:100%;">
-                            <i class="fas fa-envelope"></i> Contact ${escapeHtml(employerName)} about ${escapeHtml(jobTitle)}
-                        </button>
-                    </div>`;
-            } else {
-                html += `
-                    <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px;border:1px solid #f59e0b;">
-                        <p style="color:#f59e0b;font-size:0.85rem;">ℹ️ Employer contact info will appear once they update their profile.</p>
-                    </div>`;
-            }
-            
-            html += '</div>';
-            appDiv.innerHTML = html;
-            container.appendChild(appDiv);
         }
-    } catch (err) {
-        console.error('Error in loadMyApplications:', err);
-        container.innerHTML = '<p>Error loading your applications. Please try again.</p>';
+    }
+    
+    if (container.innerHTML === '') {
+        container.innerHTML = '<p>No applications received yet.</p>';
     }
 }
 
-// ────────── Update Profile with Email ──────────
-async function updateProfileEmail() {
-    if (!currentUser) {
-        showToast('Please login first', true);
+// ────────── MY APPLICATIONS ──────────
+async function loadMyApplications() {
+    if (!currentUser) return;
+    const container = document.getElementById('myApplicationsList');
+    
+    const { data: apps } = await db.from('job_applications')
+        .select('*')
+        .eq('applicant_id', currentUser.id)
+        .order('created_at', { ascending: false });
+    
+    if (!apps || apps.length === 0) { 
+        container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; 
+        return; 
+    }
+    
+    container.innerHTML = '';
+    
+    for (const a of apps) {
+        const { data: job } = await db.from('job_listings')
+            .select('title,description,location,user_id')
+            .eq('id', a.job_id)
+            .single();
+        
+        let employerEmail = 'N/A';
+        let employerName = 'Employer';
+        
+        if (job?.user_id) {
+            const { data: pf } = await db.from('profiles')
+                .select('display_name,email')
+                .eq('id', job.user_id)
+                .single();
+            if (pf) {
+                employerEmail = pf.email || 'N/A';
+                if (pf.display_name && pf.display_name.trim() !== '') {
+                    employerName = pf.display_name.trim();
+                } else if (pf.email) {
+                    employerName = cleanDisplayName(pf.email);
+                }
+            }
+        }
+        
+        const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
+        const showContactBtn = a.status === 'accepted' && employerEmail !== 'N/A' && employerEmail !== '';
+        
+        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
+            <strong>${escapeHtml(job?.title || 'Unknown Job')}</strong>
+            ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
+            <p>${escapeHtml(job?.description || '')}</p>
+            <small>Employer: ${escapeHtml(employerName)}</small>
+            <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
+            <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
+            ${a.status === 'accepted' && showContactBtn ? `
+                <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
+                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
+                    <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
+                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
+                    <button class="btn-primary contact-poster-btn" data-email="${escapeHtml(employerEmail)}" data-name="${escapeHtml(employerName)}" style="font-size:12px;padding:8px 16px;margin-top:6px;">
+                        <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
+                    </button>
+                </div>
+            ` : ''}
+            ${a.status === 'accepted' && !showContactBtn ? `
+                <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
+                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
+                    <p style="color:var(--text-secondary,#aaa);font-size:0.85rem;">No contact email available. Check the job posting for more details.</p>
+                </div>
+            ` : ''}
+            ${a.status === 'rejected' ? `<p style="color:#dc2626;margin-top:8px;">Not accepted. Keep applying!</p>` : ''}
+            ${a.status === 'pending' ? `<p style="color:#f59e0b;margin-top:8px;">⏳ Waiting for review...</p>` : ''}
+        </div>`;
+    }
+}
+
+async function updateApplicationStatus(appId, status) { 
+    const { error } = await db.from('job_applications')
+        .update({ status })
+        .eq('id', appId); 
+    
+    if (error) {
+        showToast('Failed to update status: ' + error.message, true);
         return;
     }
     
-    try {
-        const { error } = await db.from('profiles')
-            .update({ email: currentUser.email })
-            .eq('id', currentUser.id);
-        
-        if (error) {
-            showToast('Failed to update: ' + error.message, true);
-        } else {
-            showToast('✅ Profile email updated successfully!');
-            loadMyApplications();
-            loadApplications();
-        }
-    } catch (err) {
-        showToast('Error: ' + err.message, true);
-    }
+    showToast(`Application ${status}!`); 
+    loadApplications();
+    loadMyApplications();
 }
 
 // ────────── Market ──────────
 async function loadMarket() {
-    const cat = document.getElementById('marketCategoryFilter')?.value || 'All';
-    const locFilter = document.getElementById('marketLocationFilter')?.value?.trim() || '';
-    let q = db.from('products').select('*').order('created_at', { ascending: false });
-    if (cat !== 'All') q = q.eq('category', cat);
-    if (locFilter) q = q.ilike('location', `%${locFilter}%`);
-    const { data: products } = await q;
+    const { data: products } = await db.from('products').select('*').order('created_at', { ascending: false });
     const container = document.getElementById('marketList');
     if (!products || products.length === 0) { container.innerHTML = '<p>No products listed.</p>'; return; }
     container.innerHTML = products.map(p => `<div class="product-item">${p.image_url?`<img src="${p.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}${p.location?`<br><small>📍 ${escapeHtml(p.location)}</small>`:''}<br><small>${escapeHtml(p.category)}</small>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
@@ -676,12 +496,12 @@ async function loadMessages() {
         if (m.from_user_id) { 
             const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', m.from_user_id).single(); 
             if (pf?.display_name && pf.display_name.trim() !== '') fn = pf.display_name.trim();
-            else if (pf?.email) fn = pf.email.split('@')[0];
+            else if (pf?.email) fn = cleanDisplayName(pf.email);
         }
         if (m.to_user_id) { 
             const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', m.to_user_id).single(); 
             if (pf?.display_name && pf.display_name.trim() !== '') tn = pf.display_name.trim();
-            else if (pf?.email) tn = pf.email.split('@')[0];
+            else if (pf?.email) tn = cleanDisplayName(pf.email);
         }
         container.innerHTML += `<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
     }
@@ -709,7 +529,7 @@ async function addTutorial(title, url, description) {
     showToast('Tutorial shared!'); loadTutorials(); loadDashboardStats();
 }
 
-async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); showToast('Deleted'); loadTutorials(); loadDashboardStats(); }
+async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); showToast('Deleted'); loadTutorials(); }
 
 // ────────── Calendar ──────────
 async function loadCalendar() {
@@ -724,13 +544,11 @@ async function addEvent() {
     if (!currentUser) return;
     const title = document.getElementById('eventTitle').value.trim();
     const date = document.getElementById('eventDate').value;
-    const notes = document.getElementById('eventNotes').value.trim();
     if (!title || !date) return showToast('Title and date required', true);
-    await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes });
+    await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes: document.getElementById('eventNotes').value });
     showToast('Event added!');
     document.getElementById('eventTitle').value = '';
     document.getElementById('eventDate').value = '';
-    document.getElementById('eventNotes').value = '';
     loadCalendar();
 }
 
@@ -747,36 +565,19 @@ function calculateYield() {
 // ────────── Search ──────────
 async function globalSearch(term, category, dateFrom, dateTo) {
     const q = `%${term}%`;
+    let queries = [];
+    if (category==='all'||category==='forum') queries.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));
+    if (category==='all'||category==='records') queries.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));
+    if (category==='all'||category==='jobs') queries.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));
+    if (category==='all'||category==='tutorials') queries.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));
+    const resultsArr = await Promise.all(queries);
     const results = [];
-    
-    if (category==='all'||category==='forum') {
-        const { data } = await db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5);
-        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Forum Post', text: r.content?.substring(0,100), date: r.created_at }); });
-    }
-    if (category==='all'||category==='records') {
-        const { data } = await db.from('farm_records').select('title,created_at').ilike('title',q).limit(5);
-        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Farm Record', text: r.title, date: r.created_at }); });
-    }
-    if (category==='all'||category==='jobs') {
-        const { data } = await db.from('job_listings').select('title,created_at').ilike('title',q).limit(5);
-        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Job', text: r.title, date: r.created_at }); });
-    }
-    if (category==='all'||category==='tutorials') {
-        const { data } = await db.from('tutorials').select('title,created_at').ilike('title',q).limit(5);
-        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Tutorial', text: r.title, date: r.created_at }); });
-    }
-    
-    if (category==='all') {
-        const { data: users } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('display_name',q).limit(10);
-        if (users) users.forEach(u => { results.push({ type: 'User', text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`, date: u.created_at }); });
-        if (results.filter(r => r.type === 'User').length === 0) {
-            const { data: usersByEmail } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('email',q).limit(5);
-            if (usersByEmail) usersByEmail.forEach(u => { results.push({ type: 'User', text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`, date: u.created_at }); });
-        }
-    }
-    
-    results.sort((a, b) => new Date(b.date) - new Date(a.date));
-    document.getElementById('searchResults').innerHTML = results.length ? results.map(r => `<div style="padding:12px;margin-bottom:8px;background:var(--card-bg);border-radius:12px;border-left:3px solid var(--accent);"><span style="font-size:0.7rem;color:var(--accent);font-weight:600;">${r.type}</span><p style="margin:4px 0;">${escapeHtml(r.text)}</p><small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></div>`).join('') : '<p>No matches found.</p>';
+    resultsArr.forEach(res => {
+        if (res.data) res.data.forEach(r => {
+            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push(r.content||r.title);
+        });
+    });
+    document.getElementById('searchResults').innerHTML = results.length ? results.map(t => `<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join('') : '<p>No matches found.</p>';
 }
 
 // ────────── Chat ──────────
@@ -796,7 +597,7 @@ async function loadProfile() {
     }
     
     const { data: pd } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-    const displayName = pd?.display_name?.trim() || currentUser.email?.split('@')[0] || 'Farmer';
+    const displayName = pd?.display_name?.trim() || cleanDisplayName(currentUser.email) || 'Farmer';
     
     document.getElementById('profileName').textContent = displayName;
     document.getElementById('profileEmail').textContent = currentUser.email || 'No email';
@@ -810,23 +611,17 @@ async function loadProfile() {
     document.getElementById('editLocation').value = pd?.location || '';
     document.getElementById('editBio').value = pd?.bio || '';
     
-    document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
-    
     const { count: fc } = await db.from('forum_posts').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: rc } = await db.from('farm_records').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: jc } = await db.from('job_listings').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: pc } = await db.from('products').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: tc } = await db.from('tutorials').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
-    const { count: mc } = await db.from('messages').select('*',{count:'exact',head:true}).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`);
-    const { count: fol } = await db.from('follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id);
     
     document.getElementById('profileForumCount').textContent = fc || 0;
     document.getElementById('profileRecordsCount').textContent = rc || 0;
     document.getElementById('profileJobsCount').textContent = jc || 0;
     document.getElementById('profileProductsCount').textContent = pc || 0;
     document.getElementById('profileTutorialsCount').textContent = tc || 0;
-    document.getElementById('profileMessagesCount').textContent = mc || 0;
-    document.getElementById('followerCount').textContent = `${fol||0} followers`;
     
     document.getElementById('avatarUpload').onchange = async (e) => {
         const file = e.target.files[0];
@@ -866,604 +661,37 @@ function analyzeLeafColors(imageData) {
         else if (v < 25 && s < 30) { dark++; if (dark % 3 === 0) darkSpots++; }
         else if (s < 15 && v > 70) white++;
     }
-    return { 
-        greenPct: total ? +(green/total*100).toFixed(1) : 0, 
-        yellowPct: total ? +(yellow/total*100).toFixed(1) : 0, 
-        brownPct: total ? +(brown/total*100).toFixed(1) : 0, 
-        darkPct: total ? +(dark/total*100).toFixed(1) : 0, 
-        whitePct: total ? +(white/total*100).toFixed(1) : 0, 
-        darkSpots 
-    };
+    return { greenPct: total ? +(green/total*100).toFixed(1) : 0, yellowPct: total ? +(yellow/total*100).toFixed(1) : 0, brownPct: total ? +(brown/total*100).toFixed(1) : 0, darkPct: total ? +(dark/total*100).toFixed(1) : 0, whitePct: total ? +(white/total*100).toFixed(1) : 0, darkSpots };
 }
 
 function diagnoseFromColors(c) {
     const symptoms = [], issues = [];
     let score = 0, conf = 0;
-    
-    if (currentSensorLight !== null && currentSensorLight < 100) {
-        return { 
-            symptoms: [{ text: 'Too dark for accurate analysis - move to brighter area', found: true }], 
-            issues: ['Insufficient light'], 
-            plant: 'Unknown', 
-            confidence: 0, 
-            recommendation: 'Move to better lighting and scan again.', 
-            severity: 0, 
-            colors: c 
-        };
-    }
-    
-    if (c.brownPct > 5 && c.darkSpots > 3) { 
-        symptoms.push({ text: 'Brown circular holes 3-8mm detected', found: true, detail: `Brown: ${c.brownPct}%, Dark spots: ${c.darkSpots}` }); 
-        issues.push('Possible Fall Armyworm damage'); 
-        score += 3; 
-        conf += 25; 
-    }
-    else if (c.brownPct > 3) { 
-        symptoms.push({ text: 'Minor brown spots detected', found: true, detail: `Brown: ${c.brownPct}%` }); 
-        score += 1; 
-        conf += 10; 
-    }
-    else { 
-        symptoms.push({ text: 'No significant brown damage', found: false }); 
-        conf += 15; 
-    }
-    
-    if (c.yellowPct > 10) { 
-        symptoms.push({ text: 'Yellow discoloration >10% of leaf area', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
-        issues.push('Possible nutrient deficiency or early blight'); 
-        score += 2; 
-        conf += 20; 
-    }
-    else if (c.yellowPct > 5) { 
-        symptoms.push({ text: 'Slight yellowing detected (5-10%)', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
-        score += 1; 
-        conf += 10; 
-    }
-    else { 
-        symptoms.push({ text: 'No yellow discoloration', found: false }); 
-        conf += 10; 
-    }
-    
-    if (c.greenPct < 50) { 
-        symptoms.push({ text: 'Low chlorophyll detected (<50% green)', found: true, detail: `Green: ${c.greenPct}%` }); 
-        issues.push('Plant may be wilting or stressed'); 
-        score += 2; 
-        conf += 15; 
-    }
-    else { 
-        symptoms.push({ text: 'Healthy chlorophyll levels', found: false, detail: `Green: ${c.greenPct}%` }); 
-        conf += 20; 
-    }
-    
-    if (c.whitePct > 8) { 
-        symptoms.push({ text: 'White/powdery patches detected', found: true, detail: `White: ${c.whitePct}%` }); 
-        issues.push('Possible powdery mildew'); 
-        score += 2; 
-        conf += 15; 
-    }
-    else { 
-        symptoms.push({ text: 'No powdery mildew signs', found: false }); 
-        conf += 5; 
-    }
-    
-    let plant = c.greenPct > 60 && c.yellowPct < 5 ? 'Healthy Plant (likely Maize)' : 
-                c.greenPct > 40 ? 'Stressed Crop' : 'Broadleaf Crop';
+    if (c.brownPct > 5 && c.darkSpots > 3) { symptoms.push({ text: 'Brown holes detected', found: true }); issues.push('Possible FAW damage'); score += 3; conf += 25; }
+    else if (c.brownPct > 3) { symptoms.push({ text: 'Minor brown spots', found: true }); score += 1; conf += 10; }
+    else { symptoms.push({ text: 'No brown damage', found: false }); conf += 15; }
+    if (c.yellowPct > 10) { symptoms.push({ text: 'Yellow >10%', found: true }); issues.push('Possible deficiency'); score += 2; conf += 20; }
+    else if (c.yellowPct > 5) { symptoms.push({ text: 'Slight yellowing', found: true }); score += 1; conf += 10; }
+    else { symptoms.push({ text: 'No yellowing', found: false }); conf += 10; }
+    if (c.greenPct < 50) { symptoms.push({ text: 'Low chlorophyll', found: true }); issues.push('Plant stressed'); score += 2; conf += 15; }
+    else { symptoms.push({ text: 'Healthy chlorophyll', found: false }); conf += 20; }
+    if (c.whitePct > 8) { symptoms.push({ text: 'White patches', found: true }); issues.push('Possible mildew'); score += 2; conf += 15; }
+    else { symptoms.push({ text: 'No mildew', found: false }); conf += 5; }
+    let plant = c.greenPct > 60 ? 'Healthy Plant' : c.greenPct > 40 ? 'Stressed Crop' : 'Broadleaf Crop';
     conf = Math.min(conf, 95);
-    
-    let rec = score >= 5 ? 'URGENT: Multiple issues detected. Apply treatment immediately!' : 
-              score >= 3 ? 'Issues detected. Monitor closely and consider treatment.' : 
-              score >= 1 ? 'Minor issues. Continue regular monitoring.' : 
-              'Plant appears healthy. No action needed.';
-    
-    return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: rec, severity: score, colors: c };
+    return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: score >= 5 ? 'URGENT: Treat!' : score >= 3 ? 'Monitor closely.' : score >= 1 ? 'Minor issues.' : 'Healthy.', severity: score, colors: c };
 }
 
 // ═══════════════════════════════════════════
-// ZAMBIAN CROP DATABASE (10+ Crops with Zambian pests)
+// CROP DATABASE
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
-    // ── 1. MAIZE (Zambia's staple) ──
-    maize: { 
-        name: 'Maize (Zambia)', 
-        pests: { 
-            fall_armyworm: { 
-                name: 'Fall Armyworm (Zambia)', 
-                severity: 'critical', 
-                lossPct: 25, 
-                dosage: 250, 
-                chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], 
-                organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], 
-                note: 'Most destructive pest in Zambia. Scout early morning. Use push-pull technology.' 
-            }, 
-            stalk_borer: { 
-                name: 'Stalk Borer', 
-                severity: 'high', 
-                lossPct: 20, 
-                dosage: 180, 
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'], 
-                organic: ['Neem Oil','Push-pull','Beneficial wasps'], 
-                note: 'Attacks stems causing lodging. Apply at knee-high stage.' 
-            },
-            maize_streak_virus: {
-                name: 'Maize Streak Virus',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['Insecticides for leafhoppers'],
-                organic: ['Resistant varieties','Neem Oil'],
-                note: 'Transmitted by leafhoppers. Common in Zambian lowlands.'
-            },
-            gray_leaf_spot: {
-                name: 'Gray Leaf Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 200,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Causes rectangular gray lesions. Common in humid Zambian regions.'
-            },
-            northern_leaf_blight: {
-                name: 'Northern Leaf Blight',
-                severity: 'medium',
-                lossPct: 12,
-                dosage: 180,
-                chemicals: ['Propiconazole','Azoxystrobin'],
-                organic: ['Resistant varieties','Crop rotation'],
-                note: 'Long cigar-shaped lesions. Favored by cool, wet conditions in Zambia.'
-            }
-        }, 
-        yieldValue: 2800 
-    },
-    
-    // ── 2. GROUNDNUTS (Zambian staple) ──
-    groundnut: {
-        name: 'Groundnuts (Zambia)',
-        pests: {
-            rosette_virus: {
-                name: 'Groundnut Rosette Virus',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 0,
-                chemicals: ['Insecticides for aphids'],
-                organic: ['Resistant varieties','Aphid control'],
-                note: 'Devastating in Zambia. Transmitted by aphids. Use resistant varieties.'
-            },
-            early_leaf_spot: {
-                name: 'Early Leaf Spot',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Chlorothalonil','Tebuconazole'],
-                organic: ['Sulfur spray','Crop rotation'],
-                note: 'Dark brown spots on leaves. Common in Zambian rainy season.'
-            },
-            rust: {
-                name: 'Groundnut Rust',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 220,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Sulfur spray','Resistant varieties'],
-                note: 'Orange-brown pustules on leaves. Favored by warm Zambian weather.'
-            },
-            aphids: {
-                name: 'Groundnut Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 150,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits rosette virus. Monitor early in Zambian growing season.'
-            },
-            jassids: {
-                name: 'Jassids (Leafhoppers)',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Imidacloprid','Acetamiprid'],
-                organic: ['Neem Oil','Yellow sticky traps'],
-                note: 'Yellow spots on leaves. Active in dry Zambian weather.'
-            }
-        },
-        yieldValue: 2200
-    },
-    
-    // ── 3. COTTON (Zambian cash crop) ──
-    cotton: {
-        name: 'Cotton (Zambia)',
-        pests: {
-            bollworm: {
-                name: 'Cotton Bollworm',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 280,
-                chemicals: ['Cypermethrin','Dudu-Cyber','Rocket'],
-                organic: ['Bt spray','Neem Oil','Biological control'],
-                note: 'Most destructive cotton pest in Zambia. Monitor during flowering.'
-            },
-            aphids: {
-                name: 'Cotton Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 180,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs','Soap spray'],
-                note: 'Cause curling and stunting. Ants indicate presence.'
-            },
-            whitefly: {
-                name: 'Cotton Whitefly',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Imidacloprid','Pymetrozine'],
-                organic: ['Neem Oil','Yellow traps'],
-                note: 'Causes sticky cotton. Major problem in Zambian cotton fields.'
-            },
-            red_spider_mite: {
-                name: 'Red Spider Mite',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Dicofol','Abamectin'],
-                organic: ['Sulfur spray','Water spray'],
-                note: 'Thrives in hot dry Zambian conditions. Check under leaves.'
-            }
-        },
-        yieldValue: 1800
-    },
-    
-    // ── 4. CASSAVA (Zambian staple) ──
-    cassava: {
-        name: 'Cassava (Zambia)',
-        pests: {
-            cassava_mosaic: {
-                name: 'Cassava Mosaic Virus',
-                severity: 'critical',
-                lossPct: 50,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Resistant varieties','Plant healthy cuttings'],
-                note: 'Most serious cassava disease in Zambia. Use certified disease-free cuttings.'
-            },
-            brown_streak: {
-                name: 'Cassava Brown Streak',
-                severity: 'critical',
-                lossPct: 45,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Resistant varieties','Healthy cuttings'],
-                note: 'Causes root necrosis. Major threat to Zambian cassava production.'
-            },
-            cassava_mealybug: {
-                name: 'Cassava Mealybug',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Imidacloprid','Thiamethoxam'],
-                organic: ['Biological control (wasps)','Neem Oil'],
-                note: 'Introduced pest in Zambia. Biological control effective.'
-            },
-            green_mite: {
-                name: 'Cassava Green Mite',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Abamectin','Dicofol'],
-                organic: ['Neem Oil','Predatory mites'],
-                note: 'Causes yellow spots. Thrives in dry Zambian conditions.'
-            }
-        },
-        yieldValue: 3500
-    },
-    
-    // ── 5. SORGHUM (Zambian drought-tolerant crop) ──
-    sorghum: {
-        name: 'Sorghum (Zambia)',
-        pests: {
-            shoot_fly: {
-                name: 'Sorghum Shoot Fly',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Imidacloprid','Acetamiprid'],
-                organic: ['Neem Oil','Early planting'],
-                note: 'Attack young plants. Common in Zambian dryland areas.'
-            },
-            stem_borer: {
-                name: 'Sorghum Stem Borer',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 190,
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
-                organic: ['Neem Oil','Push-pull'],
-                note: 'Causes dead hearts. Important pest in Zambian sorghum.'
-            },
-            anthracnose: {
-                name: 'Anthracnose',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 200,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Copper spray','Resistant varieties'],
-                note: 'Dark red lesions. Favored by humid Zambian conditions.'
-            },
-            grain_mold: {
-                name: 'Grain Mold',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['No effective chemical'],
-                organic: ['Early harvesting','Adequate drying'],
-                note: 'Major storage problem in Zambia. Harvest at right time.'
-            }
-        },
-        yieldValue: 2000
-    },
-    
-    // ── 6. SWEET POTATO (Zambian staple) ──
-    sweet_potato: {
-        name: 'Sweet Potato (Zambia)',
-        pests: {
-            sweet_potato_virus: {
-                name: 'Sweet Potato Virus Disease',
-                severity: 'critical',
-                lossPct: 45,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Virus-free cuttings','Rogue infected plants'],
-                note: 'Major constraint in Zambia. Use certified disease-free material.'
-            },
-            weevil: {
-                name: 'Sweet Potato Weevil',
-                severity: 'high',
-                lossPct: 35,
-                dosage: 200,
-                chemicals: ['Imidacloprid','Fipronil'],
-                organic: ['Crop rotation','Hilling up soil'],
-                note: 'Most serious pest in Zambia. Attacks both field and storage.'
-            },
-            leaf_beetle: {
-                name: 'Sweet Potato Leaf Beetle',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Hand picking'],
-                note: 'Skeletonizes leaves. Active in Zambian rainy season.'
-            },
-            nematodes: {
-                name: 'Root Knot Nematodes',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Fumigants (pre-plant)'],
-                organic: ['Crop rotation','Resistant varieties'],
-                note: 'Causes galls on roots. Common in Zambian sandy soils.'
-            }
-        },
-        yieldValue: 3000
-    },
-    
-    // ── 7. SUNFLOWER (Zambian oil crop) ──
-    sunflower: {
-        name: 'Sunflower (Zambia)',
-        pests: {
-            sunflower_moth: {
-                name: 'Sunflower Moth',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 240,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Biological control','Pheromone traps'],
-                note: 'Larvae feed on seeds. Major pest in Zambian sunflower fields.'
-            },
-            head_rot: {
-                name: 'Head Rot',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Crop rotation','Good drainage'],
-                note: 'Causes heads to rot. Favored by humid Zambian conditions.'
-            },
-            downy_mildew: {
-                name: 'Downy Mildew',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Metalaxyl','Mancozeb'],
-                organic: ['Resistant varieties','Good drainage'],
-                note: 'White mold on leaves. Prefers cool, wet Zambian weather.'
-            },
-            aphids: {
-                name: 'Sunflower Aphids',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Colonize heads and young leaves. Monitor during flowering.'
-            }
-        },
-        yieldValue: 1600
-    },
-    
-    // ── 8. SOYBEAN (Zambian cash crop) ──
-    soybean: {
-        name: 'Soybean (Zambia)',
-        pests: {
-            rust: {
-                name: 'Soybean Rust',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 280,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Resistant varieties','Early planting'],
-                note: 'Most serious soybean disease in Zambia. Appears during rainy season.'
-            },
-            aphids: {
-                name: 'Soybean Aphids',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Can cause significant yield loss in Zambian soybean fields.'
-            },
-            pod_borer: {
-                name: 'Pod Borer',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Bt spray','Biological control'],
-                note: 'Attacks developing pods. Monitor during podding stage.'
-            },
-            frog_eye_leaf_spot: {
-                name: 'Frog Eye Leaf Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Chlorothalonil','Mancozeb'],
-                organic: ['Crop rotation','Copper spray'],
-                note: 'Circular gray spots. Favored by humid Zambian conditions.'
-            }
-        },
-        yieldValue: 2400
-    },
-    
-    // ── 9. BAMBARA NUT (Zambian traditional crop) ──
-    bambara: {
-        name: 'Bambara Nut (Zambia)',
-        pests: {
-            leaf_spot: {
-                name: 'Bambara Leaf Spot',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Common disease in Zambian bambara nut fields.'
-            },
-            rust: {
-                name: 'Bambara Rust',
-                severity: 'medium',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Tebuconazole','Mancozeb'],
-                organic: ['Sulfur spray','Resistant varieties'],
-                note: 'Appears in warm humid conditions in Zambia.'
-            },
-            aphids: {
-                name: 'Bambara Aphids',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 150,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits viruses. Monitor early in the season.'
-            },
-            nematodes: {
-                name: 'Root Knot Nematodes',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['Fumigants (pre-plant)'],
-                organic: ['Crop rotation','Organic matter'],
-                note: 'Causes galls. Serious in sandy Zambian soils.'
-            }
-        },
-        yieldValue: 1200
-    },
-    
-    // ── 10. MILLET (Zambian drought-tolerant) ──
-    millet: {
-        name: 'Millet (Zambia)',
-        pests: {
-            head_blast: {
-                name: 'Head Blast',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 240,
-                chemicals: ['Tricyclazole','Mancozeb'],
-                organic: ['Resistant varieties','Seed treatment'],
-                note: 'Destructive disease in Zambian millet. Favored by rainfall.'
-            },
-            grain_moth: {
-                name: 'Grain Moth',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 200,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Pheromone traps','Biological control'],
-                note: 'Major storage pest in Zambia. Proper storage is critical.'
-            },
-            stem_borer: {
-                name: 'Millet Stem Borer',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 190,
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
-                organic: ['Neem Oil','Push-pull'],
-                note: 'Causes dead hearts. Common in Zambian millet fields.'
-            },
-            smut: {
-                name: 'Smut',
-                severity: 'medium',
-                lossPct: 18,
-                dosage: 0,
-                chemicals: ['Seed treatment (fungicides)'],
-                organic: ['Resistant varieties','Crop rotation'],
-                note: 'Black powder in heads. Use clean seed in Zambia.'
-            }
-        },
-        yieldValue: 1500
-    },
-    
-    // ── 11. TOBACCO (Zambian cash crop) ──
-    tobacco: {
-        name: 'Tobacco (Zambia)',
-        pests: {
-            mosaic_virus: {
-                name: 'Tobacco Mosaic Virus',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Sanitation','Resistant varieties'],
-                note: 'Highly infectious. Major concern for Zambian tobacco farmers.'
-            },
-            aphids: {
-                name: 'Tobacco Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmit viruses. Monitor throughout growing season.'
-            },
-            hornworm: {
-                name: 'Hornworm',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 220,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Bt spray','Hand picking'],
-                note: 'Large caterpillars. Major pest in Zambian tobacco.'
-            },
-            blue_mold: {
-                name: 'Blue Mold',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 240,
-                chemicals: ['Mancozeb','Metalaxyl'],
-                organic: ['Copper spray','Good air circulation'],
-                note: 'Favored by humid Zambian conditions. Monitor in seedbeds.'
-            }
-        },
-        yieldValue: 2500
-    }
+    maize: { name: 'Maize', pests: { fall_armyworm: { name: 'Fall Armyworm', severity: 'high', lossPct: 15, dosage: 200, note: 'Most destructive during vegetative stage.' }, stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 150, note: 'Apply at knee-high stage.' }, aphids: { name: 'Aphids', severity: 'medium', lossPct: 8, dosage: 100, note: 'Check under leaves.' } }, yieldValue: 2533 },
+    tomato: { name: 'Tomato', pests: { late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, note: 'Spreads rapidly in cool wet conditions.' }, aphids: { name: 'Aphids', severity: 'medium', lossPct: 10, dosage: 250, note: 'Also transmits viruses.' } }, yieldValue: 5000 },
+    rice: { name: 'Rice', pests: { blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, note: 'Favored by high nitrogen.' } }, yieldValue: 3200 },
+    beans: { name: 'Beans', pests: { aphids: { name: 'Aphids', severity: 'medium', lossPct: 12, dosage: 120, note: 'Check flowering stage.' } }, yieldValue: 1800 },
+    cabbage: { name: 'Cabbage', pests: { diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, note: 'Rotate chemicals.' } }, yieldValue: 2800 }
 };
 
 // ═══════════════════════════════════════════
@@ -1505,7 +733,6 @@ function showPage(pageId) {
         case 'profile': loadProfile(); break;
         case 'calendar': loadCalendar(); break;
         case 'dashboard': loadDashboardStats(); break;
-        case 'sensorhub': updateScanMapUI(); break;
     }
 }
 
@@ -1513,7 +740,6 @@ function showPhonePage(pageId, btn) {
     showPage(pageId);
     document.querySelectorAll('.phone-nav-item').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
-    if (pageId === 'sensorhub') updateScanMapUI();
 }
 
 // ═══════════════════════════════════════════
@@ -1538,10 +764,7 @@ function updateDosageFromPest() {
     const crop = document.getElementById('mathCrop').value;
     const pest = document.getElementById('mathPest').value;
     const data = CROP_DB[crop].pests[pest];
-    if (data) {
-        document.getElementById('mathDosage').value = data.dosage;
-        document.getElementById('mathChemName').placeholder = `e.g., ${data.chemicals[0]}, ${data.chemicals[1] || ''}`;
-    }
+    if (data) document.getElementById('mathDosage').value = data.dosage;
 }
 
 function updateCostPerMl() {
@@ -1550,25 +773,16 @@ function updateCostPerMl() {
     document.getElementById('mathCostPerMl').textContent = 'K' + (price / size).toFixed(2);
 }
 
-function updateFarmSlider() { 
-    document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1); 
-}
+function updateFarmSlider() { document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1); }
 
 function saveChemical() {
-    const chem = { 
-        name: document.getElementById('mathChemName').value.trim(), 
-        size: document.getElementById('mathContSize').value, 
-        price: document.getElementById('mathContPrice').value, 
-        dosage: document.getElementById('mathDosage').value, 
-        unit: document.getElementById('mathDosageUnit').value 
-    };
-    if (!chem.name) { showToast('Enter chemical name first', true); return; }
+    const chem = { name: document.getElementById('mathChemName').value.trim(), size: document.getElementById('mathContSize').value, price: document.getElementById('mathContPrice').value, dosage: document.getElementById('mathDosage').value, unit: document.getElementById('mathDosageUnit').value };
+    if (!chem.name) { showToast('Enter name', true); return; }
     const idx = savedChems.findIndex(c => c.name.toLowerCase() === chem.name.toLowerCase());
     if (idx >= 0) savedChems[idx] = chem; else savedChems.push(chem);
     if (savedChems.length > 10) savedChems.shift();
     localStorage.setItem('agrimind_chems', JSON.stringify(savedChems));
-    showToast('Chemical saved!');
-    renderSavedChems();
+    showToast('Saved!'); renderSavedChems();
 }
 
 function loadChem(idx) {
@@ -1581,28 +795,17 @@ function loadChem(idx) {
     updateCostPerMl();
 }
 
-function deleteChem(idx) { 
-    savedChems.splice(idx, 1); 
-    localStorage.setItem('agrimind_chems', JSON.stringify(savedChems)); 
-    renderSavedChems(); 
-}
+function deleteChem(idx) { savedChems.splice(idx, 1); localStorage.setItem('agrimind_chems', JSON.stringify(savedChems)); renderSavedChems(); }
 
 function renderSavedChems() {
-    if (savedChems.length === 0) { 
-        document.getElementById('savedChems').style.display = 'none'; 
-        return; 
-    }
+    if (savedChems.length === 0) { document.getElementById('savedChems').style.display = 'none'; return; }
     document.getElementById('savedChems').style.display = 'block';
-    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved Chemicals</label>' + 
-        savedChems.map((c, i) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--input-bg);border-radius:12px;margin-bottom:4px;font-size:0.8rem;">
-                <span><strong>${escapeHtml(c.name)}</strong> | ${c.size}ml @ K${c.price}</span>
-                <div style="display:flex;gap:6px;">
-                    <button class="btn-outline" onclick="loadChem(${i})" style="padding:4px 10px;font-size:0.7rem;">Load</button>
-                    <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;padding:4px 8px;font-size:0.7rem;">X</button>
-                </div>
-            </div>
-        `).join('');
+    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved</label>' + savedChems.map((c, i) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--input-bg);border-radius:10px;margin-bottom:4px;font-size:0.8rem;">
+            <span><strong>${escapeHtml(c.name)}</strong></span>
+            <div><button class="btn-outline" onclick="loadChem(${i})" style="padding:2px 8px;font-size:0.65rem;">Load</button>
+            <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:2px 6px;font-size:0.65rem;margin-left:4px;">X</button></div>
+        </div>`).join('');
 }
 
 function calcFarmMath() {
@@ -1616,80 +819,18 @@ function calcFarmMath() {
     const farmSize = parseFloat(document.getElementById('mathFarmSlider').value);
     const pestData = CROP_DB[crop].pests[pestKey];
     const cropData = CROP_DB[crop];
-    const costPerMl = contPrice / contSize;
-    
     let dosagePerHa = dosage;
     if (unit === 'acre') dosagePerHa = dosage * 2.471;
     else if (unit === '20L') dosagePerHa = dosage * 5;
-    
     const totalMl = dosagePerHa * farmSize;
-    const totalCost = totalMl * costPerMl;
+    const totalCost = totalMl * (contPrice / contSize);
     const potentialLoss = cropData.yieldValue * farmSize * (pestData.lossPct / 100);
     const savings = potentialLoss - totalCost;
     const containers = Math.ceil(totalMl / contSize);
     const roi = totalCost > 0 ? (savings / totalCost) * 100 : 0;
-    
-    document.getElementById('mathResult').innerHTML = `
-        <div class="math-result">
-            <h3 style="color:var(--accent);">🌾 ${cropData.name}</h3>
-            <h4 style="color:var(--danger);">${pestData.name}</h4>
-            <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
-            <div class="grid-2cols" style="margin:14px 0;">
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div>
-                    <small>Spray Needed</small>
-                </div>
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div>
-                    <small>Bottles (${contSize}ml)</small>
-                </div>
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div>
-                    <small>Total Cost</small>
-                </div>
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div>
-                    <small>Net Savings</small>
-                </div>
-            </div>
-            <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:10px;font-size:0.85rem;">
-                <div style="display:flex;justify-content:space-between;">
-                    <span>Potential Loss (no spray):</span>
-                    <span style="color:var(--danger);">K${potentialLoss.toFixed(2)}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;">
-                    <span>ROI:</span>
-                    <span style="color:var(--accent);">${roi.toFixed(0)}%</span>
-                </div>
-            </div>
-            <div style="margin-top:10px;padding:10px;background:${savings>0?'rgba(16,185,129,0.2)':'rgba(239,68,68,0.2)'};border-radius:10px;border-left:3px solid ${savings>0?'var(--accent)':'var(--danger)'};font-weight:600;font-size:0.85rem;">
-                ${savings > totalCost*3 ? '🚨 URGENT: Very high ROI - spray now!' : 
-                  savings > totalCost ? '✅ RECOMMENDED: Good return on investment' : 
-                  '📊 MONITOR: Only spray if pest pressure increases'}
-            </div>
-            <p style="font-size:0.75rem;margin-top:8px;">📝 ${pestData.note}</p>
-            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <div style="padding:8px;background:rgba(16,185,129,0.1);border-radius:8px;">
-                    <strong style="color:var(--accent);">🌿 Organic Options</strong>
-                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.organic.join(', ')}</p>
-                </div>
-                <div style="padding:8px;background:rgba(245,158,11,0.1);border-radius:8px;">
-                    <strong style="color:#f59e0b;">🧪 Chemical Options</strong>
-                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.chemicals.join(', ')}</p>
-                </div>
-            </div>
-        </div>`;
+    document.getElementById('mathResult').innerHTML = `<div class="math-result"><h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3><div class="grid-2cols" style="margin:14px 0;"><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div><small>Spray</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div><small>Bottles</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div><small>Cost</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div><small>Savings</small></div></div><p>ROI: ${roi.toFixed(0)}% | Loss without spray: K${potentialLoss.toFixed(2)}</p></div>`;
     document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
-    showToast('Calculation complete!');
-    
-    if (currentUser) {
-        db.from('farm_records').insert({ 
-            user_id: currentUser.id, 
-            title: `Spray Calc: ${cropData.name}`, 
-            detail: `${chemName} | Farm: ${farmSize}ha | Spray: ${totalMl.toFixed(1)}ml | Cost: K${totalCost.toFixed(2)} | Savings: K${savings.toFixed(2)}`, 
-            location: 'Farm Math Tool' 
-        }).then(() => {}).catch(() => {});
-    }
+    showToast('Done!');
 }
 
 // ═══════════════════════════════════════════
@@ -1705,152 +846,43 @@ function analyzeLeaf(event) {
         img.onload = function() {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const maxSize = 400;
-            const ratio = Math.min(maxSize / img.width, maxSize / img.height);
+            const ratio = Math.min(400 / img.width, 400 / img.height);
             canvas.width = img.width * ratio;
             canvas.height = img.height * ratio;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const colors = analyzeLeafColors(imageData);
+            const colors = analyzeLeafColors(ctx.getImageData(0, 0, canvas.width, canvas.height));
             const diagnosis = diagnoseFromColors(colors);
-            
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
-                });
-            }
-            sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, light: currentSensorLight, diagnosis });
-            displayScanResults(e.target.result, diagnosis);
+            if (navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => { currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude }; });
+            sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, diagnosis });
+            document.getElementById('cameraPreview').innerHTML = `<img src="${e.target.result}" style="max-width:100%;border-radius:20px;"><p><strong>${diagnosis.plant}</strong> (${diagnosis.confidence}%)</p><p>${diagnosis.recommendation}</p>`;
+            showToast(diagnosis.severity > 0 ? 'Issues detected!' : 'Healthy!');
         };
         img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
 
-function displayScanResults(imageSrc, diagnosis) {
-    const preview = document.getElementById('cameraPreview');
-    const c = diagnosis.colors;
-    preview.innerHTML = `
-        <img src="${imageSrc}" style="max-width:100%;border-radius:20px;margin-bottom:10px;max-height:300px;object-fit:contain;">
-        <div style="margin-bottom:8px;">
-            <small style="color:var(--text-secondary,#aaa);">Color Breakdown (HSV Analysis)</small>
-            <div class="color-bar">
-                <div style="width:${c.greenPct}%;background:#22c55e;"></div>
-                <div style="width:${c.yellowPct}%;background:#eab308;"></div>
-                <div style="width:${c.brownPct}%;background:#92400e;"></div>
-                <div style="width:${c.darkPct}%;background:#1a1a1a;"></div>
-                <div style="width:${c.whitePct}%;background:#e5e5e5;"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:0.7rem;">
-                <span>Grn:${c.greenPct}%</span>
-                <span>Ylw:${c.yellowPct}%</span>
-                <span>Brn:${c.brownPct}%</span>
-                <span>Drk:${c.darkPct}%</span>
-                <span>Wht:${c.whitePct}%</span>
-            </div>
-        </div>
-        <div style="background:var(--input-bg);border-radius:14px;padding:14px;">
-            <strong>Symptoms:</strong>
-            ${diagnosis.symptoms.map(s => `
-                <div class="symptom-item ${s.found?'symptom-found':'symptom-clear'}">
-                    ${s.found?'⚠️ Warning':'✅ OK'} - ${s.text}
-                    ${s.detail?`<br><small>${s.detail}</small>`:''}
-                </div>
-            `).join('')}
-        </div>
-        <div style="margin-top:10px;padding:14px;background:var(--card-bg);border-radius:14px;">
-            <div style="display:flex;justify-content:space-between;">
-                <span>Plant:</span>
-                <strong>${diagnosis.plant}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <span>Confidence:</span>
-                <strong style="color:${diagnosis.confidence>70?'var(--accent)':'#f59e0b'};">${diagnosis.confidence}%</strong>
-            </div>
-            ${diagnosis.issues.length ? `
-                <div style="margin-top:8px;padding:8px;background:rgba(245,158,11,0.15);border-radius:8px;">
-                    <strong style="color:#f59e0b;">Issues:</strong> 
-                    ${diagnosis.issues.map(i=>`<div style="font-size:0.8rem;">- ${i}</div>`).join('')}
-                </div>
-            ` : ''}
-            <div style="margin-top:8px;font-weight:600;color:var(--accent);">${diagnosis.recommendation}</div>
-        </div>`;
-    updateScanMapUI();
-    showToast(diagnosis.severity > 0 ? 'Issues detected!' : 'Healthy plant!');
-}
-
 function getGPS() {
-    if (!navigator.geolocation) { 
-        document.getElementById('gpsLabel').textContent = 'Not supported'; 
-        return; 
-    }
-    document.getElementById('gpsLabel').textContent = 'Locating...';
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(pos => {
         currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
         document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
-    }, () => { 
-        document.getElementById('gpsLabel').textContent = 'Denied'; 
-    }, { enableHighAccuracy: true });
+    });
 }
 
 function checkLight() {
-    if ('AmbientLightSensor' in window) {
-        try {
-            const sensor = new AmbientLightSensor();
-            sensor.onreading = () => { 
-                currentSensorLight = sensor.illuminance; 
-                updateLightLabel(); 
-            };
-            sensor.onerror = () => { 
-                document.getElementById('lightLabel').textContent = 'Sensor error'; 
-            };
-            sensor.start();
-            setTimeout(() => sensor.stop(), 1000);
-        } catch(e) { 
-            document.getElementById('lightLabel').textContent = 'Not available'; 
-        }
-    } else { 
-        document.getElementById('lightLabel').textContent = 'Not supported'; 
-    }
-}
-
-function updateLightLabel() {
-    const el = document.getElementById('lightLabel');
-    if (!currentSensorLight) return;
-    if (currentSensorLight < 100) { 
-        el.innerHTML = '🌑 Too dark<br><small style="color:var(--danger);">Move to better light</small>'; 
-    }
-    else if (currentSensorLight < 500) { 
-        el.innerHTML = '☁️ Moderate light'; 
-    }
-    else { 
-        el.innerHTML = '☀️ Optimal lighting'; 
-    }
+    document.getElementById('lightLabel').textContent = 'Sensor check done';
 }
 
 function toggleScanMap() {
     const map = document.getElementById('scanMapDiv');
     map.style.display = map.style.display === 'none' ? 'block' : 'none';
-    updateScanMapUI();
 }
 
 function updateScanMapUI() {
     const list = document.getElementById('scanMapList');
-    if (!sensorScans.length) { 
-        list.innerHTML = '<p style="color:#aaa;text-align:center;">No scans yet. Upload a leaf photo to start!</p>'; 
-        return; 
-    }
-    list.innerHTML = sensorScans.map(s => `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);">
-            <span>${s.diagnosis.severity>0?'●':'○'}</span>
-            <div style="flex:1;font-size:0.8rem;">
-                <strong>${s.diagnosis.plant}</strong> (${s.diagnosis.confidence}%)
-                ${s.gps?`<br><small>${s.gps.lat.toFixed(3)}, ${s.gps.lon.toFixed(3)}</small>`:''}
-            </div>
-            <small>${new Date(s.timestamp).toLocaleTimeString()}</small>
-        </div>
-    `).join('');
+    if (!sensorScans.length) { list.innerHTML = '<p>No scans yet.</p>'; return; }
+    list.innerHTML = sensorScans.map(s => `<div style="padding:8px;border-bottom:1px solid var(--border);"><strong>${s.diagnosis.plant}</strong>${s.gps?`<br><small>${s.gps.lat.toFixed(3)}, ${s.gps.lon.toFixed(3)}</small>`:''}</div>`).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -1858,27 +890,12 @@ function updateScanMapUI() {
 // ═══════════════════════════════════════════
 
 async function startScout() {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        try { await DeviceMotionEvent.requestPermission(); } catch(e) {}
-    }
     scoutingActive = true;
-    scoutSteps = 0; scoutScans = 0; scoutInfections = 0; scoutDist = 0; 
-    scoutStepsSinceScan = 0; scoutPendingScan = false;
-    
+    scoutSteps = 0; scoutScans = 0; scoutInfections = 0; scoutDist = 0; scoutStepsSinceScan = 0; scoutPendingScan = false;
     document.getElementById('startScoutBtn').style.display = 'none';
     document.getElementById('stopScoutBtn').style.display = 'inline-block';
-    document.getElementById('scoutStatusDiv').innerHTML = '<div style="font-size:4rem;">●</div><h3 style="color:var(--accent);">Scouting Active</h3><p>Walk your field. Tap prompt to scan.</p>';
-    document.getElementById('scoutLog').innerHTML = '';
-    scoutLog('Started. Walk your field...');
-    document.getElementById('scoutPrompt').style.display = 'none';
-    
-    if (window.DeviceMotionEvent) { 
-        window.addEventListener('devicemotion', detectStep); 
-        scoutLog('Accelerometer active - counting real steps'); 
-    } else { 
-        scoutLog('Accelerometer not available - using timer mode'); 
-    }
-    
+    document.getElementById('scoutStatusDiv').innerHTML = '<h3 style="color:var(--accent);">Scouting</h3>';
+    if (window.DeviceMotionEvent) window.addEventListener('devicemotion', detectStep);
     scoutTimer = setInterval(() => { if (scoutingActive) checkForScanPrompt(); }, 2000);
 }
 
@@ -1886,55 +903,10 @@ function stopScout() {
     scoutingActive = false;
     clearInterval(scoutTimer);
     window.removeEventListener('devicemotion', detectStep);
-    
     document.getElementById('startScoutBtn').style.display = 'inline-block';
     document.getElementById('stopScoutBtn').style.display = 'none';
-    document.getElementById('scoutStatusDiv').innerHTML = '<div style="font-size:4rem;">■</div><h3>Stopped</h3>';
-    document.getElementById('scoutPrompt').style.display = 'none';
-    scoutPendingScan = false;
-    scoutLog('Scouting complete.');
-    
-    const sprayMl = scoutInfections * 50;
-    const sprayCost = (sprayMl * 0.19).toFixed(2);
-    
-    document.getElementById('scoutReport').innerHTML = `
-        <div class="math-result">
-            <h3 style="color:var(--accent);">Scout Report</h3>
-            <div class="grid-2cols" style="margin:12px 0;">
-                <div style="text-align:center;">
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent);">${scoutScans}</div>
-                    <small>Photos Taken</small>
-                </div>
-                <div style="text-align:center;">
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--danger);">${scoutInfections}</div>
-                    <small>Issues Found</small>
-                </div>
-                <div style="text-align:center;">
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent);">${scoutSteps}</div>
-                    <small>Steps</small>
-                </div>
-                <div style="text-align:center;">
-                    <div style="font-size:1.3rem;font-weight:700;color:var(--accent);">${scoutDist}m</div>
-                    <small>Distance</small>
-                </div>
-            </div>
-            ${scoutInfections>0 ? `
-                <div style="padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:0.85rem;">
-                    <div style="display:flex;justify-content:space-between;">
-                        <span>Recommended Spray:</span>
-                        <span>${sprayMl}ml</span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;">
-                        <span>Est. Cost:</span>
-                        <span>K${sprayCost}</span>
-                    </div>
-                </div>
-            ` : '<p style="color:var(--accent);text-align:center;">No issues detected during scouting.</p>'}
-            <div style="display:flex;gap:6px;margin-top:10px;">
-                <button class="btn-outline" onclick="showPhonePage('sensorhub')" style="font-size:0.8rem;">View Map</button>
-                <button class="btn-primary" onclick="showPhonePage('farmmath')" style="font-size:0.8rem;">Calculate Spray</button>
-            </div>
-        </div>`;
+    document.getElementById('scoutStatusDiv').innerHTML = '<h3>Stopped</h3>';
+    document.getElementById('scoutReport').innerHTML = `<div class="math-result"><h3>Report</h3><p>Photos: ${scoutScans} | Issues: ${scoutInfections} | Steps: ${scoutSteps} | ${scoutDist}m</p></div>`;
 }
 
 function detectStep(e) {
@@ -1945,8 +917,7 @@ function detectStep(e) {
     if (mag > 12 && (Math.abs(a.x-scoutLastAccel.x)>3 || Math.abs(a.y-scoutLastAccel.y)>3)) {
         const now = Date.now();
         if (now - scoutLastStep > 300) {
-            scoutSteps++; 
-            scoutStepsSinceScan++;
+            scoutSteps++; scoutStepsSinceScan++;
             scoutDist = (scoutSteps * 0.75).toFixed(1);
             document.getElementById('scoutSteps').textContent = scoutSteps;
             document.getElementById('scoutDist').textContent = scoutDist + 'm';
@@ -1958,108 +929,25 @@ function detectStep(e) {
 
 function checkForScanPrompt() {
     if (!scoutingActive || scoutPendingScan) return;
-    if (scoutStepsSinceScan >= 2 || (scoutSteps === 0 && scoutScans === 0)) {
-        scoutPendingScan = true;
-        showScanPrompt();
-    }
+    if (scoutStepsSinceScan >= 2) { scoutPendingScan = true; showScanPrompt(); }
 }
 
 function showScanPrompt() {
-    const prompt = document.getElementById('scoutPrompt');
     document.getElementById('promptStepNum').textContent = scoutSteps;
-    prompt.style.display = 'block';
+    document.getElementById('scoutPrompt').style.display = 'block';
     if (navigator.vibrate) navigator.vibrate([300, 200, 300]);
-    
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = 600;
-        gain.gain.value = 0.15;
-        osc.start();
-        setTimeout(() => { osc.stop(); ctx.close(); }, 300);
-    } catch(e) {}
-    
-    scoutLog('📷 Tap prompt to scan now! (Step ' + scoutSteps + ')');
 }
 
-function captureScoutPhoto() { 
-    document.getElementById('scoutCamera').click(); 
-}
+function captureScoutPhoto() { document.getElementById('scoutCamera').click(); }
 
 function handleScoutPhoto(event) {
     const file = event.target.files[0];
-    if (!file) { 
-        scoutPendingScan = false; 
-        document.getElementById('scoutPrompt').style.display = 'none'; 
-        return; 
-    }
-    
-    scoutScans++;
-    scoutStepsSinceScan = 0;
+    if (!file) { scoutPendingScan = false; document.getElementById('scoutPrompt').style.display = 'none'; return; }
+    scoutScans++; scoutStepsSinceScan = 0;
     document.getElementById('scoutScans').textContent = scoutScans;
     document.getElementById('scoutPrompt').style.display = 'none';
     scoutPendingScan = false;
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const maxSize = 300;
-            const ratio = Math.min(maxSize / img.width, maxSize / img.height);
-            canvas.width = img.width * ratio;
-            canvas.height = img.height * ratio;
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const colors = analyzeLeafColors(imageData);
-            const diagnosis = diagnoseFromColors(colors);
-            
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    sensorScans.push({ 
-                        id: Date.now(), 
-                        timestamp: new Date().toISOString(), 
-                        gps: currentSensorGPS, 
-                        light: currentSensorLight, 
-                        diagnosis, 
-                        step: scoutSteps 
-                    });
-                    if (diagnosis.severity > 2) {
-                        scoutInfections++;
-                        document.getElementById('scoutInfections').textContent = scoutInfections;
-                        scoutLog('⚠️ Issue detected at step ' + scoutSteps + '! Severity: ' + diagnosis.severity + '/10');
-                        showToast('⚠️ Issue detected! Location saved.');
-                    } else {
-                        scoutLog('✓ Scan at step ' + scoutSteps + ': ' + diagnosis.plant + ' (' + diagnosis.confidence + '% confidence)');
-                        showToast('✅ Scan saved: ' + diagnosis.plant);
-                    }
-                });
-            } else {
-                sensorScans.push({ 
-                    id: Date.now(), 
-                    timestamp: new Date().toISOString(), 
-                    gps: null, 
-                    light: currentSensorLight, 
-                    diagnosis, 
-                    step: scoutSteps 
-                });
-                scoutLog('✓ Scan at step ' + scoutSteps + ': ' + diagnosis.plant);
-            }
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
     event.target.value = '';
-}
-
-function scoutLog(msg) {
-    const log = document.getElementById('scoutLog');
-    log.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
-    log.scrollTop = log.scrollHeight;
 }
 
 // ═══════════════════════════════════════════
@@ -2074,66 +962,6 @@ function openModal(mode) {
 
 function closeModal() {
     document.getElementById('authModal').style.display = 'none';
-    ['authEmail','authPass','authDisplayNameInput'].forEach(id => document.getElementById(id).value='');
-}
-
-// ═══════════════════════════════════════════
-// CONTACT HANDLERS
-// ═══════════════════════════════════════════
-
-function setupContactHandlers() {
-    document.addEventListener('click', function(e) {
-        // Contact Applicant Button (for job posters)
-        const contactApplicantBtn = e.target.closest('.contact-applicant-btn');
-        if (contactApplicantBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const email = contactApplicantBtn.dataset.email;
-            const name = contactApplicantBtn.dataset.name;
-            
-            if (email && email !== 'N/A' && email !== 'undefined' && email !== '') {
-                const msgTo = document.getElementById('msgTo');
-                const msgText = document.getElementById('msgText');
-                
-                if (msgTo && msgText) {
-                    msgTo.value = email;
-                    msgText.value = `Hello ${name}, regarding your application to my job posting...`;
-                    showPage('messages');
-                    showToast(`Composing message to ${name}`);
-                }
-            } else {
-                showToast('No email available for this applicant', true);
-            }
-            return;
-        }
-        
-        // Contact Poster Button (for job applicants)
-        const contactPosterBtn = e.target.closest('.contact-poster-btn');
-        if (contactPosterBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const email = contactPosterBtn.dataset.email;
-            const name = contactPosterBtn.dataset.name;
-            const jobTitle = contactPosterBtn.dataset.jobtitle || 'the job';
-            
-            if (email && email !== 'N/A' && email !== 'undefined' && email !== '') {
-                const msgTo = document.getElementById('msgTo');
-                const msgText = document.getElementById('msgText');
-                
-                if (msgTo && msgText) {
-                    msgTo.value = email;
-                    msgText.value = `Hello ${name}, I'm following up on my application for ${jobTitle}...`;
-                    showPage('messages');
-                    showToast(`Composing message to ${name}`);
-                }
-            } else {
-                showToast('No email available for this employer. Please ask them to update their profile.', true);
-            }
-            return;
-        }
-    });
 }
 
 // ═══════════════════════════════════════════
@@ -2141,12 +969,6 @@ function setupContactHandlers() {
 // ═══════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Setup contact handlers
-    setupContactHandlers();
-    
-    // Make helper functions available globally
-    window.updateProfileEmail = updateProfileEmail;
-    
     // Sidebar
     document.getElementById('hamburgerBtn').addEventListener('click', () => {
         document.getElementById('sidebar').classList.toggle('open');
@@ -2156,39 +978,28 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sidebar').classList.remove('open');
         document.getElementById('sidebarOverlay').classList.remove('active');
     });
-    document.querySelectorAll('.nav-links li').forEach(li => {
-        li.addEventListener('click', e => { 
-            e.preventDefault(); 
-            showPage(li.dataset.page); 
-        });
+    document.getElementById('navLinks').addEventListener('click', (e) => {
+        const li = e.target.closest('li');
+        if (li && li.dataset.page) { e.preventDefault(); showPage(li.dataset.page); }
     });
 
     // Auth
     document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
     document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
     document.getElementById('closeModalBtn').addEventListener('click', closeModal);
-    document.getElementById('authModal').addEventListener('click', e => { 
-        if (e.target === e.currentTarget) closeModal(); 
-    });
 
     let authMode = 'login';
     document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
     document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
-    
     document.getElementById('authSubmitBtn').addEventListener('click', async () => {
         const email = document.getElementById('authEmail').value.trim();
         const password = document.getElementById('authPass').value;
-        const displayName = document.getElementById('authDisplayNameInput').value.trim();
+        const displayName = document.getElementById('authDisplayName').value.trim();
         try {
             if (authMode === 'login') await login(email, password);
-            else { 
-                if (!displayName) return showToast('Display name required', true); 
-                await signUp(email, password, displayName); 
-            }
+            else { if (!displayName) return showToast('Name required', true); await signUp(email, password, displayName); }
             closeModal();
-        } catch (err) { 
-            showToast(err.message, true); 
-        }
+        } catch (err) { showToast(err.message, true); }
     });
     document.getElementById('userGreeting').addEventListener('click', logout);
 
@@ -2196,11 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('postForumBtn').addEventListener('click', () => {
         const c = document.getElementById('forumContent').value.trim();
         const img = document.getElementById('forumImage').files[0];
-        if (c) { 
-            addForumPost(c, img); 
-            document.getElementById('forumContent').value = ''; 
-            document.getElementById('forumImage').value = ''; 
-        }
+        if (c) { addForumPost(c, img); document.getElementById('forumContent').value = ''; document.getElementById('forumImage').value = ''; }
     });
 
     // Groups
@@ -2212,16 +1019,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = document.getElementById('recordTitle').value.trim();
         const d = document.getElementById('recordDetail').value.trim();
         const l = document.getElementById('recordLocation').value.trim();
-        if (t) { 
-            addRecord(t, d, l); 
-            document.getElementById('recordTitle').value = ''; 
-            document.getElementById('recordDetail').value = ''; 
-            document.getElementById('recordLocation').value = ''; 
-        }
+        if (t) { addRecord(t, d, l); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; document.getElementById('recordLocation').value = ''; }
     });
 
-    // Jobs
-    document.getElementById('postJobBtn').addEventListener('click', () => {
+    // JOBS - Post Job Button
+    document.getElementById('postJobBtn')?.addEventListener('click', () => {
         const t = document.getElementById('jobTitle').value.trim();
         const d = document.getElementById('jobDesc').value.trim();
         const l = document.getElementById('jobLocation').value.trim();
@@ -2230,9 +1032,10 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('jobTitle').value = ''; 
             document.getElementById('jobDesc').value = ''; 
             document.getElementById('jobLocation').value = ''; 
+        } else {
+            showToast('Job title is required', true);
         }
     });
-    document.getElementById('jobLocationFilter').addEventListener('input', loadJobs);
 
     // Market
     document.getElementById('addProductBtn').addEventListener('click', () => {
@@ -2241,34 +1044,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const cat = document.getElementById('productCategory').value;
         const loc = document.getElementById('productLocation').value.trim();
         const img = document.getElementById('productImage').files[0];
-        if (n && p) { 
-            addProduct(n, p, cat, loc, img); 
-            document.getElementById('productName').value = ''; 
-            document.getElementById('productPrice').value = ''; 
-            document.getElementById('productLocation').value = ''; 
-        }
+        if (n && p) { addProduct(n, p, cat, loc, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; document.getElementById('productLocation').value = ''; }
     });
     document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
-    document.getElementById('marketLocationFilter').addEventListener('input', loadMarket);
 
     // Messages
     document.getElementById('sendMsgBtn').addEventListener('click', () => {
         const to = document.getElementById('msgTo').value.trim();
         const tx = document.getElementById('msgText').value.trim();
-        if (to && tx) { 
-            sendMessage(to, tx); 
-            document.getElementById('msgTo').value = ''; 
-            document.getElementById('msgText').value = ''; 
-        }
-    });
-
-    // Search
-    document.getElementById('doSearchBtn').addEventListener('click', () => {
-        const term = document.getElementById('searchInput').value.trim();
-        const cat = document.getElementById('searchCategory').value;
-        const from = document.getElementById('searchDateFrom').value;
-        const to = document.getElementById('searchDateTo').value;
-        if (term) globalSearch(term, cat, from, to);
+        if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
     });
 
     // Tutorials
@@ -2276,12 +1060,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = document.getElementById('videoTitle').value.trim();
         const u = document.getElementById('videoUrl').value.trim();
         const d = document.getElementById('videoDesc').value.trim();
-        if (t && u) { 
-            addTutorial(t, u, d); 
-            document.getElementById('videoTitle').value = ''; 
-            document.getElementById('videoUrl').value = ''; 
-            document.getElementById('videoDesc').value = ''; 
-        }
+        if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
     });
 
     // Calendar
@@ -2297,19 +1076,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const ph = document.getElementById('editPhone').value.trim();
         const loc = document.getElementById('editLocation').value.trim();
         const bio = document.getElementById('editBio').value.trim();
-        const { error } = await db.from('profiles').update({ 
-            display_name: dn, 
-            phone: ph, 
-            location: loc, 
-            bio: bio 
-        }).eq('id', currentUser.id);
+        const { error } = await db.from('profiles').update({ display_name: dn, phone: ph, location: loc, bio: bio }).eq('id', currentUser.id);
         if (error) showToast('Failed to update', true);
-        else { 
-            currentUser.displayName = dn; 
-            updateAuthUI(); 
-            showToast('Profile updated!'); 
-            loadProfile(); 
-        }
+        else { currentUser.displayName = dn; updateAuthUI(); showToast('Profile updated!'); loadProfile(); }
+    });
+
+    // Search
+    document.getElementById('doSearchBtn').addEventListener('click', () => {
+        const term = document.getElementById('searchInput').value.trim();
+        const cat = document.getElementById('searchCategory').value;
+        const from = document.getElementById('searchDateFrom').value;
+        const to = document.getElementById('searchDateTo').value;
+        if (term) globalSearch(term, cat, from, to);
     });
 
     // Chat
@@ -2325,20 +1103,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Farm Math
-    document.getElementById('mathCrop').addEventListener('change', populatePests);
-    document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
-    document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
-    populatePests();
-    updateCostPerMl();
-    renderSavedChems();
+    const mathCrop = document.getElementById('mathCrop');
+    if (mathCrop) {
+        mathCrop.addEventListener('change', populatePests);
+        document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
+        document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
+        document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
+        document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
+        document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
+        populatePests();
+        updateCostPerMl();
+        renderSavedChems();
+    }
 
-    // Event delegation for dynamic elements (non-contact buttons)
+    // ────────── CLICK HANDLERS FOR DYNAMIC ELEMENTS ──────────
     document.addEventListener('click', async function(e) {
-        // Delete buttons
-        const deleteBtn = e.target.closest('.delete-btn');
+        const target = e.target;
+        
+        // Delete buttons (all types)
+        const deleteBtn = target.closest('.delete-btn');
         if (deleteBtn) {
             if (!currentUser) return showToast('Login to delete', true);
             if (!confirm('Delete this item?')) return;
@@ -2351,59 +1134,65 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (type==='calendar') await deleteCalendarEvent(id);
             return;
         }
-
-        // Like buttons
-        const likeBtn = e.target.closest('.like-btn');
-        if (likeBtn) { 
-            const { type, id } = likeBtn.dataset; 
-            await toggleLike(type, id); 
-            return; 
-        }
-
-        // Reply toggle
-        const replyToggle = e.target.closest('.reply-toggle');
-        if (replyToggle) {
-            const postId = replyToggle.dataset.post;
-            const replyDiv = replyToggle.closest('.forum-post').nextElementSibling;
-            replyDiv.style.display = replyDiv.style.display === 'none' ? 'block' : 'none';
-            loadReplies(postId, replyDiv);
+        
+        // Apply to job
+        if (target.closest('.apply-btn')) { 
+            e.preventDefault(); 
+            const jobId = target.closest('.apply-btn').dataset.job;
+            if (jobId) await applyToJob(jobId); 
             return;
         }
-
-        // Send reply
-        const sendReply = e.target.closest('.send-reply');
-        if (sendReply && currentUser) {
-            const postId = sendReply.dataset.post;
-            const input = sendReply.previousElementSibling;
-            const content = input.value.trim();
-            if (content) { 
-                await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content }); 
-                const replyDiv = sendReply.closest('.reply-section'); 
-                loadReplies(postId, replyDiv); 
+        
+        // Accept application
+        if (target.closest('.accept-app')) {
+            const id = target.closest('.accept-app').dataset.id;
+            if (id && confirm('Accept this applicant?')) {
+                await updateApplicationStatus(id, 'accepted');
             }
             return;
         }
-
-        // Apply to job
-        const applyBtn = e.target.closest('.apply-btn');
-        if (applyBtn) { 
-            e.preventDefault(); 
-            e.stopPropagation(); 
-            await applyToJob(applyBtn.dataset.job); 
-            return; 
-        }
-
-        // Accept/Reject applications
-        const acceptBtn = e.target.closest('.accept-app');
-        if (acceptBtn) { 
-            await updateApplicationStatus(acceptBtn.dataset.id, 'accepted'); 
-            return; 
+        
+        // Reject application
+        if (target.closest('.reject-app')) {
+            const id = target.closest('.reject-app').dataset.id;
+            if (id && confirm('Reject this applicant?')) {
+                await updateApplicationStatus(id, 'rejected');
+            }
+            return;
         }
         
-        const rejectBtn = e.target.closest('.reject-app');
-        if (rejectBtn) { 
-            await updateApplicationStatus(rejectBtn.dataset.id, 'rejected'); 
-            return; 
+        // Contact applicant (employer contacting applicant)
+        if (target.closest('.contact-applicant-btn')) {
+            const btn = target.closest('.contact-applicant-btn');
+            const name = btn.dataset.name || 'Applicant';
+            const email = btn.dataset.email || '';
+            
+            if (email && email !== 'N/A' && email !== '') {
+                document.getElementById('msgTo').value = email;
+                document.getElementById('msgText').value = `Hello ${name}, regarding your application... `;
+                showPage('messages');
+                setTimeout(() => showToast(`Ready to message ${name}`), 300);
+            } else {
+                showToast('No email address available for this applicant', true);
+            }
+            return;
+        }
+        
+        // Contact poster (applicant contacting employer)
+        if (target.closest('.contact-poster-btn')) {
+            const btn = target.closest('.contact-poster-btn');
+            const name = btn.dataset.name || 'Employer';
+            const email = btn.dataset.email || '';
+            
+            if (email && email !== 'N/A' && email !== '') {
+                document.getElementById('msgTo').value = email;
+                document.getElementById('msgText').value = `Hello ${name}, I'm following up on my application... `;
+                showPage('messages');
+                setTimeout(() => showToast(`Ready to message ${name}`), 300);
+            } else {
+                showToast('No email address available for this employer', true);
+            }
+            return;
         }
     });
 
