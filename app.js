@@ -1804,8 +1804,9 @@ function scoutLog(msg) {
 
 function openModal(mode) {
     document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
-    document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
+    document.getElementById('authDisplayNameInput').style.display = mode === 'login' ? 'none' : 'block';
     document.getElementById('authModal').style.display = 'flex';
+    authMode = mode;
 }
 
 function closeModal() {
@@ -1816,6 +1817,8 @@ function closeModal() {
 // ═══════════════════════════════════════════
 // DOM READY
 // ═══════════════════════════════════════════
+
+let authMode = 'login';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Sidebar
@@ -1841,10 +1844,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('authModal').addEventListener('click', e => { 
         if (e.target === e.currentTarget) closeModal(); 
     });
-
-    let authMode = 'login';
-    document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
-    document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
     
     document.getElementById('authSubmitBtn').addEventListener('click', async () => {
         const email = document.getElementById('authEmail').value.trim();
@@ -1906,6 +1905,46 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 showToast('No email available for this contact', true);
             }
+        }
+
+        if (target.closest('.delete-btn')) {
+            const btn = target.closest('.delete-btn');
+            const type = btn.dataset.type;
+            const id = btn.dataset.id;
+            if (type === 'forum') deleteForumPost(id);
+            else if (type === 'record') deleteRecord(id);
+            else if (type === 'job') deleteJob(id);
+            else if (type === 'product') deleteProduct(id);
+            else if (type === 'tutorial') deleteTutorial(id);
+            else if (type === 'calendar') deleteCalendarEvent(id);
+        }
+
+        if (target.closest('.like-btn')) {
+            const btn = target.closest('.like-btn');
+            toggleLike(btn.dataset.type, btn.dataset.id);
+        }
+
+        if (target.closest('.reply-toggle')) {
+            const postId = target.closest('.reply-toggle').dataset.post;
+            const replyDiv = target.closest('.forum-post').nextElementSibling;
+            if (replyDiv && replyDiv.classList.contains('reply-section')) {
+                replyDiv.style.display = replyDiv.style.display === 'none' ? 'block' : 'none';
+                if (replyDiv.style.display === 'block') loadReplies(postId, replyDiv);
+            }
+        }
+
+        if (target.closest('.send-reply')) {
+            const postId = target.closest('.send-reply').dataset.post;
+            const input = target.closest('.reply-section').querySelector('.reply-input');
+            if (input && input.value.trim()) {
+                addReply(postId, input.value.trim());
+                input.value = '';
+            }
+        }
+
+        if (target.closest('.join-group-btn')) {
+            const groupId = target.closest('.join-group-btn').dataset.group;
+            showToast('Joined group! (Feature coming soon)');
         }
     });
 
@@ -2044,3 +2083,12 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSession();
     showPage('dashboard');
 });
+
+// Add missing reply function
+async function addReply(postId, content) {
+    if (!currentUser) return showToast('Please login', true);
+    await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content });
+    showToast('Reply posted!');
+    const replyDiv = document.querySelector(`.reply-toggle[data-post="${postId}"]`).closest('.forum-post').nextElementSibling;
+    if (replyDiv) loadReplies(postId, replyDiv);
+}
