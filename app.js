@@ -923,1116 +923,268 @@ function diagnoseFromColors(c) {
 }
 
 // ═══════════════════════════════════════════
-// ZAMBIAN CROP DATABASE (EXPANDED - 22 Crops)
+// ZAMBIAN CROP DATABASE (EXPANDED - 35+ Crops)
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
-    // ─── CEREALS ───
+    // ═══ CEREALS ═══
     maize: { 
         name: 'Maize (Zambia)', 
         pests: { 
-            fall_armyworm: { 
-                name: 'Fall Armyworm', 
-                severity: 'critical', 
-                lossPct: 25, 
-                dosage: 250, 
-                chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], 
-                organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], 
-                note: 'Most destructive pest in Zambia. Scout early morning.' 
-            }, 
-            stalk_borer: { 
-                name: 'Stalk Borer', 
-                severity: 'high', 
-                lossPct: 20, 
-                dosage: 180, 
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'], 
-                organic: ['Neem Oil','Push-pull'], 
-                note: 'Attacks stems causing lodging. Apply at knee-high stage.' 
-            },
-            maize_streak_virus: {
-                name: 'Maize Streak Virus',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['Insecticides for leafhoppers'],
-                organic: ['Resistant varieties','Neem Oil'],
-                note: 'Transmitted by leafhoppers. Common in Zambian lowlands.'
-            },
-            gray_leaf_spot: {
-                name: 'Gray Leaf Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 200,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Causes rectangular gray lesions. Common in humid Zambian regions.'
-            },
-            northern_leaf_blight: {
-                name: 'Northern Leaf Blight',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 200,
-                chemicals: ['Propiconazole','Azoxystrobin'],
-                organic: ['Resistant varieties','Crop rotation'],
-                note: 'Long cigar-shaped lesions. Favored by cool, wet conditions.'
-            }
-        }, 
-        yieldValue: 2800 
+            fall_armyworm: { name: 'Fall Armyworm', severity: 'critical', lossPct: 25, dosage: 250, chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], note: 'Most destructive pest in Zambia. Scout early morning.' },
+            stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Attacks stems causing lodging. Apply at knee-high stage.' },
+            maize_streak_virus: { name: 'Maize Streak Virus', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Insecticides for leafhoppers'], organic: ['Resistant varieties','Neem Oil'], note: 'Transmitted by leafhoppers. Common in Zambian lowlands.' },
+            gray_leaf_spot: { name: 'Gray Leaf Spot', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Copper spray','Crop rotation'], note: 'Causes rectangular gray lesions. Common in humid Zambian regions.' },
+            northern_leaf_blight: { name: 'Northern Leaf Blight', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Propiconazole','Azoxystrobin'], organic: ['Resistant varieties','Crop rotation'], note: 'Long cigar-shaped lesions. Favored by cool, wet conditions.' }
+        }, yieldValue: 2800 
     },
-    
-    sorghum: {
-        name: 'Sorghum (Zambia)',
-        pests: {
-            shoot_fly: {
-                name: 'Sorghum Shoot Fly',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Imidacloprid','Acetamiprid'],
-                organic: ['Neem Oil','Early planting'],
-                note: 'Attack young plants. Common in Zambian dryland areas.'
-            },
-            stem_borer: {
-                name: 'Sorghum Stem Borer',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 190,
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
-                organic: ['Neem Oil','Push-pull'],
-                note: 'Causes dead hearts. Important pest in Zambian sorghum.'
-            },
-            anthracnose: {
-                name: 'Anthracnose',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 200,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Copper spray','Resistant varieties'],
-                note: 'Dark red lesions. Favored by humid Zambian conditions.'
-            },
-            grain_mold: {
-                name: 'Grain Mold',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['No effective chemical'],
-                organic: ['Early harvesting','Adequate drying'],
-                note: 'Major storage problem in Zambia. Harvest at right time.'
-            }
-        },
-        yieldValue: 2000
+    sorghum: { name: 'Sorghum (Zambia)', pests: {
+            shoot_fly: { name: 'Sorghum Shoot Fly', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Early planting'], note: 'Attack young plants. Common in Zambian dryland areas.' },
+            stem_borer: { name: 'Sorghum Stem Borer', severity: 'high', lossPct: 22, dosage: 190, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Causes dead hearts. Important pest in Zambian sorghum.' },
+            anthracnose: { name: 'Anthracnose', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Copper spray','Resistant varieties'], note: 'Dark red lesions. Favored by humid Zambian conditions.' },
+            grain_mold: { name: 'Grain Mold', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['No effective chemical'], organic: ['Early harvesting','Adequate drying'], note: 'Major storage problem in Zambia. Harvest at right time.' }
+        }, yieldValue: 2000 
     },
-    
-    millet: {
-        name: 'Millet (Zambia)',
-        pests: {
-            head_blast: {
-                name: 'Head Blast',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 240,
-                chemicals: ['Tricyclazole','Mancozeb'],
-                organic: ['Resistant varieties','Seed treatment'],
-                note: 'Destructive disease in Zambian millet.'
-            },
-            grain_moth: {
-                name: 'Grain Moth',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 200,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Pheromone traps','Biological control'],
-                note: 'Major storage pest in Zambia. Proper storage is critical.'
-            },
-            stem_borer: {
-                name: 'Millet Stem Borer',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 190,
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
-                organic: ['Neem Oil','Push-pull'],
-                note: 'Causes dead hearts. Common in Zambian millet fields.'
-            },
-            smut: {
-                name: 'Smut',
-                severity: 'medium',
-                lossPct: 18,
-                dosage: 0,
-                chemicals: ['Seed treatment (fungicides)'],
-                organic: ['Resistant varieties','Crop rotation'],
-                note: 'Black powder in heads. Use clean seed in Zambia.'
-            }
-        },
-        yieldValue: 1500
+    millet: { name: 'Millet (Zambia)', pests: {
+            head_blast: { name: 'Head Blast', severity: 'critical', lossPct: 35, dosage: 240, chemicals: ['Tricyclazole','Mancozeb'], organic: ['Resistant varieties','Seed treatment'], note: 'Destructive disease in Zambian millet.' },
+            grain_moth: { name: 'Grain Moth', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Pheromone traps','Biological control'], note: 'Major storage pest in Zambia. Proper storage is critical.' },
+            stem_borer: { name: 'Millet Stem Borer', severity: 'high', lossPct: 22, dosage: 190, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Causes dead hearts. Common in Zambian millet fields.' },
+            smut: { name: 'Smut', severity: 'medium', lossPct: 18, dosage: 0, chemicals: ['Seed treatment (fungicides)'], organic: ['Resistant varieties','Crop rotation'], note: 'Black powder in heads. Use clean seed in Zambia.' }
+        }, yieldValue: 1500 
     },
-    
-    rice: {
-        name: 'Rice (Zambia)',
-        pests: {
-            blast: {
-                name: 'Rice Blast',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Tricyclazole','Rocket'],
-                organic: ['Silicon fertilizer','Resistant varieties'],
-                note: 'Favored by high nitrogen and frequent rainfall.'
-            },
-            brown_spot: {
-                name: 'Brown Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 150,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Balanced nutrients','Seed treatment'],
-                note: 'Small brown circular lesions. Related to nutrient deficiency.'
-            },
-            sheath_blight: {
-                name: 'Sheath Blight',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Validamycin','Propiconazole'],
-                organic: ['Avoid dense planting','Remove infected plants'],
-                note: 'Grayish-green lesions on leaf sheaths. Favored by high humidity.'
-            },
-            stem_borer: {
-                name: 'Stem Borer',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 160,
-                chemicals: ['Cartap','Chlorpyrifos'],
-                organic: ['Trap crops','Neem Oil'],
-                note: 'Causes dead hearts in early stages. Monitor moth activity.'
-            }
-        },
-        yieldValue: 3200
+    rice: { name: 'Rice (Zambia)', pests: {
+            blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Tricyclazole','Rocket'], organic: ['Silicon fertilizer','Resistant varieties'], note: 'Favored by high nitrogen and frequent rainfall.' },
+            brown_spot: { name: 'Brown Spot', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Mancozeb','Copper'], organic: ['Balanced nutrients','Seed treatment'], note: 'Small brown circular lesions. Related to nutrient deficiency.' },
+            sheath_blight: { name: 'Sheath Blight', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Validamycin','Propiconazole'], organic: ['Avoid dense planting','Remove infected plants'], note: 'Grayish-green lesions on leaf sheaths. Favored by high humidity.' },
+            stem_borer: { name: 'Stem Borer', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Cartap','Chlorpyrifos'], organic: ['Trap crops','Neem Oil'], note: 'Causes dead hearts in early stages. Monitor moth activity.' }
+        }, yieldValue: 3200 
     },
-    
-    // ─── LEGUMES ───
-    groundnut: {
-        name: 'Groundnuts (Zambia)',
-        pests: {
-            rosette_virus: {
-                name: 'Groundnut Rosette Virus',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 0,
-                chemicals: ['Insecticides for aphids'],
-                organic: ['Resistant varieties','Aphid control'],
-                note: 'Devastating in Zambia. Transmitted by aphids.'
-            },
-            early_leaf_spot: {
-                name: 'Early Leaf Spot',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Chlorothalonil','Tebuconazole'],
-                organic: ['Sulfur spray','Crop rotation'],
-                note: 'Dark brown spots on leaves. Common in Zambian rainy season.'
-            },
-            rust: {
-                name: 'Groundnut Rust',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 220,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Sulfur spray','Resistant varieties'],
-                note: 'Orange-brown pustules on leaves. Favored by warm Zambian weather.'
-            },
-            aphids: {
-                name: 'Groundnut Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 150,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits rosette virus. Monitor early in Zambian growing season.'
-            },
-            jassids: {
-                name: 'Jassids (Leafhoppers)',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Imidacloprid','Acetamiprid'],
-                organic: ['Neem Oil','Yellow sticky traps'],
-                note: 'Yellow spots on leaves. Active in dry Zambian weather.'
-            }
-        },
-        yieldValue: 2200
+    wheat: { name: 'Wheat (Zambia)', pests: {
+            rust: { name: 'Wheat Rust', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Tebuconazole','Propiconazole'], organic: ['Resistant varieties','Sulfur spray'], note: 'Orange-brown pustules. Favored by cool, humid weather.' },
+            aphids: { name: 'Wheat Aphids', severity: 'medium', lossPct: 12, dosage: 140, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit barley yellow dwarf virus.' },
+            fusarium_head_blight: { name: 'Fusarium Head Blight', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fungicide at flowering'], organic: ['Crop rotation','Resistant varieties'], note: 'Causes pink discoloration of heads. Favored by wet weather.' }
+        }, yieldValue: 2500 
     },
-    
-    soybean: {
-        name: 'Soybean (Zambia)',
-        pests: {
-            rust: {
-                name: 'Soybean Rust',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 280,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Resistant varieties','Early planting'],
-                note: 'Most serious soybean disease in Zambia.'
-            },
-            aphids: {
-                name: 'Soybean Aphids',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Can cause significant yield loss in Zambian soybean fields.'
-            },
-            pod_borer: {
-                name: 'Pod Borer',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Bt spray','Biological control'],
-                note: 'Attacks developing pods. Monitor during podding stage.'
-            },
-            frog_eye_leaf_spot: {
-                name: 'Frog Eye Leaf Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Chlorothalonil','Mancozeb'],
-                organic: ['Crop rotation','Copper spray'],
-                note: 'Circular gray spots. Favored by humid Zambian conditions.'
-            }
-        },
-        yieldValue: 2400
+
+    // ═══ LEGUMES ═══
+    groundnut: { name: 'Groundnuts (Zambia)', pests: {
+            rosette_virus: { name: 'Groundnut Rosette Virus', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Insecticides for aphids'], organic: ['Resistant varieties','Aphid control'], note: 'Devastating in Zambia. Transmitted by aphids.' },
+            early_leaf_spot: { name: 'Early Leaf Spot', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Chlorothalonil','Tebuconazole'], organic: ['Sulfur spray','Crop rotation'], note: 'Dark brown spots on leaves. Common in Zambian rainy season.' },
+            rust: { name: 'Groundnut Rust', severity: 'high', lossPct: 25, dosage: 220, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Sulfur spray','Resistant varieties'], note: 'Orange-brown pustules on leaves. Favored by warm Zambian weather.' },
+            aphids: { name: 'Groundnut Aphids', severity: 'high', lossPct: 20, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmits rosette virus. Monitor early in Zambian growing season.' },
+            jassids: { name: 'Jassids (Leafhoppers)', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Yellow sticky traps'], note: 'Yellow spots on leaves. Active in dry Zambian weather.' }
+        }, yieldValue: 2200 
     },
-    
-    bambara: {
-        name: 'Bambara Nut (Zambia)',
-        pests: {
-            leaf_spot: {
-                name: 'Bambara Leaf Spot',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Common disease in Zambian bambara nut fields.'
-            },
-            rust: {
-                name: 'Bambara Rust',
-                severity: 'medium',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Tebuconazole','Mancozeb'],
-                organic: ['Sulfur spray','Resistant varieties'],
-                note: 'Appears in warm humid conditions in Zambia.'
-            },
-            aphids: {
-                name: 'Bambara Aphids',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 150,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits viruses. Monitor early in the season.'
-            },
-            nematodes: {
-                name: 'Root Knot Nematodes',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['Fumigants (pre-plant)'],
-                organic: ['Crop rotation','Organic matter'],
-                note: 'Causes galls. Serious in sandy Zambian soils.'
-            }
-        },
-        yieldValue: 1200
+    soybean: { name: 'Soybean (Zambia)', pests: {
+            rust: { name: 'Soybean Rust', severity: 'critical', lossPct: 40, dosage: 280, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Resistant varieties','Early planting'], note: 'Most serious soybean disease in Zambia.' },
+            aphids: { name: 'Soybean Aphids', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Can cause significant yield loss in Zambian soybean fields.' },
+            pod_borer: { name: 'Pod Borer', severity: 'high', lossPct: 30, dosage: 220, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Biological control'], note: 'Attacks developing pods. Monitor during podding stage.' },
+            frog_eye_leaf_spot: { name: 'Frog Eye Leaf Spot', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Crop rotation','Copper spray'], note: 'Circular gray spots. Favored by humid Zambian conditions.' }
+        }, yieldValue: 2400 
     },
-    
-    beans: {
-        name: 'Beans (Zambia)',
-        pests: {
-            aphids: {
-                name: 'Bean Aphids',
-                severity: 'medium',
-                lossPct: 12,
-                dosage: 120,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Companion planting'],
-                note: 'Check flowering stage.'
-            },
-            bean_rust: {
-                name: 'Bean Rust',
-                severity: 'high',
-                lossPct: 18,
-                dosage: 140,
-                chemicals: ['Tebuconazole','Mancozeb'],
-                organic: ['Sulfur spray','Copper spray'],
-                note: 'Small rust-colored pustules on leaves. Favored by humid weather.'
-            },
-            angular_leaf_spot: {
-                name: 'Angular Leaf Spot',
-                severity: 'medium',
-                lossPct: 14,
-                dosage: 130,
-                chemicals: ['Copper hydroxide','Mancozeb'],
-                organic: ['Baking soda spray','Crop rotation'],
-                note: 'Angular brown lesions with yellow halos.'
-            },
-            bruchids: {
-                name: 'Bruchids (Bean Weevils)',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Phosphine fumigation','Malathion dust'],
-                organic: ['Sun drying','Neem oil on stored beans'],
-                note: 'Attacks stored beans. Clean storage and early harvest.'
-            }
-        },
-        yieldValue: 1800
+    bambara: { name: 'Bambara Nut (Zambia)', pests: {
+            leaf_spot: { name: 'Bambara Leaf Spot', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Crop rotation'], note: 'Common disease in Zambian bambara nut fields.' },
+            rust: { name: 'Bambara Rust', severity: 'medium', lossPct: 20, dosage: 200, chemicals: ['Tebuconazole','Mancozeb'], organic: ['Sulfur spray','Resistant varieties'], note: 'Appears in warm humid conditions in Zambia.' },
+            aphids: { name: 'Bambara Aphids', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmits viruses. Monitor early in the season.' },
+            nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Fumigants (pre-plant)'], organic: ['Crop rotation','Organic matter'], note: 'Causes galls. Serious in sandy Zambian soils.' }
+        }, yieldValue: 1200 
     },
-    
-    cowpea: {
-        name: 'Cowpea (Zambia)',
-        pests: {
-            aphids: {
-                name: 'Cowpea Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 150,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits viruses. Major pest in Zambian cowpea.'
-            },
-            pod_borer: {
-                name: 'Cowpea Pod Borer',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 220,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Bt spray','Neem Oil'],
-                note: 'Most destructive pest of cowpea in Zambia.'
-            },
-            thrips: {
-                name: 'Cowpea Thrips',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Spinosad','Acetamiprid'],
-                organic: ['Neem Oil','Sticky traps'],
-                note: 'Cause flower abortion. Monitor during flowering stage.'
-            },
-            leaf_spot: {
-                name: 'Cowpea Leaf Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Dark spots on leaves. Common in humid conditions.'
-            }
-        },
-        yieldValue: 1600
+    beans: { name: 'Beans (Zambia)', pests: {
+            aphids: { name: 'Bean Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Companion planting'], note: 'Check flowering stage.' },
+            bean_rust: { name: 'Bean Rust', severity: 'high', lossPct: 18, dosage: 140, chemicals: ['Tebuconazole','Mancozeb'], organic: ['Sulfur spray','Copper spray'], note: 'Small rust-colored pustules on leaves. Favored by humid weather.' },
+            angular_leaf_spot: { name: 'Angular Leaf Spot', severity: 'medium', lossPct: 14, dosage: 130, chemicals: ['Copper hydroxide','Mancozeb'], organic: ['Baking soda spray','Crop rotation'], note: 'Angular brown lesions with yellow halos.' },
+            bruchids: { name: 'Bruchids (Bean Weevils)', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Phosphine fumigation','Malathion dust'], organic: ['Sun drying','Neem oil on stored beans'], note: 'Attacks stored beans. Clean storage and early harvest.' }
+        }, yieldValue: 1800 
     },
-    
-    // ─── ROOT CROPS ───
-    cassava: {
-        name: 'Cassava (Zambia)',
-        pests: {
-            cassava_mosaic: {
-                name: 'Cassava Mosaic Virus',
-                severity: 'critical',
-                lossPct: 50,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Resistant varieties','Plant healthy cuttings'],
-                note: 'Most serious cassava disease in Zambia.'
-            },
-            brown_streak: {
-                name: 'Cassava Brown Streak',
-                severity: 'critical',
-                lossPct: 45,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Resistant varieties','Healthy cuttings'],
-                note: 'Causes root necrosis. Major threat to Zambian cassava.'
-            },
-            cassava_mealybug: {
-                name: 'Cassava Mealybug',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Imidacloprid','Thiamethoxam'],
-                organic: ['Biological control (wasps)','Neem Oil'],
-                note: 'Introduced pest in Zambia. Biological control effective.'
-            },
-            green_mite: {
-                name: 'Cassava Green Mite',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Abamectin','Dicofol'],
-                organic: ['Neem Oil','Predatory mites'],
-                note: 'Causes yellow spots. Thrives in dry Zambian conditions.'
-            }
-        },
-        yieldValue: 3500
+    cowpea: { name: 'Cowpea (Zambia)', pests: {
+            aphids: { name: 'Cowpea Aphids', severity: 'high', lossPct: 20, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmits viruses. Major pest in Zambian cowpea.' },
+            pod_borer: { name: 'Cowpea Pod Borer', severity: 'critical', lossPct: 35, dosage: 220, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Neem Oil'], note: 'Most destructive pest of cowpea in Zambia.' },
+            thrips: { name: 'Cowpea Thrips', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Sticky traps'], note: 'Cause flower abortion. Monitor during flowering stage.' },
+            leaf_spot: { name: 'Cowpea Leaf Spot', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Crop rotation'], note: 'Dark spots on leaves. Common in humid conditions.' }
+        }, yieldValue: 1600 
     },
-    
-    sweet_potato: {
-        name: 'Sweet Potato (Zambia)',
-        pests: {
-            sweet_potato_virus: {
-                name: 'Sweet Potato Virus Disease',
-                severity: 'critical',
-                lossPct: 45,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Virus-free cuttings','Rogue infected plants'],
-                note: 'Major constraint in Zambia. Use certified disease-free material.'
-            },
-            weevil: {
-                name: 'Sweet Potato Weevil',
-                severity: 'high',
-                lossPct: 35,
-                dosage: 200,
-                chemicals: ['Imidacloprid','Fipronil'],
-                organic: ['Crop rotation','Hilling up soil'],
-                note: 'Most serious pest in Zambia. Attacks both field and storage.'
-            },
-            leaf_beetle: {
-                name: 'Sweet Potato Leaf Beetle',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Hand picking'],
-                note: 'Skeletonizes leaves. Active in Zambian rainy season.'
-            },
-            nematodes: {
-                name: 'Root Knot Nematodes',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Fumigants (pre-plant)'],
-                organic: ['Crop rotation','Resistant varieties'],
-                note: 'Causes galls on roots. Common in Zambian sandy soils.'
-            }
-        },
-        yieldValue: 3000
+    pigeon_pea: { name: 'Pigeon Pea (Zambia)', pests: {
+            pod_borer: { name: 'Pod Borer', severity: 'critical', lossPct: 35, dosage: 220, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Neem Oil'], note: 'Major pest of pigeon pea in Zambia.' },
+            aphids: { name: 'Pigeon Pea Aphids', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor during flowering.' },
+            wilt: { name: 'Fusarium Wilt', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Resistant varieties','Crop rotation'], note: 'Causes wilting and death. Common in continuous cropping.' }
+        }, yieldValue: 1400 
     },
-    
-    irish_potato: {
-        name: 'Irish Potato (Zambia)',
-        pests: {
-            late_blight: {
-                name: 'Late Blight',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 300,
-                chemicals: ['Mancozeb','Metalaxyl','Rocket'],
-                organic: ['Copper spray','Bordeaux mixture'],
-                note: 'Devastating disease. Use resistant varieties where possible.'
-            },
-            early_blight: {
-                name: 'Early Blight',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 250,
-                chemicals: ['Chlorothalonil','Azoxystrobin'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Causes dark concentric rings on older leaves.'
-            },
-            potato_aphids: {
-                name: 'Potato Aphids',
-                severity: 'medium',
-                lossPct: 10,
-                dosage: 130,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits potato leaf roll virus. Monitor carefully.'
-            },
-            potato_tuber_moth: {
-                name: 'Potato Tuber Moth',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Bt spray','Fenitrothion'],
-                organic: ['Bt spray','Covering soil','Pheromone traps'],
-                note: 'Attack leaves and tubers. Keep soil covered.'
-            }
-        },
-        yieldValue: 3500
+
+    // ═══ ROOT CROPS ═══
+    cassava: { name: 'Cassava (Zambia)', pests: {
+            cassava_mosaic: { name: 'Cassava Mosaic Virus', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Plant healthy cuttings'], note: 'Most serious cassava disease in Zambia.' },
+            brown_streak: { name: 'Cassava Brown Streak', severity: 'critical', lossPct: 45, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Healthy cuttings'], note: 'Causes root necrosis. Major threat to Zambian cassava.' },
+            cassava_mealybug: { name: 'Cassava Mealybug', severity: 'high', lossPct: 30, dosage: 220, chemicals: ['Imidacloprid','Thiamethoxam'], organic: ['Biological control (wasps)','Neem Oil'], note: 'Introduced pest in Zambia. Biological control effective.' },
+            green_mite: { name: 'Cassava Green Mite', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Abamectin','Dicofol'], organic: ['Neem Oil','Predatory mites'], note: 'Causes yellow spots. Thrives in dry Zambian conditions.' }
+        }, yieldValue: 3500 
     },
-    
-    yam: {
-        name: 'Yam (Zambia)',
-        pests: {
-            yam_mosaic: {
-                name: 'Yam Mosaic Virus',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Virus-free setts','Sanitation'],
-                note: 'Transmitted by aphids. Use disease-free planting material.'
-            },
-            yam_nematodes: {
-                name: 'Yam Nematodes',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Soil fumigation'],
-                organic: ['Crop rotation','Organic matter'],
-                note: 'Cause dry rot. Common in continuous yam cultivation.'
-            },
-            yam_beetles: {
-                name: 'Yam Beetles',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Hand picking','Neem Oil'],
-                note: 'Feed on leaves. Active during rainy season.'
-            },
-            anthracnose: {
-                name: 'Yam Anthracnose',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Copper spray','Resistant varieties'],
-                note: 'Dark lesions on stems and leaves. Favored by humid conditions.'
-            }
-        },
-        yieldValue: 2800
+    sweet_potato: { name: 'Sweet Potato (Zambia)', pests: {
+            sweet_potato_virus: { name: 'Sweet Potato Virus Disease', severity: 'critical', lossPct: 45, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Virus-free cuttings','Rogue infected plants'], note: 'Major constraint in Zambia. Use certified disease-free material.' },
+            weevil: { name: 'Sweet Potato Weevil', severity: 'high', lossPct: 35, dosage: 200, chemicals: ['Imidacloprid','Fipronil'], organic: ['Crop rotation','Hilling up soil'], note: 'Most serious pest in Zambia. Attacks both field and storage.' },
+            leaf_beetle: { name: 'Sweet Potato Leaf Beetle', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Hand picking'], note: 'Skeletonizes leaves. Active in Zambian rainy season.' },
+            nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fumigants (pre-plant)'], organic: ['Crop rotation','Resistant varieties'], note: 'Causes galls on roots. Common in Zambian sandy soils.' }
+        }, yieldValue: 3000 
     },
-    
-    // ─── CASH CROPS ───
-    cotton: {
-        name: 'Cotton (Zambia)',
-        pests: {
-            bollworm: {
-                name: 'Cotton Bollworm',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 280,
-                chemicals: ['Cypermethrin','Dudu-Cyber','Rocket'],
-                organic: ['Bt spray','Neem Oil'],
-                note: 'Most destructive cotton pest in Zambia. Monitor during flowering.'
-            },
-            aphids: {
-                name: 'Cotton Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 180,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Cause curling and stunting. Ants indicate presence.'
-            },
-            whitefly: {
-                name: 'Cotton Whitefly',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Imidacloprid','Pymetrozine'],
-                organic: ['Neem Oil','Yellow traps'],
-                note: 'Causes sticky cotton. Major problem in Zambian cotton fields.'
-            },
-            red_spider_mite: {
-                name: 'Red Spider Mite',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Dicofol','Abamectin'],
-                organic: ['Sulfur spray','Water spray'],
-                note: 'Thrives in hot dry Zambian conditions. Check under leaves.'
-            }
-        },
-        yieldValue: 1800
+    irish_potato: { name: 'Irish Potato (Zambia)', pests: {
+            late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 35, dosage: 300, chemicals: ['Mancozeb','Metalaxyl','Rocket'], organic: ['Copper spray','Bordeaux mixture'], note: 'Devastating disease. Use resistant varieties where possible.' },
+            early_blight: { name: 'Early Blight', severity: 'high', lossPct: 20, dosage: 250, chemicals: ['Chlorothalonil','Azoxystrobin'], organic: ['Copper spray','Crop rotation'], note: 'Causes dark concentric rings on older leaves.' },
+            potato_aphids: { name: 'Potato Aphids', severity: 'medium', lossPct: 10, dosage: 130, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmits potato leaf roll virus. Monitor carefully.' },
+            potato_tuber_moth: { name: 'Potato Tuber Moth', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Bt spray','Fenitrothion'], organic: ['Bt spray','Covering soil','Pheromone traps'], note: 'Attack leaves and tubers. Keep soil covered.' }
+        }, yieldValue: 3500 
     },
-    
-    tobacco: {
-        name: 'Tobacco (Zambia)',
-        pests: {
-            mosaic_virus: {
-                name: 'Tobacco Mosaic Virus',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Sanitation','Resistant varieties'],
-                note: 'Highly infectious. Major concern for Zambian tobacco farmers.'
-            },
-            aphids: {
-                name: 'Tobacco Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmit viruses. Monitor throughout growing season.'
-            },
-            hornworm: {
-                name: 'Hornworm',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 220,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Bt spray','Hand picking'],
-                note: 'Large caterpillars. Major pest in Zambian tobacco.'
-            },
-            blue_mold: {
-                name: 'Blue Mold',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 240,
-                chemicals: ['Mancozeb','Metalaxyl'],
-                organic: ['Copper spray','Good air circulation'],
-                note: 'Favored by humid Zambian conditions. Monitor in seedbeds.'
-            }
-        },
-        yieldValue: 2500
+    yam: { name: 'Yam (Zambia)', pests: {
+            yam_mosaic: { name: 'Yam Mosaic Virus', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Virus-free setts','Sanitation'], note: 'Transmitted by aphids. Use disease-free planting material.' },
+            yam_nematodes: { name: 'Yam Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause dry rot. Common in continuous yam cultivation.' },
+            yam_beetles: { name: 'Yam Beetles', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Hand picking','Neem Oil'], note: 'Feed on leaves. Active during rainy season.' },
+            anthracnose: { name: 'Yam Anthracnose', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Resistant varieties'], note: 'Dark lesions on stems and leaves. Favored by humid conditions.' }
+        }, yieldValue: 2800 
     },
-    
-    sunflower: {
-        name: 'Sunflower (Zambia)',
-        pests: {
-            sunflower_moth: {
-                name: 'Sunflower Moth',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 240,
-                chemicals: ['Cypermethrin','Dudu-Cyber'],
-                organic: ['Biological control','Pheromone traps'],
-                note: 'Larvae feed on seeds. Major pest in Zambian sunflower fields.'
-            },
-            head_rot: {
-                name: 'Head Rot',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Crop rotation','Good drainage'],
-                note: 'Causes heads to rot. Favored by humid Zambian conditions.'
-            },
-            downy_mildew: {
-                name: 'Downy Mildew',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Metalaxyl','Mancozeb'],
-                organic: ['Resistant varieties','Good drainage'],
-                note: 'White mold on leaves. Prefers cool, wet Zambian weather.'
-            },
-            aphids: {
-                name: 'Sunflower Aphids',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Colonize heads and young leaves. Monitor during flowering.'
-            }
-        },
-        yieldValue: 1600
+    carrot: { name: 'Carrot (Zambia)', pests: {
+            leaf_blight: { name: 'Carrot Leaf Blight', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Crop rotation'], note: 'Causes browning of leaves. Common in humid weather.' },
+            root_knot_nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Solarization'], note: 'Causes galls on roots. Serious in sandy soils.' },
+            aphids: { name: 'Carrot Aphids', severity: 'medium', lossPct: 12, dosage: 130, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor during early growth.' }
+        }, yieldValue: 3200 
     },
-    
-    sugarcane: {
-        name: 'Sugarcane (Zambia)',
-        pests: {
-            stem_borer: {
-                name: 'Sugarcane Stem Borer',
-                severity: 'critical',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
-                organic: ['Neem Oil','Biological control'],
-                note: 'Major pest in Zambian sugarcane. Bores into stems.'
-            },
-            smut: {
-                name: 'Sugarcane Smut',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Fungicide treatment of setts'],
-                organic: ['Resistant varieties','Sanitation'],
-                note: 'Black whip-like growth. Use disease-free setts.'
-            },
-            yellow_leaf_virus: {
-                name: 'Sugarcane Yellow Leaf Virus',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Resistant varieties','Aphid control'],
-                note: 'Causes yellowing. Transmitted by aphids.'
-            },
-            whitefly: {
-                name: 'Sugarcane Whitefly',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Imidacloprid','Acetamiprid'],
-                organic: ['Neem Oil','Biological control'],
-                note: 'Causes sooty mold. Monitor during dry season.'
-            }
-        },
-        yieldValue: 4000
+
+    // ═══ CASH CROPS ═══
+    cotton: { name: 'Cotton (Zambia)', pests: {
+            bollworm: { name: 'Cotton Bollworm', severity: 'critical', lossPct: 35, dosage: 280, chemicals: ['Cypermethrin','Dudu-Cyber','Rocket'], organic: ['Bt spray','Neem Oil'], note: 'Most destructive cotton pest in Zambia. Monitor during flowering.' },
+            aphids: { name: 'Cotton Aphids', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Cause curling and stunting. Ants indicate presence.' },
+            whitefly: { name: 'Cotton Whitefly', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Imidacloprid','Pymetrozine'], organic: ['Neem Oil','Yellow traps'], note: 'Causes sticky cotton. Major problem in Zambian cotton fields.' },
+            red_spider_mite: { name: 'Red Spider Mite', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Dicofol','Abamectin'], organic: ['Sulfur spray','Water spray'], note: 'Thrives in hot dry Zambian conditions. Check under leaves.' }
+        }, yieldValue: 1800 
     },
-    
-    // ─── VEGETABLES ───
-    tomato: {
-        name: 'Tomato (Zambia)',
-        pests: {
-            late_blight: {
-                name: 'Late Blight',
-                severity: 'critical',
-                lossPct: 30,
-                dosage: 300,
-                chemicals: ['Rocket','Chlorpyrifos','Mancozeb'],
-                organic: ['Copper spray','Baking soda'],
-                note: 'Spreads rapidly in cool, wet conditions.'
-            },
-            early_blight: {
-                name: 'Early Blight',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 250,
-                chemicals: ['Chlorothalonil','Mancozeb'],
-                organic: ['Neem Oil','Copper spray'],
-                note: 'Dark concentric rings on leaves. Common in warm weather.'
-            },
-            aphids: {
-                name: 'Tomato Aphids',
-                severity: 'medium',
-                lossPct: 10,
-                dosage: 250,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Garlic spray'],
-                note: 'Also transmits viral diseases.'
-            },
-            tomato_yellow_leaf_curl: {
-                name: 'Tomato Yellow Leaf Curl',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Insecticides for whitefly','Neem Oil'],
-                organic: ['Neem Oil','Yellow sticky traps'],
-                note: 'Caused by whitefly transmitted virus. Prevention is key.'
-            },
-            blossom_end_rot: {
-                name: 'Blossom End Rot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 0,
-                chemicals: ['Calcium nitrate'],
-                organic: ['Lime','Eggshells','Compost'],
-                note: 'Calcium deficiency. Maintain consistent soil moisture.'
-            }
-        },
-        yieldValue: 5000
+    tobacco: { name: 'Tobacco (Zambia)', pests: {
+            mosaic_virus: { name: 'Tobacco Mosaic Virus', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Sanitation','Resistant varieties'], note: 'Highly infectious. Major concern for Zambian tobacco farmers.' },
+            aphids: { name: 'Tobacco Aphids', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor throughout growing season.' },
+            hornworm: { name: 'Hornworm', severity: 'high', lossPct: 25, dosage: 220, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Hand picking'], note: 'Large caterpillars. Major pest in Zambian tobacco.' },
+            blue_mold: { name: 'Blue Mold', severity: 'high', lossPct: 30, dosage: 240, chemicals: ['Mancozeb','Metalaxyl'], organic: ['Copper spray','Good air circulation'], note: 'Favored by humid Zambian conditions. Monitor in seedbeds.' }
+        }, yieldValue: 2500 
     },
-    
-    cabbage: {
-        name: 'Cabbage (Zambia)',
-        pests: {
-            diamondback_moth: {
-                name: 'Diamondback Moth',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 160,
-                chemicals: ['Dudu-Cyber','Emamectin Benzoate'],
-                organic: ['Bt spray','Neem Oil','Row covers'],
-                note: 'Rotate chemicals to prevent resistance.'
-            },
-            black_rot: {
-                name: 'Black Rot',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 0,
-                chemicals: ['Copper spray','Streptomycin'],
-                organic: ['Hot water seed treatment','Crop rotation'],
-                note: 'V-shaped yellow lesions on leaf edges. Highly infectious.'
-            },
-            clubroot: {
-                name: 'Clubroot',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['Lime application'],
-                organic: ['Lime','Organic matter','pH management'],
-                note: 'Swollen roots causing wilting. Maintain pH above 6.5.'
-            },
-            aphids: {
-                name: 'Cabbage Aphids',
-                severity: 'medium',
-                lossPct: 12,
-                dosage: 120,
-                chemicals: ['Acetamiprid','Imidacloprid'],
-                organic: ['Neem Oil','Ladybugs','Water spray'],
-                note: 'Check under leaves. Sticky surfaces indicate presence.'
-            }
-        },
-        yieldValue: 2800
+    sunflower: { name: 'Sunflower (Zambia)', pests: {
+            sunflower_moth: { name: 'Sunflower Moth', severity: 'critical', lossPct: 35, dosage: 240, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Biological control','Pheromone traps'], note: 'Larvae feed on seeds. Major pest in Zambian sunflower fields.' },
+            head_rot: { name: 'Head Rot', severity: 'high', lossPct: 30, dosage: 220, chemicals: ['Mancozeb','Copper'], organic: ['Crop rotation','Good drainage'], note: 'Causes heads to rot. Favored by humid Zambian conditions.' },
+            downy_mildew: { name: 'Downy Mildew', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Metalaxyl','Mancozeb'], organic: ['Resistant varieties','Good drainage'], note: 'White mold on leaves. Prefers cool, wet Zambian weather.' },
+            aphids: { name: 'Sunflower Aphids', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Colonize heads and young leaves. Monitor during flowering.' }
+        }, yieldValue: 1600 
     },
-    
-    onion: {
-        name: 'Onion (Zambia)',
-        pests: {
-            downy_mildew: {
-                name: 'Downy Mildew',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Metalaxyl','Mancozeb'],
-                organic: ['Copper spray','Sulfur'],
-                note: 'Purplish-gray mold on leaves. Prefers cool, wet weather.'
-            },
-            thrips: {
-                name: 'Onion Thrips',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 160,
-                chemicals: ['Spinosad','Acetamiprid'],
-                organic: ['Neem Oil','Sticky traps','Beneficial insects'],
-                note: 'Silver-white patches on leaves. Monitor from seedling stage.'
-            },
-            white_rot: {
-                name: 'White Rot',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 0,
-                chemicals: ['Fungicide bulb dip'],
-                organic: ['Crop rotation (5-7 years)','Compost management'],
-                note: 'White fungal growth at base. Causes premature yellowing.'
-            },
-            purple_blotch: {
-                name: 'Purple Blotch',
-                severity: 'high',
-                lossPct: 18,
-                dosage: 170,
-                chemicals: ['Chlorothalonil','Mancozeb'],
-                organic: ['Copper spray','Avoid overhead irrigation'],
-                note: 'Purple-brown spots on leaves. Common in warm humid weather.'
-            }
-        },
-        yieldValue: 3000
+    sugarcane: { name: 'Sugarcane (Zambia)', pests: {
+            stem_borer: { name: 'Sugarcane Stem Borer', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Biological control'], note: 'Major pest in Zambian sugarcane. Bores into stems.' },
+            smut: { name: 'Sugarcane Smut', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fungicide treatment of setts'], organic: ['Resistant varieties','Sanitation'], note: 'Black whip-like growth. Use disease-free setts.' },
+            yellow_leaf_virus: { name: 'Sugarcane Yellow Leaf Virus', severity: 'high', lossPct: 20, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Aphid control'], note: 'Causes yellowing. Transmitted by aphids.' },
+            whitefly: { name: 'Sugarcane Whitefly', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Biological control'], note: 'Causes sooty mold. Monitor during dry season.' }
+        }, yieldValue: 4000 
     },
-    
-    pepper: {
-        name: 'Pepper (Zambia)',
-        pests: {
-            anthracnose: {
-                name: 'Pepper Anthracnose',
-                severity: 'critical',
-                lossPct: 30,
-                dosage: 220,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Dark sunken lesions on fruit. Favored by warm humid weather.'
-            },
-            aphids: {
-                name: 'Pepper Aphids',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 180,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmit viruses. Monitor during early growth stage.'
-            },
-            blossom_end_rot: {
-                name: 'Blossom End Rot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 0,
-                chemicals: ['Calcium nitrate'],
-                organic: ['Lime','Compost'],
-                note: 'Calcium deficiency. Maintain consistent soil moisture.'
-            },
-            bacterial_spot: {
-                name: 'Bacterial Spot',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Copper spray','Streptomycin'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Dark spots on leaves and fruit. Favored by wet conditions.'
-            }
-        },
-        yieldValue: 3800
+    tea: { name: 'Tea (Zambia)', pests: {
+            blister_blight: { name: 'Blister Blight', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Copper spray','Mancozeb'], organic: ['Copper spray','Pruning'], note: 'Causes blisters on leaves. Favored by humid weather.' },
+            aphids: { name: 'Tea Aphids', severity: 'medium', lossPct: 12, dosage: 140, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Attack young shoots. Monitor during flush growth.' },
+            mites: { name: 'Red Spider Mites', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Abamectin','Dicofol'], organic: ['Neem Oil','Sulfur spray'], note: 'Cause bronzing of leaves. Active in dry weather.' }
+        }, yieldValue: 3000 
     },
-    
-    // ─── FRUITS ───
-    mango: {
-        name: 'Mango (Zambia)',
-        pests: {
-            anthracnose: {
-                name: 'Mango Anthracnose',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 250,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Copper spray','Pruning'],
-                note: 'Dark spots on fruit. Major problem in Zambian mangoes.'
-            },
-            fruit_fly: {
-                name: 'Fruit Fly',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 200,
-                chemicals: ['Malathion','Protein bait spray'],
-                organic: ['Fruit bagging','Pheromone traps'],
-                note: 'Larvae feed inside fruit. Major export constraint.'
-            },
-            powdery_mildew: {
-                name: 'Powdery Mildew',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 200,
-                chemicals: ['Sulfur','Tebuconazole'],
-                organic: ['Sulfur spray','Neem Oil'],
-                note: 'White powdery growth on leaves. Favored by dry weather.'
-            },
-            mango_weevil: {
-                name: 'Mango Weevil',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Imidacloprid','Dudu-Cyber'],
-                organic: ['Hot water treatment','Destroy infested fruit'],
-                note: 'Bores into seed. Monitor during flowering and fruiting.'
-            }
-        },
-        yieldValue: 4500
+    coffee: { name: 'Coffee (Zambia)', pests: {
+            coffee_berry_borer: { name: 'Coffee Berry Borer', severity: 'critical', lossPct: 35, dosage: 240, chemicals: ['Cypermethrin','Imidacloprid'], organic: ['Biological control','Traps'], note: 'Most destructive coffee pest in Zambia.' },
+            coffee_leaf_rust: { name: 'Coffee Leaf Rust', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Copper spray','Tebuconazole'], organic: ['Copper spray','Resistant varieties'], note: 'Orange powdery spores. Major disease in Zambian coffee.' },
+            aphids: { name: 'Coffee Aphids', severity: 'medium', lossPct: 12, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Attack young shoots. Monitor during flushing.' }
+        }, yieldValue: 2800 
     },
-    
-    citrus: {
-        name: 'Citrus (Zambia)',
-        pests: {
-            citrus_greening: {
-                name: 'Citrus Greening (Huanglongbing)',
-                severity: 'critical',
-                lossPct: 50,
-                dosage: 0,
-                chemicals: ['No cure - remove infected trees'],
-                organic: ['Remove infected trees','Psyllid control'],
-                note: 'Most serious citrus disease in Zambia. Fatal to trees.'
-            },
-            psyllids: {
-                name: 'Citrus Psyllids',
-                severity: 'critical',
-                lossPct: 40,
-                dosage: 220,
-                chemicals: ['Imidacloprid','Acetamiprid'],
-                organic: ['Neem Oil','Biological control'],
-                note: 'Vectors of citrus greening. Monitor regularly.'
-            },
-            aphids: {
-                name: 'Citrus Aphids',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 160,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Cause leaf curling. Monitor young shoots.'
-            },
-            scale_insects: {
-                name: 'Scale Insects',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Oil sprays','Imidacloprid'],
-                organic: ['Neem Oil','Biological control'],
-                note: 'Cause sooty mold. Monitor on stems and leaves.'
-            }
-        },
-        yieldValue: 4000
+
+    // ═══ VEGETABLES ═══
+    tomato: { name: 'Tomato (Zambia)', pests: {
+            late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], organic: ['Copper spray','Baking soda'], note: 'Spreads rapidly in cool, wet conditions.' },
+            early_blight: { name: 'Early Blight', severity: 'high', lossPct: 20, dosage: 250, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Neem Oil','Copper spray'], note: 'Dark concentric rings on leaves. Common in warm weather.' },
+            aphids: { name: 'Tomato Aphids', severity: 'medium', lossPct: 10, dosage: 250, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Garlic spray'], note: 'Also transmits viral diseases.' },
+            tomato_yellow_leaf_curl: { name: 'Tomato Yellow Leaf Curl', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Insecticides for whitefly','Neem Oil'], organic: ['Neem Oil','Yellow sticky traps'], note: 'Caused by whitefly transmitted virus. Prevention is key.' },
+            blossom_end_rot: { name: 'Blossom End Rot', severity: 'medium', lossPct: 15, dosage: 0, chemicals: ['Calcium nitrate'], organic: ['Lime','Eggshells','Compost'], note: 'Calcium deficiency. Maintain consistent soil moisture.' }
+        }, yieldValue: 5000 
     },
-    
-    banana: {
-        name: 'Banana (Zambia)',
-        pests: {
-            banana_bunchy_top: {
-                name: 'Banana Bunchy Top Virus',
-                severity: 'critical',
-                lossPct: 50,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Rogue infected plants','Use tissue culture'],
-                note: 'Most serious banana disease in Zambia. Destroy infected plants.'
-            },
-            weevil: {
-                name: 'Banana Weevil',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 200,
-                chemicals: ['Imidacloprid','Fipronil'],
-                organic: ['Clean planting material','Pheromone traps'],
-                note: 'Bores into corms. Use healthy suckers.'
-            },
-            nematodes: {
-                name: 'Banana Nematodes',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Soil fumigation'],
-                organic: ['Crop rotation','Organic matter'],
-                note: 'Cause root damage. Common in continuous banana fields.'
-            },
-            black_sigatoka: {
-                name: 'Black Sigatoka',
-                severity: 'high',
-                lossPct: 35,
-                dosage: 240,
-                chemicals: ['Mancozeb','Tebuconazole'],
-                organic: ['Pruning','Copper spray'],
-                note: 'Causes leaf spots. Major disease in humid areas.'
-            }
-        },
-        yieldValue: 4200
+    cabbage: { name: 'Cabbage (Zambia)', pests: {
+            diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Dudu-Cyber','Emamectin Benzoate'], organic: ['Bt spray','Neem Oil','Row covers'], note: 'Rotate chemicals to prevent resistance.' },
+            black_rot: { name: 'Black Rot', severity: 'critical', lossPct: 35, dosage: 0, chemicals: ['Copper spray','Streptomycin'], organic: ['Hot water seed treatment','Crop rotation'], note: 'V-shaped yellow lesions on leaf edges. Highly infectious.' },
+            clubroot: { name: 'Clubroot', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Lime application'], organic: ['Lime','Organic matter','pH management'], note: 'Swollen roots causing wilting. Maintain pH above 6.5.' },
+            aphids: { name: 'Cabbage Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Imidacloprid'], organic: ['Neem Oil','Ladybugs','Water spray'], note: 'Check under leaves. Sticky surfaces indicate presence.' }
+        }, yieldValue: 2800 
     },
-    
-    papaya: {
-        name: 'Papaya (Zambia)',
-        pests: {
-            papaya_ringspot: {
-                name: 'Papaya Ringspot Virus',
-                severity: 'critical',
-                lossPct: 50,
-                dosage: 0,
-                chemicals: ['No chemical treatment'],
-                organic: ['Resistant varieties','Aphid control'],
-                note: 'Devastating virus. Use resistant varieties.'
-            },
-            fruit_fly: {
-                name: 'Papaya Fruit Fly',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 200,
-                chemicals: ['Malathion','Protein bait'],
-                organic: ['Fruit bagging','Pheromone traps'],
-                note: 'Larvae feed inside fruit. Major pest in Zambia.'
-            },
-            powdery_mildew: {
-                name: 'Powdery Mildew',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 180,
-                chemicals: ['Sulfur','Tebuconazole'],
-                organic: ['Sulfur spray','Neem Oil'],
-                note: 'White powder on leaves. Favored by dry weather.'
-            },
-            mites: {
-                name: 'Papaya Mites',
-                severity: 'medium',
-                lossPct: 12,
-                dosage: 160,
-                chemicals: ['Abamectin','Dicofol'],
-                organic: ['Neem Oil','Sulfur spray'],
-                note: 'Cause leaf bronzing. Monitor during dry season.'
-            }
-        },
-        yieldValue: 3800
+    onion: { name: 'Onion (Zambia)', pests: {
+            downy_mildew: { name: 'Downy Mildew', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Metalaxyl','Mancozeb'], organic: ['Copper spray','Sulfur'], note: 'Purplish-gray mold on leaves. Prefers cool, wet weather.' },
+            thrips: { name: 'Onion Thrips', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Sticky traps','Beneficial insects'], note: 'Silver-white patches on leaves. Monitor from seedling stage.' },
+            white_rot: { name: 'White Rot', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Fungicide bulb dip'], organic: ['Crop rotation (5-7 years)','Compost management'], note: 'White fungal growth at base. Causes premature yellowing.' },
+            purple_blotch: { name: 'Purple Blotch', severity: 'high', lossPct: 18, dosage: 170, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Copper spray','Avoid overhead irrigation'], note: 'Purple-brown spots on leaves. Common in warm humid weather.' }
+        }, yieldValue: 3000 
+    },
+    pepper: { name: 'Pepper (Zambia)', pests: {
+            anthracnose: { name: 'Pepper Anthracnose', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Crop rotation'], note: 'Dark sunken lesions on fruit. Favored by warm humid weather.' },
+            aphids: { name: 'Pepper Aphids', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor during early growth stage.' },
+            blossom_end_rot: { name: 'Blossom End Rot', severity: 'medium', lossPct: 15, dosage: 0, chemicals: ['Calcium nitrate'], organic: ['Lime','Compost'], note: 'Calcium deficiency. Maintain consistent soil moisture.' },
+            bacterial_spot: { name: 'Bacterial Spot', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Copper spray','Streptomycin'], organic: ['Copper spray','Crop rotation'], note: 'Dark spots on leaves and fruit. Favored by wet conditions.' }
+        }, yieldValue: 3800 
+    },
+    lettuce: { name: 'Lettuce (Zambia)', pests: {
+            downy_mildew: { name: 'Downy Mildew', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Metalaxyl','Mancozeb'], organic: ['Copper spray','Good air circulation'], note: 'Yellow patches on leaves. Favored by wet weather.' },
+            aphids: { name: 'Lettuce Aphids', severity: 'medium', lossPct: 12, dosage: 130, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Cause curling of leaves. Monitor regularly.' },
+            root_rot: { name: 'Root Rot', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Good drainage','Crop rotation'], note: 'Causes wilting and death. Avoid waterlogged soils.' }
+        }, yieldValue: 2500 
+    },
+    spinach: { name: 'Spinach (Zambia)', pests: {
+            downy_mildew: { name: 'Downy Mildew', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Metalaxyl','Mancozeb'], organic: ['Copper spray','Good air circulation'], note: 'Purple-gray mold on leaves. Favored by humid weather.' },
+            aphids: { name: 'Spinach Aphids', severity: 'medium', lossPct: 12, dosage: 130, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor during early growth.' },
+            leaf_miners: { name: 'Leaf Miners', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Sticky traps'], note: 'Create tunnels in leaves. Monitor regularly.' }
+        }, yieldValue: 2200 
+    },
+
+    // ═══ FRUITS ═══
+    mango: { name: 'Mango (Zambia)', pests: {
+            anthracnose: { name: 'Mango Anthracnose', severity: 'critical', lossPct: 40, dosage: 250, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Pruning'], note: 'Dark spots on fruit. Major problem in Zambian mangoes.' },
+            fruit_fly: { name: 'Fruit Fly', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Malathion','Protein bait spray'], organic: ['Fruit bagging','Pheromone traps'], note: 'Larvae feed inside fruit. Major export constraint.' },
+            powdery_mildew: { name: 'Powdery Mildew', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Sulfur','Tebuconazole'], organic: ['Sulfur spray','Neem Oil'], note: 'White powdery growth on leaves. Favored by dry weather.' },
+            mango_weevil: { name: 'Mango Weevil', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Imidacloprid','Dudu-Cyber'], organic: ['Hot water treatment','Destroy infested fruit'], note: 'Bores into seed. Monitor during flowering and fruiting.' }
+        }, yieldValue: 4500 
+    },
+    citrus: { name: 'Citrus (Zambia)', pests: {
+            citrus_greening: { name: 'Citrus Greening (Huanglongbing)', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No cure - remove infected trees'], organic: ['Remove infected trees','Psyllid control'], note: 'Most serious citrus disease in Zambia. Fatal to trees.' },
+            psyllids: { name: 'Citrus Psyllids', severity: 'critical', lossPct: 40, dosage: 220, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Biological control'], note: 'Vectors of citrus greening. Monitor regularly.' },
+            aphids: { name: 'Citrus Aphids', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Cause leaf curling. Monitor young shoots.' },
+            scale_insects: { name: 'Scale Insects', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Oil sprays','Imidacloprid'], organic: ['Neem Oil','Biological control'], note: 'Cause sooty mold. Monitor on stems and leaves.' }
+        }, yieldValue: 4000 
+    },
+    banana: { name: 'Banana (Zambia)', pests: {
+            banana_bunchy_top: { name: 'Banana Bunchy Top Virus', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Rogue infected plants','Use tissue culture'], note: 'Most serious banana disease in Zambia. Destroy infected plants.' },
+            weevil: { name: 'Banana Weevil', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Imidacloprid','Fipronil'], organic: ['Clean planting material','Pheromone traps'], note: 'Bores into corms. Use healthy suckers.' },
+            nematodes: { name: 'Banana Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause root damage. Common in continuous banana fields.' },
+            black_sigatoka: { name: 'Black Sigatoka', severity: 'high', lossPct: 35, dosage: 240, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Pruning','Copper spray'], note: 'Causes leaf spots. Major disease in humid areas.' }
+        }, yieldValue: 4200 
+    },
+    papaya: { name: 'Papaya (Zambia)', pests: {
+            papaya_ringspot: { name: 'Papaya Ringspot Virus', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Aphid control'], note: 'Devastating virus. Use resistant varieties.' },
+            fruit_fly: { name: 'Papaya Fruit Fly', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Malathion','Protein bait'], organic: ['Fruit bagging','Pheromone traps'], note: 'Larvae feed inside fruit. Major pest in Zambia.' },
+            powdery_mildew: { name: 'Powdery Mildew', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Sulfur','Tebuconazole'], organic: ['Sulfur spray','Neem Oil'], note: 'White powder on leaves. Favored by dry weather.' },
+            mites: { name: 'Papaya Mites', severity: 'medium', lossPct: 12, dosage: 160, chemicals: ['Abamectin','Dicofol'], organic: ['Neem Oil','Sulfur spray'], note: 'Cause leaf bronzing. Monitor during dry season.' }
+        }, yieldValue: 3800 
+    },
+    avocado: { name: 'Avocado (Zambia)', pests: {
+            anthracnose: { name: 'Avocado Anthracnose', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Pruning'], note: 'Dark spots on fruit. Major post-harvest problem.' },
+            root_rot: { name: 'Avocado Root Rot', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Fosetyl-Al','Metalaxyl'], organic: ['Good drainage','Resistant rootstocks'], note: 'Causes wilting and death. Avoid waterlogged soils.' },
+            thrips: { name: 'Avocado Thrips', severity: 'medium', lossPct: 12, dosage: 150, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Beneficial insects'], note: 'Scarring on fruit. Monitor during flowering.' }
+        }, yieldValue: 3500 
+    },
+    pineapple: { name: 'Pineapple (Zambia)', pests: {
+            mealybug_wilt: { name: 'Mealybug Wilt', severity: 'critical', lossPct: 30, dosage: 0, chemicals: ['Imidacloprid'], organic: ['Biological control','Clean planting material'], note: 'Causes wilt and collapse. Major disease in Zambia.' },
+            nematodes: { name: 'Pineapple Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause root damage. Common in continuous cultivation.' },
+            fruit_borer: { name: 'Pineapple Fruit Borer', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Hand picking'], note: 'Larvae feed inside fruit. Monitor during fruiting.' }
+        }, yieldValue: 3200 
+    },
+
+    // ═══ HERBS & SPICES ═══
+    ginger: { name: 'Ginger (Zambia)', pests: {
+            rhizome_rot: { name: 'Rhizome Rot', severity: 'critical', lossPct: 35, dosage: 0, chemicals: ['Soil fumigation','Fungicide drench'], organic: ['Good drainage','Crop rotation'], note: 'Causes soft rot of rhizomes. Avoid waterlogged soils.' },
+            nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause galls on rhizomes. Serious in sandy soils.' },
+            leaf_spot: { name: 'Leaf Spot', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Good air circulation'], note: 'Dark spots on leaves. Favored by wet weather.' }
+        }, yieldValue: 2800 
+    },
+    garlic: { name: 'Garlic (Zambia)', pests: {
+            white_rot: { name: 'White Rot', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Fungicide dip for cloves'], organic: ['Crop rotation (5-7 years)','Compost management'], note: 'White fungal growth. Causes premature yellowing.' },
+            thrips: { name: 'Garlic Thrips', severity: 'high', lossPct: 20, dosage: 160, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Sticky traps'], note: 'Silver-white streaks on leaves. Monitor from early stage.' },
+            downy_mildew: { name: 'Downy Mildew', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Metalaxyl','Mancozeb'], organic: ['Copper spray','Good air circulation'], note: 'Purple-gray mold on leaves. Favored by wet weather.' }
+        }, yieldValue: 2500 
     }
 };
 
@@ -2277,7 +1429,7 @@ function calcFarmMath() {
 }
 
 // ═══════════════════════════════════════════
-// SENSOR HUB (Functions truncated for length)
+// SENSOR HUB
 // ═══════════════════════════════════════════
 
 function analyzeLeaf(event) {
