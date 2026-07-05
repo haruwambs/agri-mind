@@ -36,22 +36,38 @@ themeToggle.addEventListener('click', () => {
     localStorage.setItem('theme', document.body.classList.contains('light') ? 'light' : 'dark');
 });
 
-// ────────── Auth ──────────
+// ────────── Auth (FIXED - username properly saved and retrieved) ──────────
 async function checkSession() {
     const { data: { session } } = await db.auth.getSession();
     if (session && session.user) {
-        const { data: profile } = await db.from('profiles').select('*').eq('id', session.user.id).single();
+        // Get profile - wait for it to exist
+        let profile = null;
+        let retries = 0;
+        while (retries < 3) {
+            const { data } = await db.from('profiles').select('*').eq('id', session.user.id).single();
+            if (data) {
+                profile = data;
+                break;
+            }
+            retries++;
+            await new Promise(r => setTimeout(r, 500));
+        }
+        
+        // Determine display name
         let displayName = 'Farmer';
         if (profile?.display_name && profile.display_name.trim() !== '') {
             displayName = profile.display_name.trim();
         } else if (session.user.email) {
             displayName = session.user.email.split('@')[0];
         }
+        
         currentUser = { 
             id: session.user.id, 
             email: session.user.email, 
             displayName: displayName 
         };
+        
+        console.log('Session loaded. Display name:', displayName);
     } else { 
         currentUser = null; 
     }
@@ -77,16 +93,23 @@ async function signUp(email, password, displayName) {
     if (error) throw new Error(error.message);
     
     const nameToSave = displayName?.trim() || email.split('@')[0];
-    console.log('Saving display_name:', nameToSave);
+    console.log('Signup - saving display_name:', nameToSave, 'for user:', data.user.id);
     
-    const { error: upsertError } = await db.from('profiles').upsert({ 
+    // Save profile immediately
+    const { error: profileError } = await db.from('profiles').upsert({ 
         id: data.user.id, 
         display_name: nameToSave, 
         email: email 
-    });
+    }, { onConflict: 'id' });
     
-    if (upsertError) console.log('Error saving profile:', upsertError);
+    if (profileError) {
+        console.error('Error saving profile:', profileError);
+    } else {
+        console.log('Profile saved successfully');
+    }
     
+    // Wait a moment then check session
+    await new Promise(r => setTimeout(r, 1000));
     await checkSession();
     showToast(`Welcome, ${nameToSave}!`);
 }
@@ -167,10 +190,7 @@ async function addForumPost(content, imageFile) {
     showToast('Post shared!'); loadForum(); loadDashboardStats();
 }
 
-async function deleteForumPost(id) {
-    await db.from('forum_posts').delete().eq('id', id);
-    showToast('Deleted'); loadForum(); loadDashboardStats();
-}
+async function deleteForumPost(id) { await db.from('forum_posts').delete().eq('id', id); showToast('Deleted'); loadForum(); loadDashboardStats(); }
 
 // ────────── Groups ──────────
 async function loadGroups() {
@@ -242,148 +262,71 @@ async function deleteJob(id) { await db.from('job_listings').delete().eq('id', i
 
 async function applyToJob(jobId) {
     if (!currentUser) { showToast('Please login first', true); return; }
-    
     const { data: existing } = await db.from('job_applications').select('*').match({ job_id: parseInt(jobId), applicant_id: currentUser.id });
     if (existing && existing.length > 0) { showToast('You already applied', true); return; }
-    
     const msg = prompt('Add a message (optional):');
-    await db.from('job_applications').insert({ 
-        job_id: parseInt(jobId), 
-        applicant_id: currentUser.id, 
-        applicant_message: msg || 'I am interested.',
-        message: msg || 'I am interested.',
-        status: 'pending' 
-    });
-    showToast('Applied!');
-    loadJobs();
+    await db.from('job_applications').insert({ job_id: parseInt(jobId), applicant_id: currentUser.id, applicant_message: msg || 'I am interested.', message: msg || 'I am interested.', status: 'pending' });
+    showToast('Applied!'); loadJobs();
 }
 
-// ────────── Applications (FIXED - shows email directly) ──────────
+// ────────── Applications ──────────
 async function loadApplications() {
     if (!currentUser) return;
     const container = document.getElementById('applicationsList');
-    
     const { data: myJobs } = await db.from('job_listings').select('id,title').eq('user_id', currentUser.id);
-    if (!myJobs || myJobs.length === 0) { 
-        container.innerHTML = '<p>No jobs posted yet.</p>'; 
-        return; 
-    }
-    
+    if (!myJobs || myJobs.length === 0) { container.innerHTML = '<p>No jobs posted yet.</p>'; return; }
     container.innerHTML = '';
-    
     for (const job of myJobs) {
-        const { data: apps } = await db.from('job_applications')
-            .select('*')
-            .eq('job_id', job.id)
-            .order('created_at', { ascending: false });
-        
+        const { data: apps } = await db.from('job_applications').select('*').eq('job_id', job.id).order('created_at', { ascending: false });
         if (apps && apps.length > 0) {
             container.innerHTML += `<h4 style="color:var(--accent);margin-bottom:10px;">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
-            
             for (const a of apps) {
-                // Get applicant email directly from auth.users via profiles
-                let applicantEmail = 'N/A';
-                let applicantName = 'Unknown';
-                
+                let applicantEmail = 'N/A', applicantName = 'Unknown';
                 if (a.applicant_id) {
-                    const { data: pf } = await db.from('profiles')
-                        .select('display_name,email')
-                        .eq('id', a.applicant_id)
-                        .single();
-                    if (pf) {
-                        applicantEmail = pf.email || 'N/A';
-                        applicantName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-                    }
+                    const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', a.applicant_id).single();
+                    if (pf) { applicantEmail = pf.email || 'N/A'; applicantName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown'; }
                 }
-                
                 const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-                
                 container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
                     <strong>${escapeHtml(applicantName)}</strong>
-                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
-                    <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
-                    <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
-                    <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
-                    ${a.status === 'pending' ? `
-                        <div style="margin-top:8px;display:flex;gap:8px;">
-                            <button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
-                            <button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
-                        </div>
-                    ` : ''}
-                    ${a.status === 'accepted' ? `
-                        <div style="margin-top:8px;">
-                            <button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantEmail)}" data-name="${escapeHtml(applicantName)}" style="font-size:12px;padding:6px 14px;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
-                            </button>
-                        </div>
-                    ` : ''}
+                    <p>📧 ${escapeHtml(applicantEmail)}</p>
+                    <p>💬 ${escapeHtml(a.applicant_message || 'No message')}</p>
+                    <small>${new Date(a.created_at).toLocaleDateString()}</small>
+                    <br><span style="color:${sc};">Status: ${a.status}</span>
+                    ${a.status==='pending'?`<div style="margin-top:8px;"><button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button></div>`:''}
+                    ${a.status==='accepted'?`<button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantEmail)}" data-name="${escapeHtml(applicantName)}" style="font-size:12px;padding:6px 14px;margin-top:8px;"><i class="fas fa-envelope"></i> Contact</button>`:''}
                 </div>`;
             }
         }
     }
-    
     if (container.innerHTML === '') container.innerHTML = '<p>No applications received yet.</p>';
 }
 
-// ────────── My Applications (FIXED - shows employer email when accepted) ──────────
+// ────────── My Applications ──────────
 async function loadMyApplications() {
     if (!currentUser) return;
     const container = document.getElementById('myApplicationsList');
-    
-    const { data: apps } = await db.from('job_applications')
-        .select('*')
-        .eq('applicant_id', currentUser.id)
-        .order('created_at', { ascending: false });
-    
-    if (!apps || apps.length === 0) { 
-        container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; 
-        return; 
-    }
-    
+    const { data: apps } = await db.from('job_applications').select('*').eq('applicant_id', currentUser.id).order('created_at', { ascending: false });
+    if (!apps || apps.length === 0) { container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; return; }
     container.innerHTML = '';
-    
     for (const a of apps) {
-        const { data: job } = await db.from('job_listings')
-            .select('title,description,location,user_id')
-            .eq('id', a.job_id)
-            .single();
-        
-        // Get employer email
-        let employerEmail = 'N/A';
-        let employerName = 'Unknown';
-        
+        const { data: job } = await db.from('job_listings').select('title,description,location,user_id').eq('id', a.job_id).single();
+        let employerEmail = 'N/A', employerName = 'Unknown';
         if (job?.user_id) {
-            const { data: pf } = await db.from('profiles')
-                .select('display_name,email')
-                .eq('id', job.user_id)
-                .single();
-            if (pf) {
-                employerEmail = pf.email || 'N/A';
-                employerName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-            }
+            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', job.user_id).single();
+            if (pf) { employerEmail = pf.email || 'N/A'; employerName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown'; }
         }
-        
         const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-        
         container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
-            <strong>${escapeHtml(job?.title || 'Unknown Job')}</strong>
-            ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
-            <p>${escapeHtml(job?.description || '')}</p>
+            <strong>${escapeHtml(job?.title||'Unknown Job')}</strong>
+            ${job?.location?`<p>📍 ${escapeHtml(job.location)}</p>`:''}
+            <p>${escapeHtml(job?.description||'')}</p>
             <small>Employer: ${escapeHtml(employerName)}</small>
             <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
-            <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
-            ${a.status === 'accepted' ? `
-                <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
-                    <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
-                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
-                    <button class="btn-primary contact-poster-btn" data-email="${escapeHtml(employerEmail)}" data-name="${escapeHtml(employerName)}" style="font-size:12px;padding:8px 16px;margin-top:6px;">
-                        <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
-                    </button>
-                </div>
-            ` : ''}
-            ${a.status === 'rejected' ? `<p style="color:#dc2626;margin-top:8px;">Not accepted. Keep applying!</p>` : ''}
-            ${a.status === 'pending' ? `<p style="color:#f59e0b;margin-top:8px;">⏳ Waiting for review...</p>` : ''}
+            <br><span style="color:${sc};">Status: ${a.status}</span>
+            ${a.status==='accepted'?`<div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;"><h4 style="color:#10B981;">Accepted!</h4><p>📧 ${escapeHtml(employerEmail)}</p><button class="btn-primary contact-poster-btn" data-email="${escapeHtml(employerEmail)}" data-name="${escapeHtml(employerName)}" style="font-size:12px;padding:8px 16px;margin-top:6px;"><i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}</button></div>`:''}
+            ${a.status==='rejected'?`<p style="color:#dc2626;">Not accepted.</p>`:''}
+            ${a.status==='pending'?`<p style="color:#f59e0b;">⏳ Waiting review...</p>`:''}
         </div>`;
     }
 }
@@ -391,8 +334,7 @@ async function loadMyApplications() {
 async function updateApplicationStatus(appId, status) { 
     await db.from('job_applications').update({ status }).eq('id', appId); 
     showToast(`Application ${status}!`); 
-    loadApplications();
-    loadMyApplications();
+    loadApplications(); loadMyApplications();
 }
 
 // ────────── Market ──────────
@@ -423,10 +365,7 @@ async function loadMessages() {
     const { data: msgs } = await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
     const container = document.getElementById('messagesList');
     if (!msgs || msgs.length === 0) { container.innerHTML = '<p>No messages yet.</p>'; return; }
-    container.innerHTML = msgs.map(m => {
-        let fromName = 'User', toName = 'User';
-        return `<div class="msg-item"><strong>${escapeHtml(fromName)}</strong> → ${escapeHtml(toName)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
-    }).join('');
+    container.innerHTML = msgs.map(m => `<div class="msg-item"><strong>${escapeHtml(m.text)}</strong><br><small>${new Date(m.created_at).toLocaleString()}</small></div>`).join('');
 }
 
 async function sendMessage(toEmail, text) {
@@ -484,22 +423,92 @@ function calculateYield() {
     document.getElementById('yieldResult').textContent = (area > 0) ? `Estimated: ${(area * yields[crop]).toFixed(1)} tons` : 'Enter valid area.';
 }
 
-// ────────── Search ──────────
+// ────────── Search (UPDATED - includes user search) ──────────
 async function globalSearch(term, category, dateFrom, dateTo) {
     const q = `%${term}%`;
-    let queries = [];
-    if (category==='all'||category==='forum') queries.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));
-    if (category==='all'||category==='records') queries.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));
-    if (category==='all'||category==='jobs') queries.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));
-    if (category==='all'||category==='tutorials') queries.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));
-    const resultsArr = await Promise.all(queries);
     const results = [];
-    resultsArr.forEach(res => {
-        if (res.data) res.data.forEach(r => {
-            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push(r.content||r.title);
+    
+    // Search forum posts
+    if (category==='all'||category==='forum') {
+        const { data } = await db.from('forum_posts').select('content,created_at,user_id').ilike('content',q).limit(5);
+        if (data) data.forEach(r => {
+            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) {
+                results.push({ type: 'Forum Post', text: r.content?.substring(0,100), date: r.created_at });
+            }
         });
-    });
-    document.getElementById('searchResults').innerHTML = results.length ? results.map(t => `<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join('') : '<p>No matches found.</p>';
+    }
+    
+    // Search farm records
+    if (category==='all'||category==='records') {
+        const { data } = await db.from('farm_records').select('title,created_at').ilike('title',q).limit(5);
+        if (data) data.forEach(r => {
+            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) {
+                results.push({ type: 'Farm Record', text: r.title, date: r.created_at });
+            }
+        });
+    }
+    
+    // Search jobs
+    if (category==='all'||category==='jobs') {
+        const { data } = await db.from('job_listings').select('title,created_at').ilike('title',q).limit(5);
+        if (data) data.forEach(r => {
+            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) {
+                results.push({ type: 'Job', text: r.title, date: r.created_at });
+            }
+        });
+    }
+    
+    // Search tutorials
+    if (category==='all'||category==='tutorials') {
+        const { data } = await db.from('tutorials').select('title,created_at').ilike('title',q).limit(5);
+        if (data) data.forEach(r => {
+            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) {
+                results.push({ type: 'Tutorial', text: r.title, date: r.created_at });
+            }
+        });
+    }
+    
+    // NEW: Search users/profiles
+    if (category==='all') {
+        const { data: users } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('display_name',q).limit(10);
+        if (users) users.forEach(u => {
+            results.push({ 
+                type: 'User', 
+                text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`,
+                date: u.created_at 
+            });
+        });
+        
+        // Also search by email if no display_name matches found
+        if (results.filter(r => r.type === 'User').length === 0) {
+            const { data: usersByEmail } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('email',q).limit(5);
+            if (usersByEmail) usersByEmail.forEach(u => {
+                results.push({ 
+                    type: 'User', 
+                    text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`,
+                    date: u.created_at 
+                });
+            });
+        }
+    }
+    
+    // Display results
+    const container = document.getElementById('searchResults');
+    if (results.length === 0) {
+        container.innerHTML = '<p style="text-align:center;padding:20px;">No matches found. Try a different search term.</p>';
+        return;
+    }
+    
+    // Sort by date
+    results.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    container.innerHTML = results.map(r => `
+        <div style="padding:12px;margin-bottom:8px;background:var(--card-bg);border-radius:12px;border-left:3px solid var(--accent);">
+            <span style="font-size:0.7rem;color:var(--accent);font-weight:600;">${r.type}</span>
+            <p style="margin:4px 0;">${escapeHtml(r.text)}</p>
+            <small style="color:var(--text-secondary);">${r.date ? new Date(r.date).toLocaleDateString() : ''}</small>
+        </div>
+    `).join('');
 }
 
 // ────────── Chat ──────────
@@ -513,11 +522,7 @@ async function wikiAnswer(question) {
 
 // ────────── Profile ──────────
 async function loadProfile() {
-    if (!currentUser) { 
-        document.getElementById('profileContent').innerHTML = '<p>Please login to see your profile.</p>'; 
-        return; 
-    }
-    
+    if (!currentUser) { document.getElementById('profileContent').innerHTML = '<p>Please login to see your profile.</p>'; return; }
     const { data: pd } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
     const displayName = pd?.display_name?.trim() || currentUser.email?.split('@')[0] || 'Farmer';
     
@@ -549,10 +554,7 @@ async function loadProfile() {
         const file = e.target.files[0];
         if (!file) return;
         const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
-        if (!error) { 
-            document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl; 
-            showToast('Profile picture updated!'); 
-        }
+        if (!error) { document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl; showToast('Profile picture updated!'); }
     };
 }
 
@@ -567,13 +569,7 @@ function analyzeLeafColors(imageData) {
         const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
         const max = Math.max(r, g, b), min = Math.min(r, g, b), diff = max - min;
         let h = 0;
-        if (diff > 0) {
-            if (max === r) h = ((g - b) / diff) % 6;
-            else if (max === g) h = (b - r) / diff + 2;
-            else h = (r - g) / diff + 4;
-            h = Math.round(h * 60);
-            if (h < 0) h += 360;
-        }
+        if (diff > 0) { if (max === r) h = ((g - b) / diff) % 6; else if (max === g) h = (b - r) / diff + 2; else h = (r - g) / diff + 4; h = Math.round(h * 60); if (h < 0) h += 360; }
         const s = max > 0 ? (diff / max) * 100 : 0;
         const v = (max / 255) * 100;
         total++;
@@ -589,19 +585,17 @@ function analyzeLeafColors(imageData) {
 function diagnoseFromColors(c) {
     const symptoms = [], issues = [];
     let score = 0, conf = 0;
-    if (c.brownPct > 5 && c.darkSpots > 3) { symptoms.push({ text: 'Brown holes detected', found: true }); issues.push('Possible FAW damage'); score += 3; conf += 25; }
-    else if (c.brownPct > 3) { symptoms.push({ text: 'Minor brown spots', found: true }); score += 1; conf += 10; }
+    if (c.brownPct > 5 && c.darkSpots > 3) { symptoms.push({ text: 'Brown holes', found: true }); issues.push('Possible FAW'); score += 3; conf += 25; }
+    else if (c.brownPct > 3) { symptoms.push({ text: 'Minor spots', found: true }); score += 1; conf += 10; }
     else { symptoms.push({ text: 'No brown damage', found: false }); conf += 15; }
-    if (c.yellowPct > 10) { symptoms.push({ text: 'Yellow >10%', found: true }); issues.push('Possible deficiency'); score += 2; conf += 20; }
-    else if (c.yellowPct > 5) { symptoms.push({ text: 'Slight yellowing', found: true }); score += 1; conf += 10; }
-    else { symptoms.push({ text: 'No yellowing', found: false }); conf += 10; }
-    if (c.greenPct < 50) { symptoms.push({ text: 'Low chlorophyll', found: true }); issues.push('Plant stressed'); score += 2; conf += 15; }
-    else { symptoms.push({ text: 'Healthy chlorophyll', found: false }); conf += 20; }
-    if (c.whitePct > 8) { symptoms.push({ text: 'White patches', found: true }); issues.push('Possible mildew'); score += 2; conf += 15; }
+    if (c.yellowPct > 10) { symptoms.push({ text: 'Yellow >10%', found: true }); issues.push('Deficiency'); score += 2; conf += 20; }
+    else if (c.yellowPct > 5) { symptoms.push({ text: 'Slight yellow', found: true }); score += 1; conf += 10; }
+    else { symptoms.push({ text: 'No yellow', found: false }); conf += 10; }
+    if (c.greenPct < 50) { symptoms.push({ text: 'Low chlorophyll', found: true }); issues.push('Stressed'); score += 2; conf += 15; }
+    else { symptoms.push({ text: 'Healthy green', found: false }); conf += 20; }
+    if (c.whitePct > 8) { symptoms.push({ text: 'White patches', found: true }); issues.push('Mildew'); score += 2; conf += 15; }
     else { symptoms.push({ text: 'No mildew', found: false }); conf += 5; }
-    let plant = c.greenPct > 60 ? 'Healthy Plant' : c.greenPct > 40 ? 'Stressed Crop' : 'Broadleaf Crop';
-    conf = Math.min(conf, 95);
-    return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: score >= 5 ? 'URGENT: Treat!' : score >= 3 ? 'Monitor closely.' : score >= 1 ? 'Minor issues.' : 'Healthy.', severity: score, colors: c };
+    return { symptoms, issues, plant: c.greenPct > 60 ? 'Healthy' : c.greenPct > 40 ? 'Stressed' : 'Broadleaf', confidence: Math.min(conf, 95), recommendation: score >= 5 ? 'URGENT: Treat!' : score >= 3 ? 'Monitor.' : score >= 1 ? 'Minor.' : 'Healthy.', severity: score, colors: c };
 }
 
 // ═══════════════════════════════════════════
@@ -665,38 +659,23 @@ function showPhonePage(pageId, btn) {
 }
 
 // ═══════════════════════════════════════════
-// FARM MATH TOOL
+// FARM MATH, SENSOR HUB, AUTO-SCOUT
 // ═══════════════════════════════════════════
 
 function populatePests() {
-    const crop = document.getElementById('mathCrop').value;
     const pestSelect = document.getElementById('mathPest');
     pestSelect.innerHTML = '';
-    Object.entries(CROP_DB[crop].pests).forEach(([key, pest]) => {
+    Object.entries(CROP_DB[document.getElementById('mathCrop').value].pests).forEach(([key, pest]) => {
         const opt = document.createElement('option');
         opt.value = key;
         opt.textContent = `${pest.name} (${pest.severity.toUpperCase()})`;
         pestSelect.appendChild(opt);
     });
-    updateDosageFromPest();
-    updateCostPerMl();
+    updateDosageFromPest(); updateCostPerMl();
 }
-
-function updateDosageFromPest() {
-    const crop = document.getElementById('mathCrop').value;
-    const pest = document.getElementById('mathPest').value;
-    const data = CROP_DB[crop].pests[pest];
-    if (data) document.getElementById('mathDosage').value = data.dosage;
-}
-
-function updateCostPerMl() {
-    const size = parseFloat(document.getElementById('mathContSize').value) || 250;
-    const price = parseFloat(document.getElementById('mathContPrice').value) || 150;
-    document.getElementById('mathCostPerMl').textContent = 'K' + (price / size).toFixed(2);
-}
-
+function updateDosageFromPest() { const d = CROP_DB[document.getElementById('mathCrop').value].pests[document.getElementById('mathPest').value]; if (d) document.getElementById('mathDosage').value = d.dosage; }
+function updateCostPerMl() { document.getElementById('mathCostPerMl').textContent = 'K' + ((parseFloat(document.getElementById('mathContPrice').value)||150) / (parseFloat(document.getElementById('mathContSize').value)||250)).toFixed(2); }
 function updateFarmSlider() { document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1); }
-
 function saveChemical() {
     const chem = { name: document.getElementById('mathChemName').value.trim(), size: document.getElementById('mathContSize').value, price: document.getElementById('mathContPrice').value, dosage: document.getElementById('mathDosage').value, unit: document.getElementById('mathDosageUnit').value };
     if (!chem.name) { showToast('Enter name', true); return; }
@@ -706,203 +685,98 @@ function saveChemical() {
     localStorage.setItem('agrimind_chems', JSON.stringify(savedChems));
     showToast('Saved!'); renderSavedChems();
 }
-
-function loadChem(idx) {
-    const c = savedChems[idx];
-    document.getElementById('mathChemName').value = c.name;
-    document.getElementById('mathContSize').value = c.size;
-    document.getElementById('mathContPrice').value = c.price;
-    document.getElementById('mathDosage').value = c.dosage;
-    document.getElementById('mathDosageUnit').value = c.unit;
-    updateCostPerMl();
-}
-
+function loadChem(idx) { const c = savedChems[idx]; document.getElementById('mathChemName').value = c.name; document.getElementById('mathContSize').value = c.size; document.getElementById('mathContPrice').value = c.price; document.getElementById('mathDosage').value = c.dosage; document.getElementById('mathDosageUnit').value = c.unit; updateCostPerMl(); }
 function deleteChem(idx) { savedChems.splice(idx, 1); localStorage.setItem('agrimind_chems', JSON.stringify(savedChems)); renderSavedChems(); }
-
 function renderSavedChems() {
     if (savedChems.length === 0) { document.getElementById('savedChems').style.display = 'none'; return; }
     document.getElementById('savedChems').style.display = 'block';
-    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved</label>' + savedChems.map((c, i) => `
-        <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--input-bg);border-radius:10px;margin-bottom:4px;font-size:0.8rem;">
-            <span><strong>${escapeHtml(c.name)}</strong></span>
-            <div><button class="btn-outline" onclick="loadChem(${i})" style="padding:2px 8px;font-size:0.65rem;">Load</button>
-            <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:2px 6px;font-size:0.65rem;margin-left:4px;">X</button></div>
-        </div>`).join('');
+    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved</label>' + savedChems.map((c, i) => `<div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--input-bg);border-radius:10px;margin-bottom:4px;font-size:0.8rem;"><span><strong>${escapeHtml(c.name)}</strong></span><div><button class="btn-outline" onclick="loadChem(${i})" style="padding:2px 8px;font-size:0.65rem;">Load</button><button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:2px 6px;font-size:0.65rem;margin-left:4px;">X</button></div></div>`).join('');
 }
-
 function calcFarmMath() {
-    const crop = document.getElementById('mathCrop').value;
-    const pestKey = document.getElementById('mathPest').value;
-    const chemName = document.getElementById('mathChemName').value.trim() || 'Chemical';
-    const contSize = parseFloat(document.getElementById('mathContSize').value) || 250;
-    const contPrice = parseFloat(document.getElementById('mathContPrice').value) || 150;
-    const dosage = parseFloat(document.getElementById('mathDosage').value) || 200;
-    const unit = document.getElementById('mathDosageUnit').value;
+    const crop = document.getElementById('mathCrop').value, pestKey = document.getElementById('mathPest').value;
+    const contSize = parseFloat(document.getElementById('mathContSize').value)||250, contPrice = parseFloat(document.getElementById('mathContPrice').value)||150;
+    const dosage = parseFloat(document.getElementById('mathDosage').value)||200, unit = document.getElementById('mathDosageUnit').value;
     const farmSize = parseFloat(document.getElementById('mathFarmSlider').value);
-    const pestData = CROP_DB[crop].pests[pestKey];
-    const cropData = CROP_DB[crop];
-    let dosagePerHa = dosage;
-    if (unit === 'acre') dosagePerHa = dosage * 2.471;
-    else if (unit === '20L') dosagePerHa = dosage * 5;
-    const totalMl = dosagePerHa * farmSize;
-    const totalCost = totalMl * (contPrice / contSize);
-    const potentialLoss = cropData.yieldValue * farmSize * (pestData.lossPct / 100);
-    const savings = potentialLoss - totalCost;
-    const containers = Math.ceil(totalMl / contSize);
-    const roi = totalCost > 0 ? (savings / totalCost) * 100 : 0;
-    document.getElementById('mathResult').innerHTML = `<div class="math-result"><h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3><div class="grid-2cols" style="margin:14px 0;"><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div><small>Spray</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div><small>Bottles</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div><small>Cost</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div><small>Savings</small></div></div><p>ROI: ${roi.toFixed(0)}% | Loss without spray: K${potentialLoss.toFixed(2)}</p></div>`;
-    document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
+    const pestData = CROP_DB[crop].pests[pestKey], cropData = CROP_DB[crop];
+    let dph = dosage; if (unit==='acre') dph*=2.471; else if (unit==='20L') dph*=5;
+    const totalMl = dph*farmSize, totalCost = totalMl*(contPrice/contSize), potentialLoss = cropData.yieldValue*farmSize*(pestData.lossPct/100);
+    document.getElementById('mathResult').innerHTML = `<div class="math-result"><h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3><div class="grid-2cols"><div>${totalMl.toFixed(1)}ml</div><div>${Math.ceil(totalMl/contSize)} bottles</div><div>K${totalCost.toFixed(2)}</div><div>K${(potentialLoss-totalCost).toFixed(2)} saved</div></div></div>`;
     showToast('Done!');
 }
 
-// ═══════════════════════════════════════════
-// SENSOR HUB
-// ═══════════════════════════════════════════
-
 function analyzeLeaf(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+    const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = function(e) {
         const img = new Image();
         img.onload = function() {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const ratio = Math.min(400 / img.width, 400 / img.height);
-            canvas.width = img.width * ratio;
-            canvas.height = img.height * ratio;
+            const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+            const ratio = Math.min(400/img.width, 400/img.height);
+            canvas.width = img.width*ratio; canvas.height = img.height*ratio;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const colors = analyzeLeafColors(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            const colors = analyzeLeafColors(ctx.getImageData(0,0,canvas.width,canvas.height));
             const diagnosis = diagnoseFromColors(colors);
             if (navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => { currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude }; });
             sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, diagnosis });
             document.getElementById('cameraPreview').innerHTML = `<img src="${e.target.result}" style="max-width:100%;border-radius:20px;"><p><strong>${diagnosis.plant}</strong> (${diagnosis.confidence}%)</p><p>${diagnosis.recommendation}</p>`;
-            showToast(diagnosis.severity > 0 ? 'Issues detected!' : 'Healthy!');
         };
         img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
-
-function getGPS() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(pos => {
-        currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
-    });
-}
-
-function checkLight() {
-    document.getElementById('lightLabel').textContent = 'Sensor check done';
-}
-
-function toggleScanMap() {
-    const map = document.getElementById('scanMapDiv');
-    map.style.display = map.style.display === 'none' ? 'block' : 'none';
-}
-
+function getGPS() { if (navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => { currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude }; document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`; }); }
+function checkLight() { document.getElementById('lightLabel').textContent = 'Checked'; }
+function toggleScanMap() { document.getElementById('scanMapDiv').style.display = document.getElementById('scanMapDiv').style.display==='none'?'block':'none'; }
 function updateScanMapUI() {
-    const list = document.getElementById('scanMapList');
-    if (!sensorScans.length) { list.innerHTML = '<p>No scans yet.</p>'; return; }
-    list.innerHTML = sensorScans.map(s => `<div style="padding:8px;border-bottom:1px solid var(--border);"><strong>${s.diagnosis.plant}</strong>${s.gps?`<br><small>${s.gps.lat.toFixed(3)}, ${s.gps.lon.toFixed(3)}</small>`:''}</div>`).join('');
+    if (!sensorScans.length) { document.getElementById('scanMapList').innerHTML = '<p>No scans</p>'; return; }
+    document.getElementById('scanMapList').innerHTML = sensorScans.map(s => `<div style="padding:8px;border-bottom:1px solid var(--border);"><strong>${s.diagnosis.plant}</strong></div>`).join('');
 }
-
-// ═══════════════════════════════════════════
-// AUTO-SCOUT
-// ═══════════════════════════════════════════
 
 async function startScout() {
-    scoutingActive = true;
-    scoutSteps = 0; scoutScans = 0; scoutInfections = 0; scoutDist = 0; scoutStepsSinceScan = 0; scoutPendingScan = false;
-    document.getElementById('startScoutBtn').style.display = 'none';
-    document.getElementById('stopScoutBtn').style.display = 'inline-block';
+    scoutingActive = true; scoutSteps = 0; scoutScans = 0; scoutInfections = 0; scoutDist = 0; scoutStepsSinceScan = 0; scoutPendingScan = false;
+    document.getElementById('startScoutBtn').style.display = 'none'; document.getElementById('stopScoutBtn').style.display = 'inline-block';
     document.getElementById('scoutStatusDiv').innerHTML = '<h3 style="color:var(--accent);">Scouting</h3>';
     if (window.DeviceMotionEvent) window.addEventListener('devicemotion', detectStep);
     scoutTimer = setInterval(() => { if (scoutingActive) checkForScanPrompt(); }, 2000);
 }
-
 function stopScout() {
-    scoutingActive = false;
-    clearInterval(scoutTimer);
-    window.removeEventListener('devicemotion', detectStep);
-    document.getElementById('startScoutBtn').style.display = 'inline-block';
-    document.getElementById('stopScoutBtn').style.display = 'none';
+    scoutingActive = false; clearInterval(scoutTimer); window.removeEventListener('devicemotion', detectStep);
+    document.getElementById('startScoutBtn').style.display = 'inline-block'; document.getElementById('stopScoutBtn').style.display = 'none';
     document.getElementById('scoutStatusDiv').innerHTML = '<h3>Stopped</h3>';
-    document.getElementById('scoutReport').innerHTML = `<div class="math-result"><h3>Report</h3><p>Photos: ${scoutScans} | Issues: ${scoutInfections} | Steps: ${scoutSteps} | ${scoutDist}m</p></div>`;
+    document.getElementById('scoutReport').innerHTML = `<div class="math-result"><h3>Report</h3><p>Photos: ${scoutScans} | Steps: ${scoutSteps} | ${scoutDist}m</p></div>`;
 }
-
 function detectStep(e) {
     if (!scoutingActive) return;
-    const a = e.accelerationIncludingGravity;
-    if (!a) return;
-    const mag = Math.sqrt(a.x**2 + a.y**2 + a.z**2);
-    if (mag > 12 && (Math.abs(a.x-scoutLastAccel.x)>3 || Math.abs(a.y-scoutLastAccel.y)>3)) {
-        const now = Date.now();
-        if (now - scoutLastStep > 300) {
-            scoutSteps++; scoutStepsSinceScan++;
-            scoutDist = (scoutSteps * 0.75).toFixed(1);
-            document.getElementById('scoutSteps').textContent = scoutSteps;
-            document.getElementById('scoutDist').textContent = scoutDist + 'm';
-            scoutLastStep = now;
-        }
+    const a = e.accelerationIncludingGravity; if (!a) return;
+    if (Math.sqrt(a.x**2+a.y**2+a.z**2) > 12 && (Math.abs(a.x-scoutLastAccel.x)>3||Math.abs(a.y-scoutLastAccel.y)>3)) {
+        if (Date.now()-scoutLastStep > 300) { scoutSteps++; scoutStepsSinceScan++; scoutDist = (scoutSteps*0.75).toFixed(1); document.getElementById('scoutSteps').textContent = scoutSteps; document.getElementById('scoutDist').textContent = scoutDist+'m'; scoutLastStep = Date.now(); }
     }
     scoutLastAccel = { x: a.x, y: a.y, z: a.z };
 }
-
-function checkForScanPrompt() {
-    if (!scoutingActive || scoutPendingScan) return;
-    if (scoutStepsSinceScan >= 2) { scoutPendingScan = true; showScanPrompt(); }
-}
-
-function showScanPrompt() {
-    document.getElementById('promptStepNum').textContent = scoutSteps;
-    document.getElementById('scoutPrompt').style.display = 'block';
-    if (navigator.vibrate) navigator.vibrate([300, 200, 300]);
-}
-
+function checkForScanPrompt() { if (scoutingActive && !scoutPendingScan && scoutStepsSinceScan >= 2) { scoutPendingScan = true; showScanPrompt(); } }
+function showScanPrompt() { document.getElementById('promptStepNum').textContent = scoutSteps; document.getElementById('scoutPrompt').style.display = 'block'; if (navigator.vibrate) navigator.vibrate([300,200,300]); }
 function captureScoutPhoto() { document.getElementById('scoutCamera').click(); }
-
 function handleScoutPhoto(event) {
-    const file = event.target.files[0];
-    if (!file) { scoutPendingScan = false; document.getElementById('scoutPrompt').style.display = 'none'; return; }
-    scoutScans++; scoutStepsSinceScan = 0;
-    document.getElementById('scoutScans').textContent = scoutScans;
-    document.getElementById('scoutPrompt').style.display = 'none';
-    scoutPendingScan = false;
-    event.target.value = '';
+    if (!event.target.files[0]) { scoutPendingScan = false; document.getElementById('scoutPrompt').style.display = 'none'; return; }
+    scoutScans++; scoutStepsSinceScan = 0; document.getElementById('scoutScans').textContent = scoutScans;
+    document.getElementById('scoutPrompt').style.display = 'none'; scoutPendingScan = false; event.target.value = '';
 }
 
 // ═══════════════════════════════════════════
 // AUTH MODAL
 // ═══════════════════════════════════════════
 
-function openModal(mode) {
-    document.getElementById('modalTitle').innerText = mode === 'login' ? 'Welcome Back' : 'Create Account';
-    document.getElementById('authDisplayName').style.display = mode === 'login' ? 'none' : 'block';
-    document.getElementById('authModal').style.display = 'flex';
-}
-
-function closeModal() {
-    document.getElementById('authModal').style.display = 'none';
-}
+function openModal(mode) { document.getElementById('modalTitle').innerText = mode==='login'?'Welcome Back':'Create Account'; document.getElementById('authDisplayName').style.display = mode==='login'?'none':'block'; document.getElementById('authModal').style.display = 'flex'; }
+function closeModal() { document.getElementById('authModal').style.display = 'none'; }
 
 // ═══════════════════════════════════════════
 // DOM READY
 // ═══════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('hamburgerBtn').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.toggle('open');
-        document.getElementById('sidebarOverlay').classList.toggle('active');
-    });
-    document.getElementById('sidebarOverlay').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.remove('open');
-        document.getElementById('sidebarOverlay').classList.remove('active');
-    });
-    document.getElementById('navLinks').addEventListener('click', (e) => {
-        const li = e.target.closest('li');
-        if (li && li.dataset.page) { e.preventDefault(); showPage(li.dataset.page); }
-    });
+    document.getElementById('hamburgerBtn').addEventListener('click', () => { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sidebarOverlay').classList.toggle('active'); });
+    document.getElementById('sidebarOverlay').addEventListener('click', () => { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarOverlay').classList.remove('active'); });
+    document.getElementById('navLinks').addEventListener('click', e => { const li = e.target.closest('li'); if (li?.dataset.page) { e.preventDefault(); showPage(li.dataset.page); } });
 
     document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
     document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
@@ -912,88 +786,34 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
     document.getElementById('signupBtn').addEventListener('click', () => { authMode = 'signup'; });
     document.getElementById('authSubmitBtn').addEventListener('click', async () => {
-        const email = document.getElementById('authEmail').value.trim();
-        const password = document.getElementById('authPass').value;
-        const displayName = document.getElementById('authDisplayName').value.trim();
-        try {
-            if (authMode === 'login') await login(email, password);
-            else { if (!displayName) return showToast('Name required', true); await signUp(email, password, displayName); }
-            closeModal();
-        } catch (err) { showToast(err.message, true); }
+        const email = document.getElementById('authEmail').value.trim(), password = document.getElementById('authPass').value, displayName = document.getElementById('authDisplayName').value.trim();
+        try { if (authMode==='login') await login(email, password); else { if (!displayName) return showToast('Name required', true); await signUp(email, password, displayName); } closeModal(); } catch (err) { showToast(err.message, true); }
     });
     document.getElementById('userGreeting').addEventListener('click', logout);
 
     document.querySelector('.main-content').addEventListener('click', async (e) => {
-        const target = e.target;
-        if (target.closest('#postForumBtn')) { const c = document.getElementById('forumContent').value.trim(); if (c) { addForumPost(c, document.getElementById('forumImage').files[0]); document.getElementById('forumContent').value = ''; } }
-        if (target.closest('#createGroupBtn')) createGroup();
-        if (target.closest('#addRecordBtn')) { const t = document.getElementById('recordTitle').value.trim(); if (t) { addRecord(t, document.getElementById('recordDetail').value, document.getElementById('recordLocation').value); document.getElementById('recordTitle').value = ''; } }
-        if (target.closest('#postJobBtn')) { const t = document.getElementById('jobTitle').value.trim(); if (t) { addJob(t, document.getElementById('jobDesc').value, document.getElementById('jobLocation').value); document.getElementById('jobTitle').value = ''; } }
-        if (target.closest('#sendMsgBtn')) { const to = document.getElementById('msgTo').value.trim(); const tx = document.getElementById('msgText').value.trim(); if (to && tx) { sendMessage(to, tx); } }
-        if (target.closest('#addEventBtn')) addEvent();
-        if (target.closest('#calcYieldBtn')) calculateYield();
-        if (target.closest('#addVideoBtn')) { const t = document.getElementById('videoTitle').value.trim(); const u = document.getElementById('videoUrl').value.trim(); if (t && u) { addTutorial(t, u, document.getElementById('videoDesc').value); } }
-        if (target.closest('#saveProfileBtn')) {
-            if (!currentUser) return;
-            const dn = document.getElementById('editDisplayName').value.trim();
-            await db.from('profiles').update({ display_name: dn, phone: document.getElementById('editPhone').value, location: document.getElementById('editLocation').value, bio: document.getElementById('editBio').value }).eq('id', currentUser.id);
-            currentUser.displayName = dn || currentUser.displayName;
-            updateAuthUI();
-            showToast('Updated!');
-            loadProfile();
-        }
-        if (target.closest('#sendChatBtn')) {
-            const input = document.getElementById('chatInput').value.trim();
-            if (!input) return;
-            const chat = document.getElementById('chatMessages');
-            chat.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
-            document.getElementById('chatInput').value = '';
-            chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(await wikiAnswer(input))}</div>`;
-            chat.scrollTop = chat.scrollHeight;
-        }
-        const deleteBtn = target.closest('.delete-btn');
-        if (deleteBtn) {
-            if (!currentUser) return showToast('Login first', true);
-            if (!confirm('Delete?')) return;
-            const { type, id } = deleteBtn.dataset;
-            if (type==='forum') deleteForumPost(id);
-            else if (type==='record') deleteRecord(id);
-            else if (type==='job') deleteJob(id);
-            else if (type==='product') deleteProduct(id);
-            else if (type==='tutorial') deleteTutorial(id);
-            else if (type==='calendar') deleteCalendarEvent(id);
-        }
-        if (target.closest('.apply-btn')) { e.preventDefault(); applyToJob(target.closest('.apply-btn').dataset.job); }
-        if (target.closest('.accept-app')) updateApplicationStatus(target.closest('.accept-app').dataset.id, 'accepted');
-        if (target.closest('.reject-app')) updateApplicationStatus(target.closest('.reject-app').dataset.id, 'rejected');
-        if (target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn')) {
-            const btn = target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn');
-            document.getElementById('msgTo').value = btn.dataset.email;
-            document.getElementById('msgText').value = `Hello ${btn.dataset.name}, `;
-            showPage('messages');
-        }
+        const t = e.target;
+        if (t.closest('#postForumBtn')) { const c = document.getElementById('forumContent').value.trim(); if (c) { addForumPost(c, document.getElementById('forumImage').files[0]); document.getElementById('forumContent').value = ''; } }
+        if (t.closest('#createGroupBtn')) createGroup();
+        if (t.closest('#addRecordBtn')) { const tt = document.getElementById('recordTitle').value.trim(); if (tt) { addRecord(tt, document.getElementById('recordDetail').value, document.getElementById('recordLocation').value); document.getElementById('recordTitle').value = ''; } }
+        if (t.closest('#postJobBtn')) { const tt = document.getElementById('jobTitle').value.trim(); if (tt) { addJob(tt, document.getElementById('jobDesc').value, document.getElementById('jobLocation').value); document.getElementById('jobTitle').value = ''; } }
+        if (t.closest('#sendMsgBtn')) { const to = document.getElementById('msgTo').value.trim(), tx = document.getElementById('msgText').value.trim(); if (to&&tx) sendMessage(to, tx); }
+        if (t.closest('#addEventBtn')) addEvent();
+        if (t.closest('#calcYieldBtn')) calculateYield();
+        if (t.closest('#addVideoBtn')) { const tt = document.getElementById('videoTitle').value.trim(), u = document.getElementById('videoUrl').value.trim(); if (tt&&u) addTutorial(tt, u, document.getElementById('videoDesc').value); }
+        if (t.closest('#doSearchBtn')) { const term = document.getElementById('searchInput').value.trim(); if (term) globalSearch(term, document.getElementById('searchCategory').value, document.getElementById('searchDateFrom').value, document.getElementById('searchDateTo').value); }
+        if (t.closest('#saveProfileBtn')) { if (!currentUser) return; const dn = document.getElementById('editDisplayName').value.trim(); await db.from('profiles').update({ display_name: dn, phone: document.getElementById('editPhone').value, location: document.getElementById('editLocation').value, bio: document.getElementById('editBio').value }).eq('id', currentUser.id); currentUser.displayName = dn||currentUser.displayName; updateAuthUI(); showToast('Updated!'); loadProfile(); }
+        if (t.closest('#sendChatBtn')) { const input = document.getElementById('chatInput').value.trim(); if (!input) return; const chat = document.getElementById('chatMessages'); chat.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`; document.getElementById('chatInput').value = ''; chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(await wikiAnswer(input))}</div>`; chat.scrollTop = chat.scrollHeight; }
+        const del = t.closest('.delete-btn'); if (del) { if (!currentUser) return showToast('Login first', true); if (!confirm('Delete?')) return; const { type, id } = del.dataset; if (type==='forum') deleteForumPost(id); else if (type==='record') deleteRecord(id); else if (type==='job') deleteJob(id); else if (type==='product') deleteProduct(id); else if (type==='tutorial') deleteTutorial(id); else if (type==='calendar') deleteCalendarEvent(id); }
+        if (t.closest('.apply-btn')) { e.preventDefault(); applyToJob(t.closest('.apply-btn').dataset.job); }
+        if (t.closest('.accept-app')) updateApplicationStatus(t.closest('.accept-app').dataset.id, 'accepted');
+        if (t.closest('.reject-app')) updateApplicationStatus(t.closest('.reject-app').dataset.id, 'rejected');
+        const ct = t.closest('.contact-applicant-btn') || t.closest('.contact-poster-btn'); if (ct) { document.getElementById('msgTo').value = ct.dataset.email; document.getElementById('msgText').value = `Hello ${ct.dataset.name}, `; showPage('messages'); }
     });
 
-    const mathCrop = document.getElementById('mathCrop');
-    if (mathCrop) {
-        mathCrop.addEventListener('change', populatePests);
-        document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
-        document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
-        document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
-        document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
-        document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
-        populatePests();
-        updateCostPerMl();
-        renderSavedChems();
-    }
-
+    const mc = document.getElementById('mathCrop'); if (mc) { mc.addEventListener('change', populatePests); document.getElementById('mathPest').addEventListener('change', updateDosageFromPest); document.getElementById('mathContSize').addEventListener('input', updateCostPerMl); document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl); document.getElementById('mathDosage').addEventListener('input', updateCostPerMl); document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl); populatePests(); updateCostPerMl(); renderSavedChems(); }
     document.getElementById('marketCategoryFilter')?.addEventListener('change', loadMarket);
-    document.getElementById('addProductBtn')?.addEventListener('click', () => {
-        const n = document.getElementById('productName').value.trim();
-        const p = document.getElementById('productPrice').value.trim();
-        if (n && p) addProduct(n, p, document.getElementById('productCategory').value, document.getElementById('productLocation').value, document.getElementById('productImage').files[0]);
-    });
+    document.getElementById('addProductBtn')?.addEventListener('click', () => { const n = document.getElementById('productName').value.trim(), p = document.getElementById('productPrice').value.trim(); if (n&&p) addProduct(n, p, document.getElementById('productCategory').value, document.getElementById('productLocation').value, document.getElementById('productImage').files[0]); });
 
-    checkSession();
-    showPage('dashboard');
+    checkSession(); showPage('dashboard');
 });
