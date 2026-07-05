@@ -41,7 +41,8 @@ async function checkSession() {
     const { data: { session } } = await db.auth.getSession();
     if (session && session.user) {
         const { data: profile } = await db.from('profiles').select('display_name').eq('id', session.user.id).single();
-        currentUser = { id: session.user.id, email: session.user.email, displayName: profile?.display_name || session.user.email };
+        const displayName = profile?.display_name || session.user.email?.split('@')[0] || 'Farmer';
+        currentUser = { id: session.user.id, email: session.user.email, displayName: displayName };
     } else { currentUser = null; }
     updateAuthUI();
     if (currentUser) loadDashboardStats();
@@ -63,9 +64,10 @@ function updateAuthUI() {
 async function signUp(email, password, displayName) {
     const { data, error } = await db.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
-    await db.from('profiles').upsert({ id: data.user.id, display_name: displayName, email: email });
+    const nameToSave = displayName?.trim() || email.split('@')[0];
+    await db.from('profiles').upsert({ id: data.user.id, display_name: nameToSave, email: email });
     await checkSession();
-    showToast(`Welcome, ${displayName}!`);
+    showToast(`Welcome, ${nameToSave}!`);
 }
 
 async function login(email, password) {
@@ -400,19 +402,37 @@ function calculateYield() {
 // ────────── Search ──────────
 async function globalSearch(term, category, dateFrom, dateTo) {
     const q = `%${term}%`;
-    let queries = [];
-    if (category==='all'||category==='forum') queries.push(db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5));
-    if (category==='all'||category==='records') queries.push(db.from('farm_records').select('title,created_at').ilike('title',q).limit(5));
-    if (category==='all'||category==='jobs') queries.push(db.from('job_listings').select('title,created_at').ilike('title',q).limit(5));
-    if (category==='all'||category==='tutorials') queries.push(db.from('tutorials').select('title,created_at').ilike('title',q).limit(5));
-    const resultsArr = await Promise.all(queries);
     const results = [];
-    resultsArr.forEach(res => {
-        if (res.data) res.data.forEach(r => {
-            if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push(r.content||r.title);
-        });
-    });
-    document.getElementById('searchResults').innerHTML = results.length ? results.map(t => `<div style="padding:12px;"><i class="fas fa-search"></i> ${escapeHtml(t.substring(0,100))}</div>`).join('') : '<p>No matches found.</p>';
+    
+    if (category==='all'||category==='forum') {
+        const { data } = await db.from('forum_posts').select('content,created_at').ilike('content',q).limit(5);
+        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Forum Post', text: r.content?.substring(0,100), date: r.created_at }); });
+    }
+    if (category==='all'||category==='records') {
+        const { data } = await db.from('farm_records').select('title,created_at').ilike('title',q).limit(5);
+        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Farm Record', text: r.title, date: r.created_at }); });
+    }
+    if (category==='all'||category==='jobs') {
+        const { data } = await db.from('job_listings').select('title,created_at').ilike('title',q).limit(5);
+        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Job', text: r.title, date: r.created_at }); });
+    }
+    if (category==='all'||category==='tutorials') {
+        const { data } = await db.from('tutorials').select('title,created_at').ilike('title',q).limit(5);
+        if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Tutorial', text: r.title, date: r.created_at }); });
+    }
+    
+    // User search
+    if (category==='all') {
+        const { data: users } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('display_name',q).limit(10);
+        if (users) users.forEach(u => { results.push({ type: 'User', text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`, date: u.created_at }); });
+        if (results.filter(r => r.type === 'User').length === 0) {
+            const { data: usersByEmail } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('email',q).limit(5);
+            if (usersByEmail) usersByEmail.forEach(u => { results.push({ type: 'User', text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`, date: u.created_at }); });
+        }
+    }
+    
+    results.sort((a, b) => new Date(b.date) - new Date(a.date));
+    document.getElementById('searchResults').innerHTML = results.length ? results.map(r => `<div style="padding:12px;margin-bottom:8px;background:var(--card-bg);border-radius:12px;border-left:3px solid var(--accent);"><span style="font-size:0.7rem;color:var(--accent);font-weight:600;">${r.type}</span><p style="margin:4px 0;">${escapeHtml(r.text)}</p><small>${r.date ? new Date(r.date).toLocaleDateString() : ''}</small></div>`).join('') : '<p>No matches found.</p>';
 }
 
 // ────────── Chat ──────────
