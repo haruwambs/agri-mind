@@ -6,9 +6,8 @@
     <title>AgriMind | Smart Farming Platform</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js" defer></script>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div class="app-container">
@@ -32,6 +31,9 @@
             <li data-page="messages"><a><i class="fas fa-paper-plane"></i> Messages</a></li>
             <li data-page="calendar"><a><i class="fas fa-calendar-alt"></i> Crop Calendar</a></li>
             <li data-page="calculator"><a><i class="fas fa-calculator"></i> Yield Calculator</a></li>
+            <li data-page="farmmath"><a><i class="fas fa-percentage"></i> Farm Math Tool</a></li>
+            <li data-page="sensorhub"><a><i class="fas fa-microchip"></i> Sensor Hub</a></li>
+            <li data-page="autoscout"><a><i class="fas fa-robot"></i> Auto-Scout</a></li>
             <li data-page="search"><a><i class="fas fa-search"></i> Search</a></li>
             <li data-page="tutorials"><a><i class="fas fa-video"></i> Tutorials & Videos</a></li>
             <li data-page="profile"><a><i class="fas fa-user-circle"></i> Profile</a></li>
@@ -47,7 +49,7 @@
                 <button class="btn-outline" id="loginBtn">Log in</button>
                 <button class="btn-outline" id="signupBtn">Sign up</button>
             </div>
-            <div id="userGreeting" class="user-greeting" style="display: none;"></div>
+            <div id="userGreeting" class="user-greeting" style="display:none;"></div>
             <div class="theme-toggle" id="themeToggle"><i class="fas fa-adjust"></i></div>
         </div>
 
@@ -55,22 +57,22 @@
         <div id="dashboard" class="page active-page">
             <div class="card">
                 <h2><i class="fas fa-charging-station"></i> Smart Farming Dashboard</h2>
-                <p style="margin-top: 8px;">Your complete agricultural companion - pest identification, community knowledge, and farm management tools.</p>
-                <div class="card" style="background:#0a0a0a; margin-top:20px;">
+                <p style="margin-top:8px;">Your complete agricultural companion - pest identification, community knowledge, and farm management tools.</p>
+                <div class="card" style="background:#0a0a0a;margin-top:20px;">
                     <h4><i class="fas fa-cloud-sun"></i> Weather</h4>
                     <div id="weatherWidget">Loading weather...</div>
                 </div>
-                <div class="card" style="background:#0a0a0a; margin-top:20px; border-left:4px solid #10B981;">
-                    <h4 style="color:#10B981; margin-bottom:8px;"><i class="fas fa-microscope"></i> Offline Pest Detector</h4>
-                    <p style="font-size:0.9rem; color:#aaa; line-height:1.6;">Get our standalone pest detection tool that works <strong>completely offline</strong> on any device. Identifies <strong>102 pest species</strong> including stalk borer, armyworm, and more — no internet needed.</p>
-                    <a href="https://wa.me/260573373146?text=Hi%2C%20I%20would%20like%20to%20get%20the%20AgriMind%20Pest%20Detector%20file." target="_blank" class="btn-primary" style="text-decoration:none; margin-top:12px; display:inline-flex; align-items:center; gap:8px;"><i class="fab fa-whatsapp"></i> Request via WhatsApp</a>
-                    <p style="font-size:0.7rem; color:#666; margin-top:8px;">or contact <strong>+260 573373146</strong> · Works offline · No app install needed</p>
+                <div class="card" style="background:#0a0a0a;margin-top:20px;border-left:4px solid #10B981;">
+                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-microscope"></i> Offline Pest Detector</h4>
+                    <p style="font-size:0.9rem;color:#aaa;line-height:1.6;">Get our standalone pest detection tool that works <strong>completely offline</strong> on any device. Identifies <strong>102 pest species</strong> including stalk borer, armyworm, and more — no internet needed.</p>
+                    <a href="https://wa.me/260573373146?text=Hi%2C%20I%20would%20like%20to%20get%20the%20AgriMind%20Pest%20Detector%20file." target="_blank" class="btn-primary" style="text-decoration:none;margin-top:12px;display:inline-flex;align-items:center;gap:8px;"><i class="fab fa-whatsapp"></i> Request via WhatsApp</a>
+                    <p style="font-size:0.7rem;color:#666;margin-top:8px;">or contact <strong>+260 573373146</strong> · Works offline · No app install needed</p>
                 </div>
-                <div class="grid-2cols" style="margin-top: 28px;">
-                    <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-clipboard-list" style="font-size:28px; color:#10B981;"></i> <strong>Farm Records</strong><br><span id="statRecords">0</span> entries</div>
-                    <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-briefcase" style="font-size:28px; color:#10B981;"></i> <strong>Jobs</strong><br><span id="statJobs">0</span> active</div>
-                    <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-video" style="font-size:28px; color:#10B981;"></i> <strong>Tutorials</strong><br><span id="statTuts">0</span> videos</div>
-                    <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-users" style="font-size:28px; color:#10B981;"></i> <strong>Forum Posts</strong><br><span id="statForum">0</span></div>
+                <div class="grid-2cols" style="margin-top:28px;">
+                    <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-clipboard-list" style="font-size:28px;color:#10B981;"></i> <strong>Farm Records</strong><br><span id="statRecords">0</span> entries</div>
+                    <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-briefcase" style="font-size:28px;color:#10B981;"></i> <strong>Jobs</strong><br><span id="statJobs">0</span> active</div>
+                    <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-video" style="font-size:28px;color:#10B981;"></i> <strong>Tutorials</strong><br><span id="statTuts">0</span> videos</div>
+                    <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-users" style="font-size:28px;color:#10B981;"></i> <strong>Forum Posts</strong><br><span id="statForum">0</span></div>
                 </div>
             </div>
         </div>
@@ -81,7 +83,7 @@
                 <h2><i class="fas fa-robot"></i> Smart Farming Assistant</h2>
                 <p>Ask any farming-related question and get instant, helpful information from our agricultural knowledge base.</p>
                 <div id="chatMessages" class="chat-window"><div class="message-bubble bot-msg">Hello! I'm your farming assistant. Ask me about crop management, pest control, soil health, or any agricultural topic. How can I help you today?</div></div>
-                <div style="display:flex; gap:12px; margin-top:18px;"><input type="text" id="chatInput" placeholder="e.g., how to control aphids naturally, best maize varieties..."><button id="sendChatBtn" class="btn-primary">Ask</button></div>
+                <div style="display:flex;gap:12px;margin-top:18px;"><input type="text" id="chatInput" placeholder="e.g., how to control aphids naturally, best maize varieties..."><button id="sendChatBtn" class="btn-primary">Ask</button></div>
             </div>
         </div>
 
@@ -165,11 +167,11 @@
                 <input id="productName" placeholder="Product Name">
                 <input id="productPrice" placeholder="Price (in your local currency)">
                 <input id="productLocation" placeholder="Location">
-                <select id="productCategory" style="background:var(--input-bg); border:1px solid var(--border); padding:12px 18px; border-radius:34px; color:var(--text-color); width:100%; margin:8px 0 16px; font-family:'Inter',sans-serif;"><option value="General">General</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option><option value="Other">Other</option></select>
+                <select id="productCategory" style="background:var(--input-bg);border:1px solid var(--border);padding:12px 18px;border-radius:34px;color:var(--text-color);width:100%;margin:8px 0 16px;font-family:'Inter',sans-serif;"><option value="General">General</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option><option value="Other">Other</option></select>
                 <input type="file" id="productImage" accept="image/*" style="margin-bottom:16px;">
                 <button id="addProductBtn" class="btn-primary">List Product</button>
-                <div><label>Filter by category:</label><select id="marketCategoryFilter" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:auto; margin:8px 0;"><option value="All">All</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option><option value="Other">Other</option></select></div>
-                <input id="marketLocationFilter" placeholder="Filter by location..." style="width:100%; margin-bottom:8px;">
+                <div><label>Filter by category:</label><select id="marketCategoryFilter" style="background:var(--input-bg);border:1px solid var(--border);padding:8px 12px;border-radius:34px;color:var(--text-color);width:auto;margin:8px 0;"><option value="All">All</option><option value="Seeds">Seeds</option><option value="Tools">Tools</option><option value="Produce">Produce</option><option value="Livestock">Livestock</option><option value="Other">Other</option></select></div>
+                <input id="marketLocationFilter" placeholder="Filter by location..." style="width:100%;margin-bottom:8px;">
                 <div id="marketList" style="margin-top:24px;"></div>
             </div>
         </div>
@@ -204,10 +206,117 @@
             <div class="card">
                 <h2><i class="fas fa-calculator"></i> Yield Calculator</h2>
                 <p>Estimate your crop yield based on area and crop type.</p>
-                <label>Crop: <select id="cropType" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:100%; margin:8px 0;"><option value="maize">Maize</option><option value="rice">Rice</option><option value="wheat">Wheat</option><option value="beans">Beans</option></select></label>
+                <label>Crop: <select id="cropType" style="background:var(--input-bg);border:1px solid var(--border);padding:8px 12px;border-radius:34px;color:var(--text-color);width:100%;margin:8px 0;"><option value="maize">Maize</option><option value="rice">Rice</option><option value="wheat">Wheat</option><option value="beans">Beans</option></select></label>
                 <label>Area (hectares): <input type="number" id="areaInput" placeholder="e.g. 2.5" step="0.1" min="0"></label>
                 <button id="calcYieldBtn" class="btn-primary">Calculate Yield</button>
-                <div id="yieldResult" style="margin-top:12px; font-weight:bold;"></div>
+                <div id="yieldResult" style="margin-top:12px;font-weight:bold;"></div>
+            </div>
+        </div>
+
+        <!-- FARM MATH TOOL -->
+        <div id="farmmath" class="page">
+            <div class="card">
+                <h2><i class="fas fa-percentage"></i> Farm Math Tool</h2>
+                <p>Real farm economics in 3 taps. Enter your chemical, farm size, get exact costs.</p>
+                <div class="card" style="background:#0a0a0a;margin-top:16px;">
+                    <div class="step-row"><span class="step-num">1</span> Select Crop & Pest</div>
+                    <select id="mathCrop"><option value="maize">Maize</option><option value="tomato">Tomato</option><option value="rice">Rice</option><option value="beans">Beans</option><option value="cabbage">Cabbage</option></select>
+                    <select id="mathPest" style="margin-top:8px;"></select>
+                </div>
+                <div class="card" style="background:#0a0a0a;">
+                    <div class="step-row"><span class="step-num">2</span> Your Chemical Details</div>
+                    <input type="text" id="mathChemName" placeholder="Chemical name (e.g., Ampligo, Dudu-Cyber)" list="chemSuggest">
+                    <datalist id="chemSuggest"><option value="Ampligo (Syngenta)"><option value="Dudu-Cyber"><option value="Rocket (Villa Crop)"><option value="Cypermethrin"><option value="Lambda-Cyhalothrin"><option value="Emamectin Benzoate"><option value="Acetamiprid"><option value="Neem Oil (Organic)"></datalist>
+                    <div class="chem-row">
+                        <div><label>Container Size (ml)</label><input type="number" id="mathContSize" value="250" min="1"></div>
+                        <div><label>Price You Paid (K)</label><input type="number" id="mathContPrice" value="150" min="0" step="0.01"></div>
+                    </div>
+                    <small style="color:var(--accent);">Your cost per ml: <span id="mathCostPerMl">K0.60</span></small>
+                    <div class="chem-row" style="margin-top:8px;">
+                        <div><label>Recommended Dosage (ml)</label><input type="number" id="mathDosage" value="200" min="1"></div>
+                        <div><label>Per</label><select id="mathDosageUnit"><option value="ha">Hectare</option><option value="acre">Acre</option><option value="20L">20L Knapsack</option></select></div>
+                    </div>
+                    <button class="btn-outline" onclick="saveChemical()" style="margin-top:8px;font-size:0.85rem;">Save This Chemical</button>
+                    <div id="savedChems" style="display:none;margin-top:8px;"></div>
+                </div>
+                <div class="card" style="background:#0a0a0a;">
+                    <div class="step-row"><span class="step-num">3</span> Your Farm Size</div>
+                    <input type="range" id="mathFarmSlider" min="0.1" max="20" step="0.1" value="0.5" oninput="updateFarmSlider()">
+                    <div style="text-align:center;font-size:1.2rem;font-weight:700;color:var(--accent);"><span id="mathFarmDisplay">0.5</span> hectares</div>
+                </div>
+                <button class="btn-primary" onclick="calcFarmMath()" style="width:100%;">Calculate Cost & Savings</button>
+                <div id="mathResult" style="margin-top:16px;"></div>
+            </div>
+        </div>
+
+        <!-- SENSOR HUB -->
+        <div id="sensorhub" class="page">
+            <div class="card">
+                <h2><i class="fas fa-microchip"></i> Sensor Hub</h2>
+                <p>Real color-based leaf analysis using your phone's camera. Upload a real leaf photo to analyze.</p>
+                <div class="upload-zone" onclick="document.getElementById('leafCamera').click()">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h3>Upload Leaf Photo</h3>
+                    <p style="color:var(--text-secondary,#aaa);">Take a photo or select from gallery</p>
+                    <small style="color:var(--accent);">Real HSV color analysis · Works offline</small>
+                </div>
+                <input type="file" id="leafCamera" accept="image/*" capture="environment" style="display:none;" onchange="analyzeLeaf(event)">
+                <div style="display:flex;gap:10px;margin-bottom:16px;">
+                    <button class="btn-outline btn-sm" onclick="document.getElementById('leafCamera').click()" style="flex:1;">Take Photo</button>
+                    <button class="btn-outline btn-sm" onclick="document.getElementById('leafBrowse').click()" style="flex:1;">Browse Files</button>
+                </div>
+                <input type="file" id="leafBrowse" accept="image/*" style="display:none;" onchange="analyzeLeaf(event)">
+                <div class="grid-2cols" style="margin-bottom:16px;">
+                    <div class="card sensor-tile" onclick="getGPS()" style="background:#0a0a0a;text-align:center;">
+                        <i class="fas fa-map-marker-alt" style="font-size:24px;color:var(--accent);"></i>
+                        <h4>GPS Location</h4>
+                        <small id="gpsLabel">Tap to get location</small>
+                    </div>
+                    <div class="card sensor-tile" onclick="checkLight()" style="background:#0a0a0a;text-align:center;">
+                        <i class="fas fa-sun" style="font-size:24px;color:var(--accent);"></i>
+                        <h4>Light Sensor</h4>
+                        <small id="lightLabel">Tap to check light</small>
+                    </div>
+                </div>
+                <div id="cameraPreview" style="margin-top:16px;"></div>
+                <button class="btn-outline" onclick="toggleScanMap()" style="width:100%;margin-top:12px;">View Disease Scan Map</button>
+                <div id="scanMapDiv" style="display:none;margin-top:16px;">
+                    <div class="card" style="background:#0a0a0a;">
+                        <h4>Disease Scan Map</h4>
+                        <div id="scanMapList"><p style="color:#aaa;">No scans yet. Upload a leaf photo to start!</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AUTO-SCOUT MODE -->
+        <div id="autoscout" class="page">
+            <div class="card">
+                <h2><i class="fas fa-robot"></i> Auto-Scout Mode</h2>
+                <p>Walk your field. Phone counts steps and prompts you to scan leaves at regular intervals.</p>
+                <div style="text-align:center;padding:20px;" id="scoutStatusDiv">
+                    <div style="font-size:4rem;">⏹️</div>
+                    <h3>Auto-Scout Stopped</h3>
+                    <p style="color:#aaa;">Phone in pocket, camera facing out</p>
+                </div>
+                <div class="grid-2cols" style="margin:16px 0;">
+                    <div class="card" style="background:#0a0a0a;text-align:center;padding:12px;"><div style="font-size:1.4rem;font-weight:700;color:var(--accent);" id="scoutSteps">0</div><small>Steps</small></div>
+                    <div class="card" style="background:#0a0a0a;text-align:center;padding:12px;"><div style="font-size:1.4rem;font-weight:700;color:var(--accent);" id="scoutScans">0</div><small>Photos Taken</small></div>
+                    <div class="card" style="background:#0a0a0a;text-align:center;padding:12px;"><div style="font-size:1.4rem;font-weight:700;color:var(--danger);" id="scoutInfections">0</div><small>Issues Found</small></div>
+                    <div class="card" style="background:#0a0a0a;text-align:center;padding:12px;"><div style="font-size:1.4rem;font-weight:700;color:var(--accent);" id="scoutDist">0m</div><small>Distance</small></div>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn-primary" id="startScoutBtn" onclick="startScout()">Start Auto-Scout</button>
+                    <button class="btn-outline" id="stopScoutBtn" onclick="stopScout()" style="display:none;border-color:var(--danger);color:var(--danger);">Stop</button>
+                </div>
+                <div id="scoutPrompt" class="scout-prompt" style="display:none;" onclick="captureScoutPhoto()">
+                    <i class="fas fa-camera" style="font-size:1.5rem;"></i>
+                    <strong>Tap to Scan Leaf Now!</strong>
+                    <p style="font-size:0.8rem;margin-top:4px;">Step <span id="promptStepNum">0</span> - Take a photo</p>
+                </div>
+                <input type="file" id="scoutCamera" accept="image/*" capture="environment" style="display:none;" onchange="handleScoutPhoto(event)">
+                <div id="scoutLog" style="background:#000;border-radius:12px;padding:12px;max-height:180px;overflow-y:auto;margin-top:12px;font-family:monospace;font-size:0.8rem;color:#aaa;">Ready to start scouting...</div>
+                <div id="scoutReport" style="margin-top:16px;"></div>
             </div>
         </div>
 
@@ -217,8 +326,8 @@
                 <h2><i class="fas fa-search"></i> Search Everything</h2>
                 <p>Find information across forums, records, jobs, and tutorials all in one place.</p>
                 <input id="searchInput" placeholder="Search all content...">
-                <select id="searchCategory" style="background:var(--input-bg); border:1px solid var(--border); padding:8px 12px; border-radius:34px; color:var(--text-color); width:auto; margin:8px 0;"><option value="all">All Categories</option><option value="forum">Forum</option><option value="records">Records</option><option value="jobs">Jobs</option><option value="tutorials">Tutorials</option></select>
-                <input type="date" id="searchDateFrom" style="width:auto; display:inline; margin:0 8px;"> to <input type="date" id="searchDateTo" style="width:auto; display:inline; margin:0 8px;">
+                <select id="searchCategory" style="background:var(--input-bg);border:1px solid var(--border);padding:8px 12px;border-radius:34px;color:var(--text-color);width:auto;margin:8px 0;"><option value="all">All Categories</option><option value="forum">Forum</option><option value="records">Records</option><option value="jobs">Jobs</option><option value="tutorials">Tutorials</option></select>
+                <input type="date" id="searchDateFrom" style="width:auto;display:inline;margin:0 8px;"> to <input type="date" id="searchDateTo" style="width:auto;display:inline;margin:0 8px;">
                 <button id="doSearchBtn" class="btn-primary">Search</button>
                 <div id="searchResults" style="margin-top:24px;"></div>
             </div>
@@ -241,24 +350,24 @@
         <div id="profile" class="page">
             <div class="card">
                 <h2><i class="fas fa-user-circle"></i> Your Profile</h2>
-                <div id="profileContent" style="margin-top: 20px;">
-                    <div style="display:flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-                        <div style="position: relative;">
-                            <img id="profileAvatar" src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981;">
-                            <label for="avatarUpload" style="position: absolute; bottom: 0; right: 0; background: #10B981; color: black; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px;"><i class="fas fa-camera"></i></label>
-                            <input type="file" id="avatarUpload" accept="image/*" style="display: none;">
+                <div id="profileContent" style="margin-top:20px;">
+                    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+                        <div style="position:relative;">
+                            <img id="profileAvatar" src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:2px solid #10B981;">
+                            <label for="avatarUpload" style="position:absolute;bottom:0;right:0;background:#10B981;color:black;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;"><i class="fas fa-camera"></i></label>
+                            <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
                         </div>
                         <div>
                             <h3 id="profileName" style="margin:0;">...</h3>
-                            <p id="profileEmail" style="color:#aaa; margin:5px 0;">...</p>
-                            <p id="profilePhone" style="color:#aaa; margin:5px 0;">📱 Phone: Not set</p>
-                            <p id="profileLocation" style="color:#aaa; margin:5px 0;">📍 Location: Not set</p>
-                            <p id="profileBio" style="color:#aaa; margin:5px 0;">💬 Bio: Not set</p>
-                            <p id="profileSince" style="color:#aaa; margin:5px 0;">Member since: ...</p>
+                            <p id="profileEmail" style="color:#aaa;margin:5px 0;">...</p>
+                            <p id="profilePhone" style="color:#aaa;margin:5px 0;">Phone: Not set</p>
+                            <p id="profileLocation" style="color:#aaa;margin:5px 0;">Location: Not set</p>
+                            <p id="profileBio" style="color:#aaa;margin:5px 0;">Bio: Not set</p>
+                            <p id="profileSince" style="color:#aaa;margin:5px 0;">Member since: ...</p>
                             <span id="followerCount">0 followers</span>
                         </div>
                     </div>
-                    <div style="margin-top:20px; padding:16px; background:#0a0a0a; border-radius:16px;">
+                    <div style="margin-top:20px;padding:16px;background:#0a0a0a;border-radius:16px;">
                         <h4 style="margin-bottom:12px;"><i class="fas fa-edit"></i> Edit Profile</h4>
                         <input id="editDisplayName" placeholder="Display Name">
                         <input id="editPhone" placeholder="Phone Number">
@@ -266,15 +375,15 @@
                         <textarea id="editBio" placeholder="Bio (tell us about yourself)" style="min-height:60px;"></textarea>
                         <button id="saveProfileBtn" class="btn-primary">Save Changes</button>
                     </div>
-                    <hr style="border-color:#2c2c2c; margin:20px 0;">
+                    <hr style="border-color:#2c2c2c;margin:20px 0;">
                     <h4>Your Contributions</h4>
-                    <div class="grid-2cols" style="margin-top: 10px;">
-                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-comments" style="color:#10B981;"></i> <strong>Forum Posts</strong><br><span id="profileForumCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-database" style="color:#10B981;"></i> <strong>Farm Records</strong><br><span id="profileRecordsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-briefcase" style="color:#10B981;"></i> <strong>Jobs Posted</strong><br><span id="profileJobsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-store" style="color:#10B981;"></i> <strong>Products Listed</strong><br><span id="profileProductsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-video" style="color:#10B981;"></i> <strong>Tutorials Shared</strong><br><span id="profileTutorialsCount">0</span></div>
-                        <div class="card" style="background:#0a0a0a; text-align:center;"><i class="fas fa-paper-plane" style="color:#10B981;"></i> <strong>Messages</strong><br><span id="profileMessagesCount">0</span></div>
+                    <div class="grid-2cols" style="margin-top:10px;">
+                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-comments" style="color:#10B981;"></i> <strong>Forum Posts</strong><br><span id="profileForumCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-database" style="color:#10B981;"></i> <strong>Farm Records</strong><br><span id="profileRecordsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-briefcase" style="color:#10B981;"></i> <strong>Jobs Posted</strong><br><span id="profileJobsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-store" style="color:#10B981;"></i> <strong>Products Listed</strong><br><span id="profileProductsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-video" style="color:#10B981;"></i> <strong>Tutorials Shared</strong><br><span id="profileTutorialsCount">0</span></div>
+                        <div class="card" style="background:#0a0a0a;text-align:center;"><i class="fas fa-paper-plane" style="color:#10B981;"></i> <strong>Messages</strong><br><span id="profileMessagesCount">0</span></div>
                     </div>
                 </div>
             </div>
@@ -297,11 +406,11 @@
         <div id="about" class="page">
             <div class="card">
                 <h2><i class="fas fa-leaf"></i> About AgriMind</h2>
-                <p style="font-size: 1.1rem; line-height: 1.8;">AgriMind is a comprehensive farming platform built to empower smallholder farmers and agricultural communities. Our mission is to make smart farming accessible to everyone, providing tools for pest identification, community knowledge sharing, farm management, and marketplace access - all in one place.</p>
-                <p style="margin-top: 16px; line-height: 1.8;">We believe that every farmer deserves access to technology that can improve their yields, protect their crops, and connect them with markets. AgriMind is designed to work offline and process data locally on your device, ensuring privacy and accessibility even in areas with limited internet connectivity.</p>
-                <div class="contact-card"><h3 style="color: white;"><i class="fas fa-user-circle"></i> Developer Information</h3><div class="contact-info"><p style="font-size: 1.2rem; margin-bottom: 12px;"><strong>Developed by:</strong> Wambulawae Daniel</p><p style="margin-bottom: 8px;"><i class="fas fa-phone"></i> <strong>Contact:</strong> +260 573373146</p><p style="margin-bottom: 8px;"><i class="fas fa-envelope"></i> <strong>Email:</strong> wambsharu0@gmail.com</p><p style="margin-top: 16px; font-size: 0.9rem;">For technical support, feature requests, or collaboration opportunities, please reach out through the contact information above.</p></div></div>
-                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;"><h3 style="color: #10B981; margin-bottom: 12px;"><i class="fas fa-heart"></i> Our Commitment</h3><p style="line-height: 1.8;">AgriMind is committed to supporting sustainable agriculture and food security. We continuously work to improve our platform based on feedback from the farming community. Together, we can build a smarter, more sustainable future for agriculture.</p></div>
-                <div style="margin-top: 24px; padding: 20px; background: #0a0a0a; border-radius: 20px;"><h3 style="color: #10B981; margin-bottom: 12px;"><i class="fas fa-bullseye"></i> Our Features</h3><ul style="list-style: none; line-height: 2;"><li>🌱 <strong>Smart Farming Assistant</strong> - Get instant answers to your farming questions</li><li>🔬 <strong>Offline Pest Detector</strong> - Identify 102+ pest species without internet</li><li>👥 <strong>Farmers Forum</strong> - Connect and share knowledge with fellow farmers</li><li>💼 <strong>Job Listings</strong> - Find agricultural jobs or post opportunities</li><li>🏪 <strong>Marketplace</strong> - Buy and sell farm products directly</li><li>📊 <strong>Farm Records</strong> - Track your farming activities and yields</li><li>📅 <strong>Crop Calendar</strong> - Plan your planting and harvesting schedule</li><li>🧮 <strong>Yield Calculator</strong> - Estimate your crop yields</li><li>🌐 <strong>Communities</strong> - Join location-based farming groups</li></ul></div>
+                <p style="font-size:1.1rem;line-height:1.8;">AgriMind is a comprehensive farming platform built to empower smallholder farmers and agricultural communities. Our mission is to make smart farming accessible to everyone, providing tools for pest identification, community knowledge sharing, farm management, and marketplace access - all in one place.</p>
+                <p style="margin-top:16px;line-height:1.8;">We believe that every farmer deserves access to technology that can improve their yields, protect their crops, and connect them with markets. AgriMind is designed to work offline and process data locally on your device, ensuring privacy and accessibility even in areas with limited internet connectivity.</p>
+                <div class="contact-card"><h3 style="color:white;"><i class="fas fa-user-circle"></i> Developer Information</h3><div class="contact-info"><p style="font-size:1.2rem;margin-bottom:12px;"><strong>Developed by:</strong> Wambulawae Daniel</p><p style="margin-bottom:8px;"><i class="fas fa-phone"></i> <strong>Contact:</strong> +260 573373146</p><p style="margin-bottom:8px;"><i class="fas fa-envelope"></i> <strong>Email:</strong> wambsharu0@gmail.com</p><p style="margin-top:16px;font-size:0.9rem;">For technical support, feature requests, or collaboration opportunities, please reach out through the contact information above.</p></div></div>
+                <div style="margin-top:24px;padding:20px;background:#0a0a0a;border-radius:20px;"><h3 style="color:#10B981;margin-bottom:12px;"><i class="fas fa-heart"></i> Our Commitment</h3><p style="line-height:1.8;">AgriMind is committed to supporting sustainable agriculture and food security. We continuously work to improve our platform based on feedback from the farming community. Together, we can build a smarter, more sustainable future for agriculture.</p></div>
+                <div style="margin-top:24px;padding:20px;background:#0a0a0a;border-radius:20px;"><h3 style="color:#10B981;margin-bottom:12px;"><i class="fas fa-bullseye"></i> Our Features</h3><ul style="list-style:none;line-height:2;"><li>🌱 <strong>Smart Farming Assistant</strong> - Get instant answers to your farming questions</li><li>🔬 <strong>Offline Pest Detector</strong> - Identify 102+ pest species without internet</li><li>👥 <strong>Farmers Forum</strong> - Connect and share knowledge with fellow farmers</li><li>💼 <strong>Job Listings</strong> - Find agricultural jobs or post opportunities</li><li>🏪 <strong>Marketplace</strong> - Buy and sell farm products directly</li><li>📊 <strong>Farm Records</strong> - Track your farming activities and yields</li><li>📅 <strong>Crop Calendar</strong> - Plan your planting and harvesting schedule</li><li>🧮 <strong>Yield Calculator</strong> - Estimate your crop yields</li><li>🌐 <strong>Communities</strong> - Join location-based farming groups</li></ul></div>
             </div>
         </div>
         
@@ -309,16 +418,28 @@
     </main>
 </div>
 
+<!-- Bottom Phone Navigation -->
+<div class="bottom-phone-nav">
+    <button class="phone-nav-item active" onclick="showPhonePage('dashboard',this)"><i class="fas fa-home"></i><span>Home</span></button>
+    <button class="phone-nav-item" onclick="showPhonePage('autoscout',this)"><i class="fas fa-robot"></i><span>Scout</span></button>
+    <button class="phone-nav-item" onclick="showPhonePage('wikichat',this)"><i class="fas fa-comment-dots"></i><span>Chat</span></button>
+    <button class="phone-nav-item" onclick="showPhonePage('search',this)"><i class="fas fa-search"></i><span>Search</span></button>
+    <button class="phone-nav-item" onclick="showPhonePage('messages',this)"><i class="fas fa-envelope"></i><span>Messages</span></button>
+    <button class="phone-nav-item" onclick="showPhonePage('profile',this)"><i class="fas fa-user"></i><span>Profile</span></button>
+</div>
+
 <!-- Auth Modal -->
-<div id="authModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:none; align-items:center; justify-content:center; z-index:1500;">
-    <div style="background:#0f0f0f; border-radius:48px; padding:32px; max-width:400px; width:90%; border:1px solid #10B981;">
+<div id="authModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:none;align-items:center;justify-content:center;z-index:1500;">
+    <div style="background:#0f0f0f;border-radius:48px;padding:32px;max-width:400px;width:90%;border:1px solid #10B981;">
         <h3 id="modalTitle">Log in</h3>
         <input type="email" id="authEmail" placeholder="Email" style="margin-top:16px;">
         <input type="password" id="authPass" placeholder="Password">
-        <input type="text" id="authDisplayName" placeholder="Display Name" style="display:none; margin-top:12px;">
+        <input type="text" id="authDisplayName" placeholder="Display Name" style="display:none;margin-top:12px;">
         <button id="authSubmitBtn" class="btn-primary" style="width:100%;">Continue</button>
-        <button id="closeModalBtn" class="btn-outline" style="margin-top:12px; width:100%;">Cancel</button>
+        <button id="closeModalBtn" class="btn-outline" style="margin-top:12px;width:100%;">Cancel</button>
     </div>
 </div>
+
+<script src="app.js"></script>
 </body>
 </html>
