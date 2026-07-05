@@ -70,29 +70,17 @@ async function checkSession() {
             displayName: displayName 
         };
         
-        // Update profile with email if missing
-        if (profile && (!profile.email || profile.email === '')) {
-            try {
-                await db.from('profiles')
-                    .update({ 
-                        display_name: displayName,
-                        email: session.user.email 
-                    })
-                    .eq('id', session.user.id);
-                console.log('Updated profile with email for user:', session.user.id);
-            } catch (err) {
-                console.log('Could not update profile:', err);
-            }
-        }
-        
-        if (profile && (!profile.display_name || profile.display_name.trim() === '')) {
-            try {
-                await db.from('profiles')
-                    .update({ display_name: displayName })
-                    .eq('id', session.user.id);
-            } catch (err) {
-                console.log('Could not update display name:', err);
-            }
+        // CRITICAL: Always update profile with email on login
+        try {
+            await db.from('profiles')
+                .update({ 
+                    display_name: displayName,
+                    email: session.user.email 
+                })
+                .eq('id', session.user.id);
+            console.log('Updated profile with email for user:', session.user.id);
+        } catch (err) {
+            console.log('Could not update profile:', err);
         }
     } else { 
         currentUser = null; 
@@ -160,7 +148,7 @@ db.auth.onAuthStateChange((event, session) => {
 // ────────── Weather ──────────
 async function loadWeather() {
     try {
-        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-1.28&longitude=36.82&current_weather=true');
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=-15.38&longitude=28.32&current_weather=true');
         const data = await res.json();
         if (data.current_weather) {
             document.getElementById('weatherWidget').innerHTML = `<p>🌡️ Temp: ${data.current_weather.temperature}°C</p><p>💨 Wind: ${data.current_weather.windspeed} km/h</p>`;
@@ -491,7 +479,7 @@ async function loadApplications() {
     }
 }
 
-// ────────── My Applications ──────────
+// ────────── My Applications (FIXED - uses direct email from current user) ──────────
 async function loadMyApplications() {
     if (!currentUser) {
         document.getElementById('myApplicationsList').innerHTML = '<p>Please login to view your applications.</p>';
@@ -528,6 +516,9 @@ async function loadMyApplications() {
             let jobLocation = '';
             let jobDescription = '';
             let employerId = null;
+            let employerEmail = 'N/A';
+            let employerName = 'Unknown';
+            let employerPhone = 'N/A';
             
             try {
                 const { data: job, error: jobError } = await db.from('job_listings')
@@ -542,50 +533,23 @@ async function loadMyApplications() {
                     jobLocation = job.location || '';
                     jobDescription = job.description || '';
                     employerId = job.user_id;
+                    
+                    // Fetch employer profile
+                    if (employerId) {
+                        const { data: profile } = await db.from('profiles')
+                            .select('display_name, email, phone')
+                            .eq('id', employerId)
+                            .single();
+                        
+                        if (profile) {
+                            employerEmail = profile.email || 'N/A';
+                            employerName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
+                            employerPhone = profile.phone || 'N/A';
+                        }
+                    }
                 }
             } catch (err) {
                 console.error('Exception fetching job:', err);
-            }
-            
-            let employerEmail = 'N/A';
-            let employerName = 'Unknown';
-            let employerPhone = 'N/A';
-            
-            if (employerId) {
-                try {
-                    // First try to get from profiles
-                    const { data: profile, error: profileError } = await db.from('profiles')
-                        .select('display_name, email, phone')
-                        .eq('id', employerId)
-                        .single();
-                    
-                    if (profileError) {
-                        console.error('Error fetching employer profile:', profileError);
-                    } else if (profile) {
-                        employerEmail = profile.email || 'N/A';
-                        employerName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
-                        employerPhone = profile.phone || 'N/A';
-                    }
-                    
-                    // If still no email, try to get from auth (if admin)
-                    if (employerEmail === 'N/A') {
-                        try {
-                            const { data: authUser } = await db.auth.admin.getUserById(employerId);
-                            if (authUser && authUser.email) {
-                                employerEmail = authUser.email;
-                                // Update profile with email
-                                await db.from('profiles')
-                                    .update({ email: authUser.email })
-                                    .eq('id', employerId);
-                                console.log('Updated employer profile with email from auth');
-                            }
-                        } catch (authErr) {
-                            console.log('Cannot fetch auth user (admin rights needed)');
-                        }
-                    }
-                } catch (err) {
-                    console.error('Exception fetching employer profile:', err);
-                }
             }
             
             const statusColor = app.status === 'accepted' ? '#10B981' : 
@@ -635,7 +599,7 @@ async function loadMyApplications() {
             } else {
                 html += `
                     <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px;border:1px solid #f59e0b;">
-                        <p style="color:#f59e0b;font-size:0.85rem;">⚠️ Employer contact information not available. Please try again later.</p>
+                        <p style="color:#f59e0b;font-size:0.85rem;">ℹ️ Employer contact info will appear once they update their profile.</p>
                     </div>`;
             }
             
@@ -649,60 +613,27 @@ async function loadMyApplications() {
     }
 }
 
-// ────────── Fix Missing Emails ──────────
-async function fixMissingEmails() {
+// ────────── Update Profile with Email ──────────
+async function updateProfileEmail() {
     if (!currentUser) {
         showToast('Please login first', true);
         return;
     }
     
-    showToast('Checking for missing emails...');
-    
     try {
-        // Get all profiles without emails
-        const { data: profiles, error } = await db.from('profiles')
-            .select('id, email')
-            .is('email', null);
+        const { error } = await db.from('profiles')
+            .update({ email: currentUser.email })
+            .eq('id', currentUser.id);
         
         if (error) {
-            console.error('Error fetching profiles:', error);
-            showToast('Error checking profiles', true);
-            return;
+            showToast('Failed to update: ' + error.message, true);
+        } else {
+            showToast('✅ Profile email updated successfully!');
+            loadMyApplications();
+            loadApplications();
         }
-        
-        if (!profiles || profiles.length === 0) {
-            showToast('✅ All profiles have emails!');
-            return;
-        }
-        
-        console.log(`Found ${profiles.length} profiles without emails`);
-        let fixed = 0;
-        
-        for (const profile of profiles) {
-            try {
-                // Try to get email from auth
-                const { data: authUser } = await db.auth.admin.getUserById(profile.id);
-                if (authUser && authUser.email) {
-                    await db.from('profiles')
-                        .update({ email: authUser.email })
-                        .eq('id', profile.id);
-                    fixed++;
-                    console.log(`Updated email for user ${profile.id}`);
-                }
-            } catch (err) {
-                console.log(`Could not update user ${profile.id}:`, err);
-            }
-        }
-        
-        showToast(`✅ Fixed ${fixed} profiles with missing emails`);
-        
-        // Reload applications
-        loadMyApplications();
-        loadApplications();
-        
     } catch (err) {
-        console.error('Error in fixMissingEmails:', err);
-        showToast('Error fixing emails. Check console.', true);
+        showToast('Error: ' + err.message, true);
     }
 }
 
@@ -1028,378 +959,510 @@ function diagnoseFromColors(c) {
 }
 
 // ═══════════════════════════════════════════
-// CROP DATABASE (EXPANDED with more crops, pests, and diseases)
+// ZAMBIAN CROP DATABASE (10+ Crops with Zambian pests)
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
-    // ── MAIZE ──
+    // ── 1. MAIZE (Zambia's staple) ──
     maize: { 
-        name: 'Maize', 
+        name: 'Maize (Zambia)', 
         pests: { 
             fall_armyworm: { 
-                name: 'Fall Armyworm', 
-                severity: 'high', 
-                lossPct: 15, 
-                dosage: 200, 
+                name: 'Fall Armyworm (Zambia)', 
+                severity: 'critical', 
+                lossPct: 25, 
+                dosage: 250, 
                 chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], 
-                organic: ['Neem Oil','Bt','Hand picking'], 
-                note: 'Most destructive during vegetative stage. Scout early morning or late evening.' 
+                organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], 
+                note: 'Most destructive pest in Zambia. Scout early morning. Use push-pull technology.' 
             }, 
             stalk_borer: { 
                 name: 'Stalk Borer', 
                 severity: 'high', 
                 lossPct: 20, 
-                dosage: 150, 
+                dosage: 180, 
                 chemicals: ['Dudu-Cyber','Chlorpyrifos'], 
-                organic: ['Neem Oil','Push-pull'], 
+                organic: ['Neem Oil','Push-pull','Beneficial wasps'], 
                 note: 'Attacks stems causing lodging. Apply at knee-high stage.' 
-            }, 
-            aphids: { 
-                name: 'Aphids', 
-                severity: 'medium', 
-                lossPct: 8, 
-                dosage: 100, 
-                chemicals: ['Acetamiprid','Dudu-Cyber'], 
-                organic: ['Ladybugs','Neem Oil','Soap spray'], 
-                note: 'Check under leaves. Ants indicate presence.' 
+            },
+            maize_streak_virus: {
+                name: 'Maize Streak Virus',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 0,
+                chemicals: ['Insecticides for leafhoppers'],
+                organic: ['Resistant varieties','Neem Oil'],
+                note: 'Transmitted by leafhoppers. Common in Zambian lowlands.'
             },
             gray_leaf_spot: {
                 name: 'Gray Leaf Spot',
                 severity: 'medium',
-                lossPct: 12,
-                dosage: 180,
+                lossPct: 15,
+                dosage: 200,
                 chemicals: ['Mancozeb','Tebuconazole'],
                 organic: ['Copper spray','Crop rotation'],
-                note: 'Causes rectangular gray lesions. Common in humid weather.'
+                note: 'Causes rectangular gray lesions. Common in humid Zambian regions.'
             },
             northern_leaf_blight: {
                 name: 'Northern Leaf Blight',
                 severity: 'medium',
-                lossPct: 10,
-                dosage: 160,
+                lossPct: 12,
+                dosage: 180,
                 chemicals: ['Propiconazole','Azoxystrobin'],
                 organic: ['Resistant varieties','Crop rotation'],
-                note: 'Long cigar-shaped lesions. Favored by cool, wet conditions.'
-            }
-        }, 
-        yieldValue: 2533 
-    },
-    
-    // ── TOMATO ──
-    tomato: { 
-        name: 'Tomato', 
-        pests: { 
-            late_blight: { 
-                name: 'Late Blight', 
-                severity: 'critical', 
-                lossPct: 30, 
-                dosage: 300, 
-                chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], 
-                organic: ['Copper spray','Baking soda'], 
-                note: 'Spreads rapidly in cool, wet conditions.' 
-            }, 
-            early_blight: {
-                name: 'Early Blight',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 250,
-                chemicals: ['Chlorothalonil','Mancozeb'],
-                organic: ['Neem Oil','Copper spray'],
-                note: 'Dark concentric rings on leaves. Common in warm weather.'
-            },
-            aphids: { 
-                name: 'Aphids', 
-                severity: 'medium', 
-                lossPct: 10, 
-                dosage: 250, 
-                chemicals: ['Acetamiprid','Dudu-Cyber'], 
-                organic: ['Neem Oil','Garlic spray'], 
-                note: 'Also transmits viral diseases.' 
-            },
-            tomato_yellow_leaf_curl: {
-                name: 'Tomato Yellow Leaf Curl',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Insecticides for whitefly','Neem Oil'],
-                organic: ['Neem Oil','Yellow sticky traps'],
-                note: 'Caused by whitefly transmitted virus. Prevention is key.'
-            },
-            blossom_end_rot: {
-                name: 'Blossom End Rot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 0,
-                chemicals: ['Calcium nitrate'],
-                organic: ['Lime','Eggshells','Compost'],
-                note: 'Calcium deficiency. Maintain consistent soil moisture.'
-            }
-        }, 
-        yieldValue: 5000 
-    },
-    
-    // ── RICE ──
-    rice: { 
-        name: 'Rice', 
-        pests: { 
-            blast: { 
-                name: 'Rice Blast', 
-                severity: 'high', 
-                lossPct: 25, 
-                dosage: 180, 
-                chemicals: ['Tricyclazole','Rocket'], 
-                organic: ['Silicon fertilizer','Resistant varieties'], 
-                note: 'Favored by high nitrogen and frequent rainfall.' 
-            },
-            brown_spot: {
-                name: 'Brown Spot',
-                severity: 'medium',
-                lossPct: 15,
-                dosage: 150,
-                chemicals: ['Mancozeb','Copper'],
-                organic: ['Balanced nutrients','Seed treatment'],
-                note: 'Small brown circular lesions. Related to nutrient deficiency.'
-            },
-            sheath_blight: {
-                name: 'Sheath Blight',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Validamycin','Propiconazole'],
-                organic: ['Avoid dense planting','Remove infected plants'],
-                note: 'Grayish-green lesions on leaf sheaths. Favored by high humidity.'
-            },
-            stem_borer: {
-                name: 'Stem Borer',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 160,
-                chemicals: ['Cartap','Chlorpyrifos'],
-                organic: ['Trap crops','Neem Oil'],
-                note: 'Causes dead hearts in early stages. Monitor moth activity.'
-            }
-        }, 
-        yieldValue: 3200 
-    },
-    
-    // ── BEANS ──
-    beans: { 
-        name: 'Beans', 
-        pests: { 
-            aphids: { 
-                name: 'Aphids', 
-                severity: 'medium', 
-                lossPct: 12, 
-                dosage: 120, 
-                chemicals: ['Acetamiprid','Dudu-Cyber'], 
-                organic: ['Neem Oil','Companion planting'], 
-                note: 'Check flowering stage.' 
-            },
-            bean_rust: {
-                name: 'Bean Rust',
-                severity: 'high',
-                lossPct: 18,
-                dosage: 140,
-                chemicals: ['Tebuconazole','Mancozeb'],
-                organic: ['Sulfur spray','Copper spray'],
-                note: 'Small rust-colored pustules on leaves. Favored by humid weather.'
-            },
-            angular_leaf_spot: {
-                name: 'Angular Leaf Spot',
-                severity: 'medium',
-                lossPct: 14,
-                dosage: 130,
-                chemicals: ['Copper hydroxide','Mancozeb'],
-                organic: ['Baking soda spray','Crop rotation'],
-                note: 'Angular brown lesions with yellow halos.'
-            },
-            bruchids: {
-                name: 'Bruchids (Bean Weevils)',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 0,
-                chemicals: ['Phosphine fumigation','Malathion dust'],
-                organic: ['Sun drying','Neem oil on stored beans'],
-                note: 'Attacks stored beans. Clean storage and early harvest.'
-            }
-        }, 
-        yieldValue: 1800 
-    },
-    
-    // ── CABBAGE ──
-    cabbage: { 
-        name: 'Cabbage', 
-        pests: { 
-            diamondback_moth: { 
-                name: 'Diamondback Moth', 
-                severity: 'high', 
-                lossPct: 22, 
-                dosage: 160, 
-                chemicals: ['Dudu-Cyber','Emamectin Benzoate'], 
-                organic: ['Bt spray','Neem Oil','Row covers'], 
-                note: 'Rotate chemicals to prevent resistance.' 
-            },
-            black_rot: {
-                name: 'Black Rot',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 0,
-                chemicals: ['Copper spray','Streptomycin'],
-                organic: ['Hot water seed treatment','Crop rotation'],
-                note: 'V-shaped yellow lesions on leaf edges. Highly infectious.'
-            },
-            clubroot: {
-                name: 'Clubroot',
-                severity: 'high',
-                lossPct: 30,
-                dosage: 0,
-                chemicals: ['Lime application'],
-                organic: ['Lime','Organic matter','pH management'],
-                note: 'Swollen roots causing wilting. Maintain pH above 6.5.'
-            },
-            aphids: {
-                name: 'Cabbage Aphids',
-                severity: 'medium',
-                lossPct: 12,
-                dosage: 120,
-                chemicals: ['Acetamiprid','Imidacloprid'],
-                organic: ['Neem Oil','Ladybugs','Water spray'],
-                note: 'Check under leaves. Sticky surfaces indicate presence.'
+                note: 'Long cigar-shaped lesions. Favored by cool, wet conditions in Zambia.'
             }
         }, 
         yieldValue: 2800 
     },
     
-    // ── POTATO ──
-    potato: {
-        name: 'Potato',
+    // ── 2. GROUNDNUTS (Zambian staple) ──
+    groundnut: {
+        name: 'Groundnuts (Zambia)',
         pests: {
-            late_blight: {
-                name: 'Late Blight',
-                severity: 'critical',
-                lossPct: 35,
-                dosage: 300,
-                chemicals: ['Mancozeb','Metalaxyl','Rocket'],
-                organic: ['Copper spray','Bordeaux mixture'],
-                note: 'Devastating disease. Use resistant varieties where possible.'
-            },
-            early_blight: {
-                name: 'Early Blight',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 250,
-                chemicals: ['Chlorothalonil','Azoxystrobin'],
-                organic: ['Copper spray','Crop rotation'],
-                note: 'Causes dark concentric rings on older leaves.'
-            },
-            potato_aphids: {
-                name: 'Potato Aphids',
-                severity: 'medium',
-                lossPct: 10,
-                dosage: 130,
-                chemicals: ['Acetamiprid','Dudu-Cyber'],
-                organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits potato leaf roll virus. Monitor carefully.'
-            },
-            potato_tuber_moth: {
-                name: 'Potato Tuber Moth',
-                severity: 'high',
-                lossPct: 25,
-                dosage: 180,
-                chemicals: ['Bt spray','Fenitrothion'],
-                organic: ['Bt spray','Covering soil','Pheromone traps'],
-                note: 'Attack leaves and tubers. Keep soil covered.'
-            }
-        },
-        yieldValue: 3500
-    },
-    
-    // ── ONION ──
-    onion: {
-        name: 'Onion',
-        pests: {
-            downy_mildew: {
-                name: 'Downy Mildew',
-                severity: 'high',
-                lossPct: 20,
-                dosage: 200,
-                chemicals: ['Metalaxyl','Mancozeb'],
-                organic: ['Copper spray','Sulfur'],
-                note: 'Purplish-gray mold on leaves. Prefers cool, wet weather.'
-            },
-            thrips: {
-                name: 'Onion Thrips',
-                severity: 'high',
-                lossPct: 22,
-                dosage: 160,
-                chemicals: ['Spinosad','Acetamiprid'],
-                organic: ['Neem Oil','Sticky traps','Beneficial insects'],
-                note: 'Silver-white patches on leaves. Monitor from seedling stage.'
-            },
-            white_rot: {
-                name: 'White Rot',
+            rosette_virus: {
+                name: 'Groundnut Rosette Virus',
                 severity: 'critical',
                 lossPct: 40,
                 dosage: 0,
-                chemicals: ['Fungicide bulb dip'],
-                organic: ['Crop rotation (5-7 years)','Compost management'],
-                note: 'White fungal growth at base. Causes premature yellowing.'
+                chemicals: ['Insecticides for aphids'],
+                organic: ['Resistant varieties','Aphid control'],
+                note: 'Devastating in Zambia. Transmitted by aphids. Use resistant varieties.'
             },
-            purple_blotch: {
-                name: 'Purple Blotch',
-                severity: 'high',
-                lossPct: 18,
-                dosage: 170,
-                chemicals: ['Chlorothalonil','Mancozeb'],
-                organic: ['Copper spray','Avoid overhead irrigation'],
-                note: 'Purple-brown spots on leaves. Common in warm humid weather.'
-            }
-        },
-        yieldValue: 3000
-    },
-    
-    // ── GROUNDNUT ──
-    groundnut: {
-        name: 'Groundnut',
-        pests: {
-            leaf_spot: {
+            early_leaf_spot: {
                 name: 'Early Leaf Spot',
                 severity: 'high',
-                lossPct: 20,
-                dosage: 180,
+                lossPct: 25,
+                dosage: 200,
                 chemicals: ['Chlorothalonil','Tebuconazole'],
                 organic: ['Sulfur spray','Crop rotation'],
-                note: 'Dark brown spots on leaves. Defoliation reduces yield.'
+                note: 'Dark brown spots on leaves. Common in Zambian rainy season.'
             },
             rust: {
                 name: 'Groundnut Rust',
                 severity: 'high',
                 lossPct: 25,
-                dosage: 200,
+                dosage: 220,
                 chemicals: ['Mancozeb','Tebuconazole'],
                 organic: ['Sulfur spray','Resistant varieties'],
-                note: 'Orange-brown pustules on leaves. Favored by warm weather.'
+                note: 'Orange-brown pustules on leaves. Favored by warm Zambian weather.'
             },
             aphids: {
                 name: 'Groundnut Aphids',
-                severity: 'medium',
-                lossPct: 10,
-                dosage: 120,
+                severity: 'high',
+                lossPct: 20,
+                dosage: 150,
                 chemicals: ['Acetamiprid','Dudu-Cyber'],
                 organic: ['Neem Oil','Ladybugs'],
-                note: 'Transmits rosette virus. Monitor early for control.'
+                note: 'Transmits rosette virus. Monitor early in Zambian growing season.'
             },
             jassids: {
                 name: 'Jassids (Leafhoppers)',
                 severity: 'medium',
-                lossPct: 12,
-                dosage: 140,
+                lossPct: 15,
+                dosage: 160,
                 chemicals: ['Imidacloprid','Acetamiprid'],
                 organic: ['Neem Oil','Yellow sticky traps'],
-                note: 'Yellow spots on leaves causing curling. Active in dry weather.'
+                note: 'Yellow spots on leaves. Active in dry Zambian weather.'
             }
         },
         yieldValue: 2200
+    },
+    
+    // ── 3. COTTON (Zambian cash crop) ──
+    cotton: {
+        name: 'Cotton (Zambia)',
+        pests: {
+            bollworm: {
+                name: 'Cotton Bollworm',
+                severity: 'critical',
+                lossPct: 35,
+                dosage: 280,
+                chemicals: ['Cypermethrin','Dudu-Cyber','Rocket'],
+                organic: ['Bt spray','Neem Oil','Biological control'],
+                note: 'Most destructive cotton pest in Zambia. Monitor during flowering.'
+            },
+            aphids: {
+                name: 'Cotton Aphids',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 180,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs','Soap spray'],
+                note: 'Cause curling and stunting. Ants indicate presence.'
+            },
+            whitefly: {
+                name: 'Cotton Whitefly',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 200,
+                chemicals: ['Imidacloprid','Pymetrozine'],
+                organic: ['Neem Oil','Yellow traps'],
+                note: 'Causes sticky cotton. Major problem in Zambian cotton fields.'
+            },
+            red_spider_mite: {
+                name: 'Red Spider Mite',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 160,
+                chemicals: ['Dicofol','Abamectin'],
+                organic: ['Sulfur spray','Water spray'],
+                note: 'Thrives in hot dry Zambian conditions. Check under leaves.'
+            }
+        },
+        yieldValue: 1800
+    },
+    
+    // ── 4. CASSAVA (Zambian staple) ──
+    cassava: {
+        name: 'Cassava (Zambia)',
+        pests: {
+            cassava_mosaic: {
+                name: 'Cassava Mosaic Virus',
+                severity: 'critical',
+                lossPct: 50,
+                dosage: 0,
+                chemicals: ['No chemical treatment'],
+                organic: ['Resistant varieties','Plant healthy cuttings'],
+                note: 'Most serious cassava disease in Zambia. Use certified disease-free cuttings.'
+            },
+            brown_streak: {
+                name: 'Cassava Brown Streak',
+                severity: 'critical',
+                lossPct: 45,
+                dosage: 0,
+                chemicals: ['No chemical treatment'],
+                organic: ['Resistant varieties','Healthy cuttings'],
+                note: 'Causes root necrosis. Major threat to Zambian cassava production.'
+            },
+            cassava_mealybug: {
+                name: 'Cassava Mealybug',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 220,
+                chemicals: ['Imidacloprid','Thiamethoxam'],
+                organic: ['Biological control (wasps)','Neem Oil'],
+                note: 'Introduced pest in Zambia. Biological control effective.'
+            },
+            green_mite: {
+                name: 'Cassava Green Mite',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 200,
+                chemicals: ['Abamectin','Dicofol'],
+                organic: ['Neem Oil','Predatory mites'],
+                note: 'Causes yellow spots. Thrives in dry Zambian conditions.'
+            }
+        },
+        yieldValue: 3500
+    },
+    
+    // ── 5. SORGHUM (Zambian drought-tolerant crop) ──
+    sorghum: {
+        name: 'Sorghum (Zambia)',
+        pests: {
+            shoot_fly: {
+                name: 'Sorghum Shoot Fly',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 180,
+                chemicals: ['Imidacloprid','Acetamiprid'],
+                organic: ['Neem Oil','Early planting'],
+                note: 'Attack young plants. Common in Zambian dryland areas.'
+            },
+            stem_borer: {
+                name: 'Sorghum Stem Borer',
+                severity: 'high',
+                lossPct: 22,
+                dosage: 190,
+                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
+                organic: ['Neem Oil','Push-pull'],
+                note: 'Causes dead hearts. Important pest in Zambian sorghum.'
+            },
+            anthracnose: {
+                name: 'Anthracnose',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 200,
+                chemicals: ['Mancozeb','Tebuconazole'],
+                organic: ['Copper spray','Resistant varieties'],
+                note: 'Dark red lesions. Favored by humid Zambian conditions.'
+            },
+            grain_mold: {
+                name: 'Grain Mold',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 0,
+                chemicals: ['No effective chemical'],
+                organic: ['Early harvesting','Adequate drying'],
+                note: 'Major storage problem in Zambia. Harvest at right time.'
+            }
+        },
+        yieldValue: 2000
+    },
+    
+    // ── 6. SWEET POTATO (Zambian staple) ──
+    sweet_potato: {
+        name: 'Sweet Potato (Zambia)',
+        pests: {
+            sweet_potato_virus: {
+                name: 'Sweet Potato Virus Disease',
+                severity: 'critical',
+                lossPct: 45,
+                dosage: 0,
+                chemicals: ['No chemical treatment'],
+                organic: ['Virus-free cuttings','Rogue infected plants'],
+                note: 'Major constraint in Zambia. Use certified disease-free material.'
+            },
+            weevil: {
+                name: 'Sweet Potato Weevil',
+                severity: 'high',
+                lossPct: 35,
+                dosage: 200,
+                chemicals: ['Imidacloprid','Fipronil'],
+                organic: ['Crop rotation','Hilling up soil'],
+                note: 'Most serious pest in Zambia. Attacks both field and storage.'
+            },
+            leaf_beetle: {
+                name: 'Sweet Potato Leaf Beetle',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 160,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Hand picking'],
+                note: 'Skeletonizes leaves. Active in Zambian rainy season.'
+            },
+            nematodes: {
+                name: 'Root Knot Nematodes',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 0,
+                chemicals: ['Fumigants (pre-plant)'],
+                organic: ['Crop rotation','Resistant varieties'],
+                note: 'Causes galls on roots. Common in Zambian sandy soils.'
+            }
+        },
+        yieldValue: 3000
+    },
+    
+    // ── 7. SUNFLOWER (Zambian oil crop) ──
+    sunflower: {
+        name: 'Sunflower (Zambia)',
+        pests: {
+            sunflower_moth: {
+                name: 'Sunflower Moth',
+                severity: 'critical',
+                lossPct: 35,
+                dosage: 240,
+                chemicals: ['Cypermethrin','Dudu-Cyber'],
+                organic: ['Biological control','Pheromone traps'],
+                note: 'Larvae feed on seeds. Major pest in Zambian sunflower fields.'
+            },
+            head_rot: {
+                name: 'Head Rot',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 220,
+                chemicals: ['Mancozeb','Copper'],
+                organic: ['Crop rotation','Good drainage'],
+                note: 'Causes heads to rot. Favored by humid Zambian conditions.'
+            },
+            downy_mildew: {
+                name: 'Downy Mildew',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 200,
+                chemicals: ['Metalaxyl','Mancozeb'],
+                organic: ['Resistant varieties','Good drainage'],
+                note: 'White mold on leaves. Prefers cool, wet Zambian weather.'
+            },
+            aphids: {
+                name: 'Sunflower Aphids',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 160,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs'],
+                note: 'Colonize heads and young leaves. Monitor during flowering.'
+            }
+        },
+        yieldValue: 1600
+    },
+    
+    // ── 8. SOYBEAN (Zambian cash crop) ──
+    soybean: {
+        name: 'Soybean (Zambia)',
+        pests: {
+            rust: {
+                name: 'Soybean Rust',
+                severity: 'critical',
+                lossPct: 40,
+                dosage: 280,
+                chemicals: ['Mancozeb','Tebuconazole'],
+                organic: ['Resistant varieties','Early planting'],
+                note: 'Most serious soybean disease in Zambia. Appears during rainy season.'
+            },
+            aphids: {
+                name: 'Soybean Aphids',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 200,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs'],
+                note: 'Can cause significant yield loss in Zambian soybean fields.'
+            },
+            pod_borer: {
+                name: 'Pod Borer',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 220,
+                chemicals: ['Cypermethrin','Dudu-Cyber'],
+                organic: ['Bt spray','Biological control'],
+                note: 'Attacks developing pods. Monitor during podding stage.'
+            },
+            frog_eye_leaf_spot: {
+                name: 'Frog Eye Leaf Spot',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 180,
+                chemicals: ['Chlorothalonil','Mancozeb'],
+                organic: ['Crop rotation','Copper spray'],
+                note: 'Circular gray spots. Favored by humid Zambian conditions.'
+            }
+        },
+        yieldValue: 2400
+    },
+    
+    // ── 9. BAMBARA NUT (Zambian traditional crop) ──
+    bambara: {
+        name: 'Bambara Nut (Zambia)',
+        pests: {
+            leaf_spot: {
+                name: 'Bambara Leaf Spot',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 180,
+                chemicals: ['Mancozeb','Copper'],
+                organic: ['Copper spray','Crop rotation'],
+                note: 'Common disease in Zambian bambara nut fields.'
+            },
+            rust: {
+                name: 'Bambara Rust',
+                severity: 'medium',
+                lossPct: 20,
+                dosage: 200,
+                chemicals: ['Tebuconazole','Mancozeb'],
+                organic: ['Sulfur spray','Resistant varieties'],
+                note: 'Appears in warm humid conditions in Zambia.'
+            },
+            aphids: {
+                name: 'Bambara Aphids',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 150,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs'],
+                note: 'Transmits viruses. Monitor early in the season.'
+            },
+            nematodes: {
+                name: 'Root Knot Nematodes',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 0,
+                chemicals: ['Fumigants (pre-plant)'],
+                organic: ['Crop rotation','Organic matter'],
+                note: 'Causes galls. Serious in sandy Zambian soils.'
+            }
+        },
+        yieldValue: 1200
+    },
+    
+    // ── 10. MILLET (Zambian drought-tolerant) ──
+    millet: {
+        name: 'Millet (Zambia)',
+        pests: {
+            head_blast: {
+                name: 'Head Blast',
+                severity: 'critical',
+                lossPct: 35,
+                dosage: 240,
+                chemicals: ['Tricyclazole','Mancozeb'],
+                organic: ['Resistant varieties','Seed treatment'],
+                note: 'Destructive disease in Zambian millet. Favored by rainfall.'
+            },
+            grain_moth: {
+                name: 'Grain Moth',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 200,
+                chemicals: ['Cypermethrin','Dudu-Cyber'],
+                organic: ['Pheromone traps','Biological control'],
+                note: 'Major storage pest in Zambia. Proper storage is critical.'
+            },
+            stem_borer: {
+                name: 'Millet Stem Borer',
+                severity: 'high',
+                lossPct: 22,
+                dosage: 190,
+                chemicals: ['Dudu-Cyber','Chlorpyrifos'],
+                organic: ['Neem Oil','Push-pull'],
+                note: 'Causes dead hearts. Common in Zambian millet fields.'
+            },
+            smut: {
+                name: 'Smut',
+                severity: 'medium',
+                lossPct: 18,
+                dosage: 0,
+                chemicals: ['Seed treatment (fungicides)'],
+                organic: ['Resistant varieties','Crop rotation'],
+                note: 'Black powder in heads. Use clean seed in Zambia.'
+            }
+        },
+        yieldValue: 1500
+    },
+    
+    // ── 11. TOBACCO (Zambian cash crop) ──
+    tobacco: {
+        name: 'Tobacco (Zambia)',
+        pests: {
+            mosaic_virus: {
+                name: 'Tobacco Mosaic Virus',
+                severity: 'critical',
+                lossPct: 40,
+                dosage: 0,
+                chemicals: ['No chemical treatment'],
+                organic: ['Sanitation','Resistant varieties'],
+                note: 'Highly infectious. Major concern for Zambian tobacco farmers.'
+            },
+            aphids: {
+                name: 'Tobacco Aphids',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 200,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs'],
+                note: 'Transmit viruses. Monitor throughout growing season.'
+            },
+            hornworm: {
+                name: 'Hornworm',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 220,
+                chemicals: ['Cypermethrin','Dudu-Cyber'],
+                organic: ['Bt spray','Hand picking'],
+                note: 'Large caterpillars. Major pest in Zambian tobacco.'
+            },
+            blue_mold: {
+                name: 'Blue Mold',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 240,
+                chemicals: ['Mancozeb','Metalaxyl'],
+                organic: ['Copper spray','Good air circulation'],
+                note: 'Favored by humid Zambian conditions. Monitor in seedbeds.'
+            }
+        },
+        yieldValue: 2500
     }
 };
 
@@ -1477,7 +1540,7 @@ function updateDosageFromPest() {
     const data = CROP_DB[crop].pests[pest];
     if (data) {
         document.getElementById('mathDosage').value = data.dosage;
-        document.getElementById('mathChemName').placeholder = `e.g., ${data.chemicals[0]}, ${data.chemicals[1]}...`;
+        document.getElementById('mathChemName').placeholder = `e.g., ${data.chemicals[0]}, ${data.chemicals[1] || ''}`;
     }
 }
 
@@ -1568,7 +1631,8 @@ function calcFarmMath() {
     
     document.getElementById('mathResult').innerHTML = `
         <div class="math-result">
-            <h3 style="color:var(--accent);">${cropData.name} × ${pestData.name}</h3>
+            <h3 style="color:var(--accent);">🌾 ${cropData.name}</h3>
+            <h4 style="color:var(--danger);">${pestData.name}</h4>
             <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
             <div class="grid-2cols" style="margin:14px 0;">
                 <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
@@ -1603,9 +1667,17 @@ function calcFarmMath() {
                   savings > totalCost ? '✅ RECOMMENDED: Good return on investment' : 
                   '📊 MONITOR: Only spray if pest pressure increases'}
             </div>
-            <p style="font-size:0.75rem;margin-top:8px;">${pestData.note}</p>
-            <p style="font-size:0.7rem;color:var(--accent);margin-top:4px;">🌿 Organic options: ${pestData.organic.join(', ')}</p>
-            <p style="font-size:0.7rem;color:var(--text-secondary);">🧪 Chemical options: ${pestData.chemicals.join(', ')}</p>
+            <p style="font-size:0.75rem;margin-top:8px;">📝 ${pestData.note}</p>
+            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div style="padding:8px;background:rgba(16,185,129,0.1);border-radius:8px;">
+                    <strong style="color:var(--accent);">🌿 Organic Options</strong>
+                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.organic.join(', ')}</p>
+                </div>
+                <div style="padding:8px;background:rgba(245,158,11,0.1);border-radius:8px;">
+                    <strong style="color:#f59e0b;">🧪 Chemical Options</strong>
+                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.chemicals.join(', ')}</p>
+                </div>
+            </div>
         </div>`;
     document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
     showToast('Calculation complete!');
@@ -2057,7 +2129,7 @@ function setupContactHandlers() {
                     showToast(`Composing message to ${name}`);
                 }
             } else {
-                showToast('No email available for this employer', true);
+                showToast('No email available for this employer. Please ask them to update their profile.', true);
             }
             return;
         }
@@ -2072,8 +2144,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup contact handlers
     setupContactHandlers();
     
-    // Make fixMissingEmails available globally
-    window.fixMissingEmails = fixMissingEmails;
+    // Make helper functions available globally
+    window.updateProfileEmail = updateProfileEmail;
     
     // Sidebar
     document.getElementById('hamburgerBtn').addEventListener('click', () => {
