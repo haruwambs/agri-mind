@@ -346,7 +346,7 @@ async function applyToJob(jobId) {
     loadJobs();
 }
 
-// ────────── Applications ──────────
+// ────────── Applications (FIXED) ──────────
 async function loadApplications() {
     if (!currentUser) return;
     const container = document.getElementById('applicationsList');
@@ -392,7 +392,6 @@ async function loadApplications() {
                 container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
                     <strong>${escapeHtml(applicantName)}</strong>
                     <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
-                    ${a.status === 'accepted' ? `<p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p><p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>` : ''}
                     <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
                     <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
                     <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
@@ -403,10 +402,19 @@ async function loadApplications() {
                         </div>
                     ` : ''}
                     ${a.status === 'accepted' ? `
-                        <div style="margin-top:8px;">
-                            <button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantEmail)}" data-name="${escapeHtml(applicantName)}" style="font-size:12px;padding:6px 14px;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
-                            </button>
+                        <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
+                            <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
+                            <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
+                            <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>
+                            <div style="margin-top:8px;">
+                                <button class="btn-primary contact-applicant-btn" 
+                                    data-email="${escapeHtml(applicantEmail)}" 
+                                    data-name="${escapeHtml(applicantName)}" 
+                                    data-phone="${escapeHtml(applicantPhone)}"
+                                    style="font-size:12px;padding:6px 14px;">
+                                    <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
+                                </button>
+                            </div>
                         </div>
                     ` : ''}
                 </div>`;
@@ -417,7 +425,7 @@ async function loadApplications() {
     if (container.innerHTML === '') container.innerHTML = '<p>No applications received yet.</p>';
 }
 
-// ────────── My Applications ──────────
+// ────────── My Applications (FIXED) ──────────
 async function loadMyApplications() {
     if (!currentUser) return;
     const container = document.getElementById('myApplicationsList');
@@ -463,20 +471,24 @@ async function loadMyApplications() {
             ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
             <p>${escapeHtml(job?.description || '')}</p>
             <small>Employer: ${escapeHtml(employerName)}</small>
-            ${a.status === 'accepted' ? `<br><small>📧 ${escapeHtml(employerEmail)}</small><br><small>📱 ${escapeHtml(employerPhone)}</small>` : ''}
             <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
             <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
             ${a.status === 'accepted' ? `
-                <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
+                <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                     <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
                     <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
-                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
-                    <button class="btn-primary contact-poster-btn" data-email="${escapeHtml(employerEmail)}" data-name="${escapeHtml(employerName)}" style="font-size:12px;padding:8px 16px;margin-top:6px;">
+                    <p><strong>📱 Employer Phone:</strong> ${escapeHtml(employerPhone)}</p>
+                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);margin-top:4px;">Contact the employer to discuss next steps.</p>
+                    <button class="btn-primary contact-poster-btn" 
+                        data-email="${escapeHtml(employerEmail)}" 
+                        data-name="${escapeHtml(employerName)}" 
+                        data-phone="${escapeHtml(employerPhone)}"
+                        style="font-size:12px;padding:8px 16px;margin-top:6px;">
                         <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
                     </button>
                 </div>
             ` : ''}
-            ${a.status === 'rejected' ? `<p style="color:#dc2626;margin-top:8px;">Not accepted. Keep applying!</p>` : ''}
+            ${a.status === 'rejected' ? `<p style="color:#dc2626;margin-top:8px;">❌ Not accepted. Keep applying!</p>` : ''}
             ${a.status === 'pending' ? `<p style="color:#f59e0b;margin-top:8px;">⏳ Waiting for review...</p>` : ''}
         </div>`;
     }
@@ -1558,7 +1570,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('authSubmitBtn').addEventListener('click', async () => {
         const email = document.getElementById('authEmail').value.trim();
         const password = document.getElementById('authPass').value;
-        const displayName = document.getElementById('authDisplayName').value.trim();
+        const displayName = document.getElementById('authDisplayNameInput').value.trim();
         try {
             if (authMode === 'login') await login(email, password);
             else { 
@@ -1786,20 +1798,39 @@ document.addEventListener('DOMContentLoaded', () => {
             return; 
         }
 
-        // Contact buttons
+        // FIXED: Contact applicant button (for job posters)
         const contactApplicant = e.target.closest('.contact-applicant-btn');
         if (contactApplicant) { 
-            document.getElementById('msgTo').value = contactApplicant.dataset.email; 
-            document.getElementById('msgText').value = `Hello ${contactApplicant.dataset.name}, regarding your application...`; 
-            showPage('messages'); 
+            const email = contactApplicant.dataset.email;
+            const name = contactApplicant.dataset.name;
+            const phone = contactApplicant.dataset.phone || '';
+            
+            if (email && email !== 'N/A') {
+                document.getElementById('msgTo').value = email;
+                document.getElementById('msgText').value = `Hello ${name}, regarding your application to my job posting...`;
+                showPage('messages');
+                showToast(`Composing message to ${name}`);
+            } else {
+                showToast('No email available for this applicant', true);
+            }
             return; 
         }
-        
+
+        // FIXED: Contact poster button (for job applicants)
         const contactPoster = e.target.closest('.contact-poster-btn');
         if (contactPoster) { 
-            document.getElementById('msgTo').value = contactPoster.dataset.email; 
-            document.getElementById('msgText').value = `Hello ${contactPoster.dataset.name}, I'm following up on my application...`; 
-            showPage('messages'); 
+            const email = contactPoster.dataset.email;
+            const name = contactPoster.dataset.name;
+            const phone = contactPoster.dataset.phone || '';
+            
+            if (email && email !== 'N/A') {
+                document.getElementById('msgTo').value = email;
+                document.getElementById('msgText').value = `Hello ${name}, I'm following up on my application...`;
+                showPage('messages');
+                showToast(`Composing message to ${name}`);
+            } else {
+                showToast('No email available for this employer', true);
+            }
             return; 
         }
     });
@@ -1807,3 +1838,4 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSession();
     showPage('dashboard');
 });
+            
