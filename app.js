@@ -41,7 +41,9 @@ async function checkSession() {
     const { data: { session } } = await db.auth.getSession();
     if (session && session.user) {
         const { data: profile } = await db.from('profiles').select('display_name').eq('id', session.user.id).single();
-        currentUser = { id: session.user.id, email: session.user.email, displayName: profile?.display_name || session.user.email };
+        // Use display_name if available, otherwise use email prefix, fallback to 'Farmer'
+        const displayName = profile?.display_name || session.user.email?.split('@')[0] || 'Farmer';
+        currentUser = { id: session.user.id, email: session.user.email, displayName: displayName };
     } else { currentUser = null; }
     updateAuthUI();
     if (currentUser) loadDashboardStats();
@@ -428,7 +430,11 @@ async function wikiAnswer(question) {
 async function loadProfile() {
     if (!currentUser) { document.getElementById('profileContent').innerHTML='<p>Please login to see your profile.</p>'; return; }
     const { data: pd } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-    document.getElementById('profileName').textContent = pd?.display_name || currentUser.email;
+    
+    // Use display_name, fallback to email prefix, then 'Farmer'
+    const displayName = pd?.display_name || currentUser.email?.split('@')[0] || 'Farmer';
+    
+    document.getElementById('profileName').textContent = displayName;
     document.getElementById('profileEmail').textContent = currentUser.email;
     document.getElementById('profilePhone').textContent = '📱 Phone: ' + (pd?.phone || 'Not set');
     document.getElementById('profileLocation').textContent = '📍 Location: ' + (pd?.location || 'Not set');
@@ -569,6 +575,15 @@ function showPage(pageId) {
     if (nav) nav.classList.add('active');
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('active');
+    
+    // Focus first input on page if exists (fixes keyboard issue)
+    setTimeout(() => {
+        const firstInput = document.getElementById(pageId)?.querySelector('input:not([type="file"]):not([type="range"]), textarea');
+        if (firstInput && document.getElementById(pageId)?.classList.contains('active-page')) {
+            // Don't auto-focus, just ensure the page is ready for interaction
+        }
+    }, 100);
+    
     switch(pageId){
         case 'forum': loadForum(); break;
         case 'groups': loadGroups(); break;
@@ -595,6 +610,15 @@ function showPhonePage(pageId, btn) {
     document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
     const nav = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
     if (nav) nav.classList.add('active');
+    
+    // Focus first input on page if exists (fixes keyboard issue)
+    setTimeout(() => {
+        const firstInput = document.getElementById(pageId)?.querySelector('input:not([type="file"]):not([type="range"]), textarea');
+        if (firstInput && document.getElementById(pageId)?.classList.contains('active-page')) {
+            // Don't auto-focus, just ensure the page is ready for interaction
+        }
+    }, 100);
+    
     if (pageId === 'sensorhub') updateScanMapUI();
     if (pageId === 'messages') loadMessages();
     if (pageId === 'dashboard') loadDashboardStats();
@@ -605,7 +629,8 @@ function showPhonePage(pageId, btn) {
 // ═══════════════════════════════════════════
 
 function populatePests() {
-    const crop = document.getElementById('mathCrop').value;
+    const crop = document.getElementById('mathCrop')?.value;
+    if (!crop) return;
     const pestSelect = document.getElementById('mathPest');
     const pests = CROP_DB[crop].pests;
     pestSelect.innerHTML = '';
@@ -620,8 +645,9 @@ function populatePests() {
 }
 
 function updateDosageFromPest() {
-    const crop = document.getElementById('mathCrop').value;
-    const pest = document.getElementById('mathPest').value;
+    const crop = document.getElementById('mathCrop')?.value;
+    const pest = document.getElementById('mathPest')?.value;
+    if (!crop || !pest) return;
     const data = CROP_DB[crop].pests[pest];
     if (data) {
         document.getElementById('mathDosage').value = data.dosage;
@@ -630,22 +656,24 @@ function updateDosageFromPest() {
 }
 
 function updateCostPerMl() {
-    const size = parseFloat(document.getElementById('mathContSize').value) || 250;
-    const price = parseFloat(document.getElementById('mathContPrice').value) || 150;
-    document.getElementById('mathCostPerMl').textContent = 'K' + (price / size).toFixed(2);
+    const size = parseFloat(document.getElementById('mathContSize')?.value) || 250;
+    const price = parseFloat(document.getElementById('mathContPrice')?.value) || 150;
+    const el = document.getElementById('mathCostPerMl');
+    if (el) el.textContent = 'K' + (price / size).toFixed(2);
 }
 
 function updateFarmSlider() {
-    document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1);
+    const el = document.getElementById('mathFarmDisplay');
+    if (el) el.textContent = parseFloat(document.getElementById('mathFarmSlider')?.value || 0.5).toFixed(1);
 }
 
 function saveChemical() {
     const chem = {
-        name: document.getElementById('mathChemName').value.trim(),
-        size: document.getElementById('mathContSize').value,
-        price: document.getElementById('mathContPrice').value,
-        dosage: document.getElementById('mathDosage').value,
-        unit: document.getElementById('mathDosageUnit').value
+        name: document.getElementById('mathChemName')?.value?.trim() || '',
+        size: document.getElementById('mathContSize')?.value || '250',
+        price: document.getElementById('mathContPrice')?.value || '150',
+        dosage: document.getElementById('mathDosage')?.value || '200',
+        unit: document.getElementById('mathDosageUnit')?.value || 'ha'
     };
     if (!chem.name) { showToast('Enter chemical name first', true); return; }
     const idx = savedChems.findIndex(c => c.name.toLowerCase() === chem.name.toLowerCase());
@@ -669,10 +697,12 @@ function loadChem(idx) {
 function deleteChem(idx) { savedChems.splice(idx, 1); localStorage.setItem('agrimind_chems', JSON.stringify(savedChems)); renderSavedChems(); }
 
 function renderSavedChems() {
-    if (savedChems.length === 0) { document.getElementById('savedChems').style.display = 'none'; return; }
-    document.getElementById('savedChems').style.display = 'block';
-    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved Chemicals</label>' + savedChems.map((c, i) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--input-bg);border-radius:12px;margin-bottom:4px;font-size:0.8rem;">
+    const container = document.getElementById('savedChems');
+    if (!container) return;
+    if (savedChems.length === 0) { container.style.display = 'none'; return; }
+    container.style.display = 'block';
+    container.innerHTML = '<label style="color:var(--accent);">Saved Chemicals</label>' + savedChems.map((c, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--input-bg);border-radius:12px;margin-bottom:4px;font-size:0.8rem;color:var(--text-color);">
             <span><strong>${escapeHtml(c.name)}</strong> | ${c.size}ml @ K${c.price}</span>
             <div style="display:flex;gap:6px;">
                 <button class="btn-outline" onclick="loadChem(${i})" style="padding:4px 10px;font-size:0.7rem;">Load</button>
@@ -683,14 +713,15 @@ function renderSavedChems() {
 }
 
 function calcFarmMath() {
-    const crop = document.getElementById('mathCrop').value;
-    const pestKey = document.getElementById('mathPest').value;
-    const chemName = document.getElementById('mathChemName').value.trim() || 'Unspecified Chemical';
-    const contSize = parseFloat(document.getElementById('mathContSize').value) || 250;
-    const contPrice = parseFloat(document.getElementById('mathContPrice').value) || 150;
-    const dosage = parseFloat(document.getElementById('mathDosage').value) || 200;
-    const unit = document.getElementById('mathDosageUnit').value;
-    const farmSize = parseFloat(document.getElementById('mathFarmSlider').value);
+    const crop = document.getElementById('mathCrop')?.value;
+    const pestKey = document.getElementById('mathPest')?.value;
+    if (!crop || !pestKey) return;
+    const chemName = document.getElementById('mathChemName')?.value?.trim() || 'Unspecified Chemical';
+    const contSize = parseFloat(document.getElementById('mathContSize')?.value) || 250;
+    const contPrice = parseFloat(document.getElementById('mathContPrice')?.value) || 150;
+    const dosage = parseFloat(document.getElementById('mathDosage')?.value) || 200;
+    const unit = document.getElementById('mathDosageUnit')?.value || 'ha';
+    const farmSize = parseFloat(document.getElementById('mathFarmSlider')?.value) || 0.5;
     const pestData = CROP_DB[crop].pests[pestKey];
     const cropData = CROP_DB[crop];
     const costPerMl = contPrice / contSize;
@@ -704,7 +735,9 @@ function calcFarmMath() {
     const containers = Math.ceil(totalMl / contSize);
     const roi = totalCost > 0 ? (savings / totalCost) * 100 : 0;
 
-    document.getElementById('mathResult').innerHTML = `
+    const resultEl = document.getElementById('mathResult');
+    if (!resultEl) return;
+    resultEl.innerHTML = `
         <div class="math-result">
             <h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3>
             <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
@@ -724,7 +757,7 @@ function calcFarmMath() {
             <p style="font-size:0.75rem;margin-top:8px;">${pestData.note}</p>
             <p style="font-size:0.7rem;color:var(--accent);margin-top:4px;">Organic options: ${pestData.organic.join(', ')}</p>
         </div>`;
-    document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
+    resultEl.scrollIntoView({ behavior: 'smooth' });
     showToast('Calculation complete!');
     if (currentUser) {
         db.from('farm_records').insert({ user_id: currentUser.id, title: `Spray Calc: ${cropData.name}`, detail: `${chemName} | Farm: ${farmSize}ha | Spray: ${totalMl.toFixed(1)}ml | Cost: K${totalCost.toFixed(2)} | Savings: K${savings.toFixed(2)}`, location: 'Farm Math Tool' }).then(() => {}).catch(() => {});
@@ -755,7 +788,8 @@ function analyzeLeaf(event) {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
+                    const gpsLabel = document.getElementById('gpsLabel');
+                    if (gpsLabel) gpsLabel.textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
                 });
             }
             sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, light: currentSensorLight, diagnosis });
@@ -768,6 +802,7 @@ function analyzeLeaf(event) {
 
 function displayScanResults(imageSrc, diagnosis) {
     const preview = document.getElementById('cameraPreview');
+    if (!preview) return;
     const c = diagnosis.colors;
     preview.innerHTML = `
         <img src="${imageSrc}" style="max-width:100%;border-radius:20px;margin-bottom:10px;max-height:300px;object-fit:contain;">
@@ -799,29 +834,35 @@ function displayScanResults(imageSrc, diagnosis) {
 }
 
 function getGPS() {
-    if (!navigator.geolocation) { document.getElementById('gpsLabel').textContent = 'Not supported'; return; }
-    document.getElementById('gpsLabel').textContent = 'Locating...';
+    if (!navigator.geolocation) { 
+        const el = document.getElementById('gpsLabel');
+        if (el) el.textContent = 'Not supported'; 
+        return; 
+    }
+    const el = document.getElementById('gpsLabel');
+    if (el) el.textContent = 'Locating...';
     navigator.geolocation.getCurrentPosition(pos => {
         currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
-    }, () => { document.getElementById('gpsLabel').textContent = 'Denied'; }, { enableHighAccuracy: true });
+        if (el) el.textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
+    }, () => { if (el) el.textContent = 'Denied'; }, { enableHighAccuracy: true });
 }
 
 function checkLight() {
+    const el = document.getElementById('lightLabel');
     if ('AmbientLightSensor' in window) {
         try {
             const sensor = new AmbientLightSensor();
             sensor.onreading = () => { currentSensorLight = sensor.illuminance; updateLightLabel(); };
-            sensor.onerror = () => { document.getElementById('lightLabel').textContent = 'Sensor error'; };
+            sensor.onerror = () => { if (el) el.textContent = 'Sensor error'; };
             sensor.start();
             setTimeout(() => sensor.stop(), 1000);
-        } catch(e) { document.getElementById('lightLabel').textContent = 'Not available'; }
-    } else { document.getElementById('lightLabel').textContent = 'Not supported'; }
+        } catch(e) { if (el) el.textContent = 'Not available'; }
+    } else { if (el) el.textContent = 'Not supported'; }
 }
 
 function updateLightLabel() {
     const el = document.getElementById('lightLabel');
-    if (!currentSensorLight) return;
+    if (!el || !currentSensorLight) return;
     if (currentSensorLight < 100) { el.innerHTML = 'Too dark<br><small style="color:var(--danger);">Move to better light</small>'; }
     else if (currentSensorLight < 500) { el.innerHTML = 'Moderate light'; }
     else { el.innerHTML = 'Optimal lighting'; }
@@ -829,12 +870,13 @@ function updateLightLabel() {
 
 function toggleScanMap() {
     const map = document.getElementById('scanMapDiv');
-    map.style.display = map.style.display === 'none' ? 'block' : 'none';
+    if (map) map.style.display = map.style.display === 'none' ? 'block' : 'none';
     updateScanMapUI();
 }
 
 function updateScanMapUI() {
     const list = document.getElementById('scanMapList');
+    if (!list) return;
     if (!sensorScans.length) { list.innerHTML = '<p style="color:#aaa;text-align:center;">No scans yet. Upload a leaf photo to start!</p>'; return; }
     list.innerHTML = sensorScans.map(s => `
         <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);">
@@ -988,6 +1030,7 @@ function handleScoutPhoto(event) {
 
 function scoutLog(msg) {
     const log = document.getElementById('scoutLog');
+    if (!log) return;
     log.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
     log.scrollTop = log.scrollHeight;
 }
@@ -1004,7 +1047,7 @@ function openModal(mode) {
 
 function closeModal() {
     document.getElementById('authModal').style.display = 'none';
-    ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value='');
+    ['authEmail','authPass','authDisplayName'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 }
 
 // ═══════════════════════════════════════════
@@ -1012,6 +1055,7 @@ function closeModal() {
 // ═══════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Sidebar
     document.getElementById('hamburgerBtn').addEventListener('click', () => {
         document.getElementById('sidebar').classList.toggle('open');
         document.getElementById('sidebarOverlay').classList.toggle('active');
@@ -1022,6 +1066,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.querySelectorAll('.nav-links li').forEach(li => li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); }));
 
+    // Auth
     document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
     document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
     document.getElementById('closeModalBtn').addEventListener('click', closeModal);
@@ -1042,19 +1087,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('userGreeting').addEventListener('click', logout);
 
+    // Forum
     document.getElementById('postForumBtn').addEventListener('click', () => {
         const c = document.getElementById('forumContent').value.trim();
         const img = document.getElementById('forumImage').files[0];
         if (c) { addForumPost(c, img); document.getElementById('forumContent').value = ''; document.getElementById('forumImage').value = ''; }
     });
+
+    // Groups
     document.getElementById('createGroupBtn').addEventListener('click', createGroup);
     document.getElementById('groupLocationFilter').addEventListener('input', loadGroups);
+
+    // Records
     document.getElementById('addRecordBtn').addEventListener('click', () => {
         const t = document.getElementById('recordTitle').value.trim();
         const d = document.getElementById('recordDetail').value.trim();
         const l = document.getElementById('recordLocation').value.trim();
         if (t) { addRecord(t, d, l); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; document.getElementById('recordLocation').value = ''; }
     });
+
+    // Jobs
     document.getElementById('postJobBtn').addEventListener('click', () => {
         const t = document.getElementById('jobTitle').value.trim();
         const d = document.getElementById('jobDesc').value.trim();
@@ -1062,6 +1114,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (t) { addJob(t, d, l); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; document.getElementById('jobLocation').value = ''; }
     });
     document.getElementById('jobLocationFilter').addEventListener('input', loadJobs);
+
+    // Market
     document.getElementById('addProductBtn').addEventListener('click', () => {
         const n = document.getElementById('productName').value.trim();
         const p = document.getElementById('productPrice').value.trim();
@@ -1072,11 +1126,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
     document.getElementById('marketLocationFilter').addEventListener('input', loadMarket);
+
+    // Messages
     document.getElementById('sendMsgBtn').addEventListener('click', () => {
         const to = document.getElementById('msgTo').value.trim();
         const tx = document.getElementById('msgText').value.trim();
         if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
     });
+
+    // Search
     document.getElementById('doSearchBtn').addEventListener('click', () => {
         const term = document.getElementById('searchInput').value.trim();
         const cat = document.getElementById('searchCategory').value;
@@ -1084,15 +1142,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const to = document.getElementById('searchDateTo').value;
         if (term) globalSearch(term, cat, from, to);
     });
+
+    // Tutorials
     document.getElementById('addVideoBtn').addEventListener('click', () => {
         const t = document.getElementById('videoTitle').value.trim();
         const u = document.getElementById('videoUrl').value.trim();
         const d = document.getElementById('videoDesc').value.trim();
         if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
     });
+
+    // Calendar
     document.getElementById('addEventBtn').addEventListener('click', addEvent);
+
+    // Calculator
     document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
-    
+
+    // Profile save
     document.getElementById('saveProfileBtn').addEventListener('click', async () => {
         if (!currentUser) return;
         const dn = document.getElementById('editDisplayName').value.trim();
@@ -1104,6 +1169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else { currentUser.displayName = dn; updateAuthUI(); showToast('Profile updated!'); loadProfile(); }
     });
 
+    // Chat
     document.getElementById('sendChatBtn').addEventListener('click', async () => {
         const input = document.getElementById('chatInput').value.trim();
         if (!input) return;
@@ -1115,16 +1181,21 @@ document.addEventListener('DOMContentLoaded', () => {
         chat.scrollTop = chat.scrollHeight;
     });
 
-    document.getElementById('mathCrop').addEventListener('change', populatePests);
-    document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
-    document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
-    populatePests();
-    updateCostPerMl();
-    renderSavedChems();
+    // Farm Math initialization
+    const mathCrop = document.getElementById('mathCrop');
+    if (mathCrop) {
+        mathCrop.addEventListener('change', populatePests);
+        document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
+        document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
+        document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
+        document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
+        document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
+        populatePests();
+        updateCostPerMl();
+        renderSavedChems();
+    }
 
+    // Global click handler
     document.addEventListener('click', async function(e) {
         const deleteBtn = e.target.closest('.delete-btn');
         if (deleteBtn) {
