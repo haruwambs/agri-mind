@@ -47,21 +47,16 @@ async function checkSession() {
         
         let displayName = 'Farmer';
         
-        // Try to get display name from profile
         if (profile?.display_name && profile.display_name.trim() !== '') {
             displayName = profile.display_name.trim();
         } 
-        // If no profile display name, create user-friendly name from email
         else if (session.user.email) {
             let emailPrefix = session.user.email.split('@')[0];
-            
-            // Clean up: replace separators with spaces, capitalize
             let cleanName = emailPrefix
                 .replace(/[._-]/g, ' ')
                 .replace(/\b\w/g, l => l.toUpperCase())
                 .trim();
             
-            // If it's too weird or long, use a default
             if (cleanName.length > 20 || cleanName.includes('_') || cleanName.includes('-')) {
                 cleanName = 'Farmer';
             }
@@ -75,7 +70,6 @@ async function checkSession() {
             displayName: displayName 
         };
         
-        // Update profile if display name is empty
         if (profile && (!profile.display_name || profile.display_name.trim() === '')) {
             try {
                 await db.from('profiles')
@@ -114,6 +108,7 @@ async function signUp(email, password, displayName) {
         .replace(/\b\w/g, l => l.toUpperCase())
         .trim() || 'Farmer';
     
+    // Save email to profiles
     const { error: upsertError } = await db.from('profiles').upsert({ 
         id: data.user.id, 
         display_name: nameToSave, 
@@ -346,7 +341,7 @@ async function applyToJob(jobId) {
     loadJobs();
 }
 
-// ────────── Applications (FIXED) ──────────
+// ────────── Applications (FIXED - Fetches applicant details properly) ──────────
 async function loadApplications() {
     if (!currentUser) return;
     const container = document.getElementById('applicationsList');
@@ -374,11 +369,13 @@ async function loadApplications() {
                 let applicantPhone = 'N/A';
                 let applicantLocation = 'N/A';
                 
+                // Fetch the applicant's full profile
                 if (a.applicant_id) {
                     const { data: pf } = await db.from('profiles')
                         .select('display_name,email,phone,location')
                         .eq('id', a.applicant_id)
                         .single();
+                    
                     if (pf) {
                         applicantEmail = pf.email || 'N/A';
                         applicantName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
@@ -389,9 +386,14 @@ async function loadApplications() {
                 
                 const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
                 
+                // Always show email, show phone/location only when accepted
                 container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
                     <strong>${escapeHtml(applicantName)}</strong>
                     <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
+                    ${a.status === 'accepted' ? `
+                        <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
+                        <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>
+                    ` : ''}
                     <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
                     <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
                     <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
@@ -404,8 +406,6 @@ async function loadApplications() {
                     ${a.status === 'accepted' ? `
                         <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                             <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
-                            <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
-                            <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>
                             <div style="margin-top:8px;">
                                 <button class="btn-primary contact-applicant-btn" 
                                     data-email="${escapeHtml(applicantEmail)}" 
@@ -425,7 +425,7 @@ async function loadApplications() {
     if (container.innerHTML === '') container.innerHTML = '<p>No applications received yet.</p>';
 }
 
-// ────────── My Applications (FIXED) ──────────
+// ────────── My Applications (FIXED - Fetches employer details properly) ──────────
 async function loadMyApplications() {
     if (!currentUser) return;
     const container = document.getElementById('myApplicationsList');
@@ -443,6 +443,7 @@ async function loadMyApplications() {
     container.innerHTML = '';
     
     for (const a of apps) {
+        // Fetch the job details
         const { data: job } = await db.from('job_listings')
             .select('title,description,location,user_id')
             .eq('id', a.job_id)
@@ -452,11 +453,13 @@ async function loadMyApplications() {
         let employerName = 'Unknown';
         let employerPhone = 'N/A';
         
+        // Fetch the employer's profile using the job's user_id
         if (job?.user_id) {
             const { data: pf } = await db.from('profiles')
                 .select('display_name,email,phone')
                 .eq('id', job.user_id)
                 .single();
+            
             if (pf) {
                 employerEmail = pf.email || 'N/A';
                 employerName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
@@ -471,13 +474,15 @@ async function loadMyApplications() {
             ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
             <p>${escapeHtml(job?.description || '')}</p>
             <small>Employer: ${escapeHtml(employerName)}</small>
+            ${a.status === 'accepted' ? `
+                <br><small>📧 ${escapeHtml(employerEmail)}</small>
+                <br><small>📱 ${escapeHtml(employerPhone)}</small>
+            ` : ''}
             <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
             <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
             ${a.status === 'accepted' ? `
                 <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                     <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
-                    <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
-                    <p><strong>📱 Employer Phone:</strong> ${escapeHtml(employerPhone)}</p>
                     <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);margin-top:4px;">Contact the employer to discuss next steps.</p>
                     <button class="btn-primary contact-poster-btn" 
                         data-email="${escapeHtml(employerEmail)}" 
@@ -825,7 +830,7 @@ function diagnoseFromColors(c) {
 }
 
 // ═══════════════════════════════════════════
-// CROP DATABASE (Enhanced with chemicals & organic options)
+// CROP DATABASE
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
@@ -984,7 +989,7 @@ function showPhonePage(pageId, btn) {
 }
 
 // ═══════════════════════════════════════════
-// FARM MATH TOOL (Enhanced)
+// FARM MATH TOOL
 // ═══════════════════════════════════════════
 
 function populatePests() {
@@ -1150,7 +1155,7 @@ function calcFarmMath() {
 }
 
 // ═══════════════════════════════════════════
-// SENSOR HUB (Enhanced with light sensor)
+// SENSOR HUB
 // ═══════════════════════════════════════════
 
 function analyzeLeaf(event) {
@@ -1311,7 +1316,7 @@ function updateScanMapUI() {
 }
 
 // ═══════════════════════════════════════════
-// AUTO-SCOUT WITH PROMPT SYSTEM (Enhanced)
+// AUTO-SCOUT
 // ═══════════════════════════════════════════
 
 async function startScout() {
@@ -1531,7 +1536,7 @@ function openModal(mode) {
 
 function closeModal() {
     document.getElementById('authModal').style.display = 'none';
-    ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value='');
+    ['authEmail','authPass','authDisplayNameInput'].forEach(id => document.getElementById(id).value='');
 }
 
 // ═══════════════════════════════════════════
@@ -1798,7 +1803,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return; 
         }
 
-        // FIXED: Contact applicant button (for job posters)
+        // FIXED: Contact applicant button (for job posters) - fetches applicant details
         const contactApplicant = e.target.closest('.contact-applicant-btn');
         if (contactApplicant) { 
             const email = contactApplicant.dataset.email;
@@ -1816,7 +1821,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return; 
         }
 
-        // FIXED: Contact poster button (for job applicants)
+        // FIXED: Contact poster button (for job applicants) - fetches employer details
         const contactPoster = e.target.closest('.contact-poster-btn');
         if (contactPoster) { 
             const email = contactPoster.dataset.email;
@@ -1838,4 +1843,3 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSession();
     showPage('dashboard');
 });
-            
