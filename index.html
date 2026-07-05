@@ -213,13 +213,13 @@
             </div>
         </div>
 
-        <!-- FARM MATH TOOL - UPDATED WITH ALL 35+ CROPS -->
+        <!-- FARM MATH TOOL - UPDATED WITH ALL 35+ CROPS AND EXTENSIVE ZAMBIAN PESTS & DISEASES -->
         <div id="farmmath" class="page">
             <div class="card">
                 <h2><i class="fas fa-percentage"></i> Farm Math Tool</h2>
                 <p>Real farm economics in 3 taps. Enter your chemical, farm size, get exact costs.</p>
                 <div class="card" style="background:#0a0a0a;margin-top:16px;">
-                    <div class="step-row"><span class="step-num">1</span> Select Crop & Pest</div>
+                    <div class="step-row"><span class="step-num">1</span> Select Crop & Pest/Disease</div>
                     <select id="mathCrop">
                         <!-- Cereals -->
                         <optgroup label="🌾 Cereals">
@@ -287,24 +287,59 @@
                     <div class="step-row"><span class="step-num">2</span> Your Chemical Details</div>
                     <input type="text" id="mathChemName" placeholder="Chemical name (e.g., Ampligo, Dudu-Cyber)" list="chemSuggest">
                     <datalist id="chemSuggest">
-                        <option value="Ampligo (Syngenta)">
-                        <option value="Dudu-Cyber">
-                        <option value="Rocket (Villa Crop)">
-                        <option value="Cypermethrin">
-                        <option value="Lambda-Cyhalothrin">
-                        <option value="Emamectin Benzoate">
-                        <option value="Acetamiprid">
-                        <option value="Neem Oil (Organic)">
-                        <option value="Mancozeb">
-                        <option value="Tebuconazole">
-                        <option value="Chlorothalonil">
-                        <option value="Imidacloprid">
-                        <option value="Metalaxyl">
-                        <option value="Copper spray">
-                        <option value="Propiconazole">
-                        <option value="Azoxystrobin">
-                        <option value="Chlorpyrifos">
-                        <option value="Spinosad">
+                        <!-- Insecticides -->
+                        <optgroup label="🦗 Insecticides">
+                            <option value="Ampligo (Syngenta)">
+                            <option value="Dudu-Cyber">
+                            <option value="Rocket (Villa Crop)">
+                            <option value="Cypermethrin">
+                            <option value="Lambda-Cyhalothrin">
+                            <option value="Emamectin Benzoate">
+                            <option value="Acetamiprid">
+                            <option value="Imidacloprid">
+                            <option value="Chlorpyrifos">
+                            <option value="Spinosad">
+                            <option value="Indoxacarb">
+                            <option value="Abamectin">
+                            <option value="Deltamethrin">
+                            <option value="Malathion">
+                            <option value="Diazinon">
+                            <option value="Carbaryl">
+                            <option value="Bifenthrin">
+                            <option value="Thiamethoxam">
+                            <option value="Fipronil">
+                            <option value="Profenofos">
+                        </optgroup>
+                        <!-- Fungicides -->
+                        <optgroup label="🍄 Fungicides">
+                            <option value="Mancozeb">
+                            <option value="Tebuconazole">
+                            <option value="Chlorothalonil">
+                            <option value="Metalaxyl">
+                            <option value="Copper spray">
+                            <option value="Propiconazole">
+                            <option value="Azoxystrobin">
+                            <option value="Ridomil Gold">
+                            <option value="Dithane M-45">
+                            <option value="Kocide">
+                            <option value="Thiram">
+                            <option value="Carbendazim">
+                            <option value="Triadimefon">
+                            <option value="Hexaconazole">
+                            <option value="Sulphur (dusting/wettable)">
+                            <option value="Bordeaux mixture">
+                            <option value="Captan">
+                            <option value="Zineb">
+                        </optgroup>
+                        <!-- Organic/Biological -->
+                        <optgroup label="🌱 Organic/Biological">
+                            <option value="Neem Oil (Organic)">
+                            <option value="Bacillus thuringiensis (Bt)">
+                            <option value="Pyrethrum (Natural)">
+                            <option value="Diatomaceous Earth">
+                            <option value="Garlic Spray (Organic)">
+                            <option value="Chilli Pepper Spray">
+                        </optgroup>
                     </datalist>
                     <div class="chem-row">
                         <div><label>Container Size (ml)</label><input type="number" id="mathContSize" value="250" min="1"></div>
