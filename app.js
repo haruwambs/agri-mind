@@ -40,21 +40,9 @@ themeToggle.addEventListener('click', () => {
 async function checkSession() {
     const { data: { session } } = await db.auth.getSession();
     if (session && session.user) {
-        const { data: profile } = await db.from('profiles').select('*').eq('id', session.user.id).single();
-        let displayName = 'Farmer';
-        if (profile?.display_name && profile.display_name.trim() !== '') {
-            displayName = profile.display_name.trim();
-        } else if (session.user.email) {
-            displayName = session.user.email.split('@')[0];
-        }
-        currentUser = { 
-            id: session.user.id, 
-            email: session.user.email, 
-            displayName: displayName 
-        };
-    } else { 
-        currentUser = null; 
-    }
+        const { data: profile } = await db.from('profiles').select('display_name').eq('id', session.user.id).single();
+        currentUser = { id: session.user.id, email: session.user.email, displayName: profile?.display_name || session.user.email };
+    } else { currentUser = null; }
     updateAuthUI();
     if (currentUser) loadDashboardStats();
 }
@@ -75,27 +63,16 @@ function updateAuthUI() {
 async function signUp(email, password, displayName) {
     const { data, error } = await db.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
-    
-    const nameToSave = displayName?.trim() || email.split('@')[0];
-    console.log('Saving display_name:', nameToSave);
-    
-    const { error: upsertError } = await db.from('profiles').upsert({ 
-        id: data.user.id, 
-        display_name: nameToSave, 
-        email: email 
-    });
-    
-    if (upsertError) console.log('Error saving profile:', upsertError);
-    
+    await db.from('profiles').upsert({ id: data.user.id, display_name: displayName, email: email });
     await checkSession();
-    showToast(`Welcome, ${nameToSave}!`);
+    showToast(`Welcome, ${displayName}!`);
 }
 
 async function login(email, password) {
     const { error } = await db.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
     await checkSession();
-    showToast(`Welcome back, ${currentUser?.displayName || 'farmer'}!`);
+    showToast(`Welcome back!`);
 }
 
 async function logout() {
@@ -105,10 +82,7 @@ async function logout() {
     showToast('Logged out');
 }
 
-db.auth.onAuthStateChange((event, session) => { 
-    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') checkSession();
-    else if (event === 'SIGNED_OUT') { currentUser = null; updateAuthUI(); }
-});
+db.auth.onAuthStateChange((event, session) => { checkSession(); });
 
 // ────────── Weather ──────────
 async function loadWeather() {
@@ -143,16 +117,30 @@ async function loadForum() {
     container.innerHTML = '';
     for (const p of posts) {
         let dn = 'Anonymous';
-        if (p.user_id) { 
-            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', p.user_id).single(); 
-            if (pf?.display_name && pf.display_name.trim() !== '') dn = pf.display_name.trim();
-            else if (pf?.email) dn = pf.email.split('@')[0];
-        }
+        if (p.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', p.user_id).single(); if (pf) dn = pf.display_name; }
+        const { count: lc } = await db.from('likes').select('*', { count: 'exact', head: true }).match({ target_type: 'forum', target_id: p.id });
         const postDiv = document.createElement('div');
         postDiv.className = 'forum-post';
-        postDiv.innerHTML = `<strong>${escapeHtml(dn)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}`;
+        postDiv.innerHTML = `<strong>${escapeHtml(dn)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}<span class="like-btn" data-type="forum" data-id="${p.id}">❤️ ${lc||0}</span>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}<button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>`;
+        const replyDiv = document.createElement('div');
+        replyDiv.className = 'reply-section';
+        replyDiv.style.display = 'none';
         container.appendChild(postDiv);
+        container.appendChild(replyDiv);
     }
+}
+
+async function loadReplies(postId, container) {
+    const { data: replies } = await db.from('forum_replies').select('*').eq('post_id', postId).order('created_at', { ascending: true });
+    container.innerHTML = '';
+    if (replies) {
+        for (const r of replies) {
+            let dn = 'Anonymous';
+            if (r.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', r.user_id).single(); if (pf) dn = pf.display_name; }
+            container.innerHTML += `<div style="padding:4px 0;"><strong>${escapeHtml(dn)}:</strong> ${escapeHtml(r.content)}</div>`;
+        }
+    }
+    container.innerHTML += `<input type="text" class="reply-input" placeholder="Write reply..." style="width:70%;display:inline;"><button class="btn-outline send-reply" data-post="${postId}">Send</button>`;
 }
 
 async function addForumPost(content, imageFile) {
@@ -168,25 +156,46 @@ async function addForumPost(content, imageFile) {
 }
 
 async function deleteForumPost(id) {
+    await db.from('forum_replies').delete().eq('post_id', id);
+    await db.from('likes').delete().match({ target_type: 'forum', target_id: id });
     await db.from('forum_posts').delete().eq('id', id);
     showToast('Deleted'); loadForum(); loadDashboardStats();
 }
 
+async function toggleLike(type, id) {
+    if (!currentUser) return showToast('Login first', true);
+    const { data: ex } = await db.from('likes').select('*').match({ user_id: currentUser.id, target_type: type, target_id: id });
+    if (ex && ex.length) await db.from('likes').delete().eq('id', ex[0].id);
+    else await db.from('likes').insert({ user_id: currentUser.id, target_type: type, target_id: id });
+    if (type === 'forum') loadForum();
+    else if (type === 'job') loadJobs();
+    else if (type === 'product') loadMarket();
+    else if (type === 'tutorial') loadTutorials();
+}
+
 // ────────── Groups ──────────
 async function loadGroups() {
-    const { data: groups } = await db.from('groups').select('*').order('created_at', { ascending: false });
+    const locFilter = document.getElementById('groupLocationFilter')?.value?.trim() || '';
+    let query = db.from('groups').select('*').order('created_at', { ascending: false });
+    if (locFilter) query = query.ilike('location', `%${locFilter}%`);
+    const { data: groups } = await query;
     const container = document.getElementById('groupsList');
-    if (!groups || groups.length === 0) { container.innerHTML = '<p>No groups yet.</p>'; return; }
-    container.innerHTML = groups.map(g => `<div class="forum-post"><strong>${escapeHtml(g.name)}</strong> <small>${escapeHtml(g.category)}</small><p>${escapeHtml(g.description||'')}</p></div>`).join('');
+    if (!groups || groups.length === 0) { container.innerHTML = '<p>No groups yet. Create one!</p>'; return; }
+    container.innerHTML = groups.map(g => `<div class="forum-post"><strong>${escapeHtml(g.name)}</strong> <small>${escapeHtml(g.category)}</small>${g.location?`<br><small>📍 ${escapeHtml(g.location)}</small>`:''}<p>${escapeHtml(g.description||'')}</p><button class="btn-outline join-group-btn" data-group="${g.id}">Join Group</button></div>`).join('');
 }
 
 async function createGroup() {
     if (!currentUser) return showToast('Please login', true);
     const name = document.getElementById('groupName').value.trim();
+    const desc = document.getElementById('groupDesc').value.trim();
+    const cat = document.getElementById('groupCategory').value;
+    const loc = document.getElementById('groupLocation').value.trim();
     if (!name) return showToast('Group name required', true);
-    await db.from('groups').insert({ name, description: document.getElementById('groupDesc').value, category: document.getElementById('groupCategory').value, location: document.getElementById('groupLocation').value, created_by: currentUser.id });
+    await db.from('groups').insert({ name, description: desc, category: cat, location: loc, created_by: currentUser.id });
     showToast('Group created!');
     document.getElementById('groupName').value = '';
+    document.getElementById('groupDesc').value = '';
+    document.getElementById('groupLocation').value = '';
     loadGroups();
 }
 
@@ -209,26 +218,19 @@ async function deleteRecord(id) { await db.from('farm_records').delete().eq('id'
 
 // ────────── Jobs ──────────
 async function loadJobs() {
-    const { data: jobs } = await db.from('job_listings').select('*').order('created_at', { ascending: false });
+    const locFilter = document.getElementById('jobLocationFilter')?.value?.trim() || '';
+    let query = db.from('job_listings').select('*').order('created_at', { ascending: false });
+    if (locFilter) query = query.ilike('location', `%${locFilter}%`);
+    const { data: jobs } = await query;
     const container = document.getElementById('jobsList');
     if (!jobs || jobs.length === 0) { container.innerHTML = '<p>No jobs available.</p>'; return; }
     container.innerHTML = '';
     for (const j of jobs) {
-        let posterName = 'Anonymous';
-        if (j.user_id) {
-            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', j.user_id).single();
-            if (pf?.display_name && pf.display_name.trim() !== '') posterName = pf.display_name.trim();
-            else if (pf?.email) posterName = pf.email.split('@')[0];
-        }
+        let dn = 'Anonymous';
+        if (j.user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', j.user_id).single(); if (pf) dn = pf.display_name; }
+        const { count: ac } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
         const isOwner = currentUser && currentUser.id === j.user_id;
-        container.innerHTML += `<div class="job-item">
-            <strong>${escapeHtml(j.title)}</strong>
-            <p>${escapeHtml(j.description||'')}</p>
-            ${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}
-            <small>Posted by: ${escapeHtml(posterName)}</small>
-            ${isOwner ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
-            ${!isOwner && currentUser ? `<button class="btn-outline apply-btn" data-job="${j.id}" style="margin-left:8px;">Apply Now</button>` : ''}
-        </div>`;
+        container.innerHTML += `<div class="job-item"><strong>${escapeHtml(j.title)}</strong><p>${escapeHtml(j.description||'')}</p>${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}<small>Posted by ${escapeHtml(dn)}</small><span>👤 ${ac||0} applicants</span>${isOwner?`<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>`:''}${!isOwner&&currentUser?`<button class="btn-outline apply-btn" data-job="${j.id}" style="margin-left:8px;">Apply Now</button>`:''}</div>`;
     }
 }
 
@@ -238,166 +240,72 @@ async function addJob(title, description, location) {
     showToast('Job posted!'); loadJobs(); loadDashboardStats();
 }
 
-async function deleteJob(id) { await db.from('job_listings').delete().eq('id', id); showToast('Deleted'); loadJobs(); }
+async function deleteJob(id) { 
+    await db.from('job_applications').delete().eq('job_id', id); 
+    await db.from('job_listings').delete().eq('id', id); 
+    showToast('Job deleted'); loadJobs(); loadDashboardStats(); 
+}
 
 async function applyToJob(jobId) {
     if (!currentUser) { showToast('Please login first', true); return; }
-    
-    const { data: existing } = await db.from('job_applications').select('*').match({ job_id: parseInt(jobId), applicant_id: currentUser.id });
-    if (existing && existing.length > 0) { showToast('You already applied', true); return; }
-    
-    const msg = prompt('Add a message (optional):');
-    await db.from('job_applications').insert({ 
-        job_id: parseInt(jobId), 
-        applicant_id: currentUser.id, 
-        applicant_message: msg || 'I am interested.',
-        message: msg || 'I am interested.',
-        status: 'pending' 
-    });
-    showToast('Applied!');
-    loadJobs();
+    const { data: existing } = await db.from('job_applications').select('*').match({ job_id: jobId, applicant_id: currentUser.id });
+    if (existing && existing.length > 0) { showToast('You already applied to this job', true); return; }
+    const msg = prompt('Add a message with your application (optional):');
+    const { error } = await db.from('job_applications').insert({ job_id: parseInt(jobId), applicant_id: currentUser.id, applicant_message: msg || null, message: msg || 'I am interested.', status: 'pending' });
+    if (error) { showToast('Failed to apply: ' + error.message, true); return; }
+    showToast('Application submitted successfully!'); loadJobs();
 }
 
-// ────────── Applications (FIXED - shows email directly) ──────────
+// ────────── Applications ──────────
 async function loadApplications() {
     if (!currentUser) return;
     const container = document.getElementById('applicationsList');
-    
     const { data: myJobs } = await db.from('job_listings').select('id,title').eq('user_id', currentUser.id);
-    if (!myJobs || myJobs.length === 0) { 
-        container.innerHTML = '<p>No jobs posted yet.</p>'; 
-        return; 
-    }
-    
+    if (!myJobs || myJobs.length === 0) { container.innerHTML = '<p>No jobs posted yet.</p>'; return; }
     container.innerHTML = '';
-    
     for (const job of myJobs) {
-        const { data: apps } = await db.from('job_applications')
-            .select('*')
-            .eq('job_id', job.id)
-            .order('created_at', { ascending: false });
-        
+        const { data: apps } = await db.from('job_applications').select('*').eq('job_id', job.id).order('created_at', { ascending: false });
         if (apps && apps.length > 0) {
-            container.innerHTML += `<h4 style="color:var(--accent);margin-bottom:10px;">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
-            
+            container.innerHTML += `<h4 style="color:var(--accent);">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
             for (const a of apps) {
-                // Get applicant email directly from auth.users via profiles
-                let applicantEmail = 'N/A';
-                let applicantName = 'Unknown';
-                
-                if (a.applicant_id) {
-                    const { data: pf } = await db.from('profiles')
-                        .select('display_name,email')
-                        .eq('id', a.applicant_id)
-                        .single();
-                    if (pf) {
-                        applicantEmail = pf.email || 'N/A';
-                        applicantName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-                    }
-                }
-                
+                let dn = 'Unknown', em = 'N/A', ph = 'N/A', lo = 'N/A';
+                if (a.applicant_id) { const { data: pf } = await db.from('profiles').select('display_name,email,phone,location').eq('id', a.applicant_id).single(); if (pf) { dn = pf.display_name; em = pf.email; ph = pf.phone || 'N/A'; lo = pf.location || 'N/A'; } }
                 const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-                
-                container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
-                    <strong>${escapeHtml(applicantName)}</strong>
-                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
-                    <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
-                    <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
-                    <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
-                    ${a.status === 'pending' ? `
-                        <div style="margin-top:8px;display:flex;gap:8px;">
-                            <button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
-                            <button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
-                        </div>
-                    ` : ''}
-                    ${a.status === 'accepted' ? `
-                        <div style="margin-top:8px;">
-                            <button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantEmail)}" data-name="${escapeHtml(applicantName)}" style="font-size:12px;padding:6px 14px;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
-                            </button>
-                        </div>
-                    ` : ''}
-                </div>`;
+                container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(dn)}</strong><br><small>📧 ${escapeHtml(em)}</small>${a.status==='accepted'?`<br><small>📱 ${escapeHtml(ph)}</small><br><small>📍 ${escapeHtml(lo)}</small>`:''}<br><small>Message: ${escapeHtml(a.applicant_message||'No message')}</small><br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small><br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>${a.status==='pending'?`<div style="margin-top:8px;"><button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button><button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button></div>`:''}${a.status==='accepted'?`<div style="margin-top:8px;"><button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(em)}" data-name="${escapeHtml(dn)}" style="font-size:12px;padding:6px 14px;"><i class="fas fa-envelope"></i> Send Message</button></div>`:''}</div>`;
             }
         }
     }
-    
     if (container.innerHTML === '') container.innerHTML = '<p>No applications received yet.</p>';
 }
 
-// ────────── My Applications (FIXED - shows employer email when accepted) ──────────
 async function loadMyApplications() {
     if (!currentUser) return;
     const container = document.getElementById('myApplicationsList');
-    
-    const { data: apps } = await db.from('job_applications')
-        .select('*')
-        .eq('applicant_id', currentUser.id)
-        .order('created_at', { ascending: false });
-    
-    if (!apps || apps.length === 0) { 
-        container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; 
-        return; 
-    }
-    
+    const { data: apps } = await db.from('job_applications').select('*').eq('applicant_id', currentUser.id).order('created_at', { ascending: false });
+    if (!apps || apps.length === 0) { container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; return; }
     container.innerHTML = '';
-    
     for (const a of apps) {
-        const { data: job } = await db.from('job_listings')
-            .select('title,description,location,user_id')
-            .eq('id', a.job_id)
-            .single();
-        
-        // Get employer email
-        let employerEmail = 'N/A';
-        let employerName = 'Unknown';
-        
-        if (job?.user_id) {
-            const { data: pf } = await db.from('profiles')
-                .select('display_name,email')
-                .eq('id', job.user_id)
-                .single();
-            if (pf) {
-                employerEmail = pf.email || 'N/A';
-                employerName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-            }
-        }
-        
+        const { data: job } = await db.from('job_listings').select('title,description,location,user_id').eq('id', a.job_id).single();
+        let pn = 'Unknown', pe = 'N/A', pp = 'N/A';
+        if (job?.user_id) { const { data: pf } = await db.from('profiles').select('display_name,email,phone').eq('id', job.user_id).single(); if (pf) { pn = pf.display_name; pe = pf.email; pp = pf.phone || 'N/A'; } }
         const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
-        
-        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
-            <strong>${escapeHtml(job?.title || 'Unknown Job')}</strong>
-            ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
-            <p>${escapeHtml(job?.description || '')}</p>
-            <small>Employer: ${escapeHtml(employerName)}</small>
-            <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
-            <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
-            ${a.status === 'accepted' ? `
-                <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
-                    <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
-                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
-                    <button class="btn-primary contact-poster-btn" data-email="${escapeHtml(employerEmail)}" data-name="${escapeHtml(employerName)}" style="font-size:12px;padding:8px 16px;margin-top:6px;">
-                        <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
-                    </button>
-                </div>
-            ` : ''}
-            ${a.status === 'rejected' ? `<p style="color:#dc2626;margin-top:8px;">Not accepted. Keep applying!</p>` : ''}
-            ${a.status === 'pending' ? `<p style="color:#f59e0b;margin-top:8px;">⏳ Waiting for review...</p>` : ''}
-        </div>`;
+        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};"><strong>${escapeHtml(job?.title||'Unknown Job')}</strong>${job?.location?`<p>📍 ${escapeHtml(job.location)}</p>`:''}<p>${escapeHtml(job?.description||'')}</p><small>Posted by: ${escapeHtml(pn)}</small>${a.status==='accepted'?`<br><small>📧 ${escapeHtml(pe)}</small><br><small>📱 ${escapeHtml(pp)}</small>`:''}<br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small><br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>${a.status==='accepted'?`<div style="margin-top:8px;"><button class="btn-primary contact-poster-btn" data-email="${escapeHtml(pe)}" data-name="${escapeHtml(pn)}" style="font-size:12px;padding:6px 14px;"><i class="fas fa-envelope"></i> Contact Employer</button></div>`:''}</div>`;
     }
 }
 
 async function updateApplicationStatus(appId, status) { 
     await db.from('job_applications').update({ status }).eq('id', appId); 
-    showToast(`Application ${status}!`); 
-    loadApplications();
-    loadMyApplications();
+    showToast(`Application ${status}!`); loadApplications(); 
 }
 
 // ────────── Market ──────────
 async function loadMarket() {
-    const { data: products } = await db.from('products').select('*').order('created_at', { ascending: false });
+    const cat = document.getElementById('marketCategoryFilter')?.value || 'All';
+    const locFilter = document.getElementById('marketLocationFilter')?.value?.trim() || '';
+    let q = db.from('products').select('*').order('created_at', { ascending: false });
+    if (cat !== 'All') q = q.eq('category', cat);
+    if (locFilter) q = q.ilike('location', `%${locFilter}%`);
+    const { data: products } = await q;
     const container = document.getElementById('marketList');
     if (!products || products.length === 0) { container.innerHTML = '<p>No products listed.</p>'; return; }
     container.innerHTML = products.map(p => `<div class="product-item">${p.image_url?`<img src="${p.image_url}" style="max-width:100px;border-radius:10px;">`:''}<strong>${escapeHtml(p.name)}</strong> - ${escapeHtml(p.price)}${p.location?`<br><small>📍 ${escapeHtml(p.location)}</small>`:''}<br><small>${escapeHtml(p.category)}</small>${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="product" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}</div>`).join('');
@@ -423,10 +331,13 @@ async function loadMessages() {
     const { data: msgs } = await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
     const container = document.getElementById('messagesList');
     if (!msgs || msgs.length === 0) { container.innerHTML = '<p>No messages yet.</p>'; return; }
-    container.innerHTML = msgs.map(m => {
-        let fromName = 'User', toName = 'User';
-        return `<div class="msg-item"><strong>${escapeHtml(fromName)}</strong> → ${escapeHtml(toName)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
-    }).join('');
+    container.innerHTML = '';
+    for (const m of msgs) {
+        let fn = 'Unknown', tn = 'Unknown';
+        if (m.from_user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', m.from_user_id).single(); if (pf) fn = pf.display_name; }
+        if (m.to_user_id) { const { data: pf } = await db.from('profiles').select('display_name').eq('id', m.to_user_id).single(); if (pf) tn = pf.display_name; }
+        container.innerHTML += `<div class="msg-item"><strong>${escapeHtml(fn)}</strong> → ${escapeHtml(tn)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
+    }
 }
 
 async function sendMessage(toEmail, text) {
@@ -451,7 +362,7 @@ async function addTutorial(title, url, description) {
     showToast('Tutorial shared!'); loadTutorials(); loadDashboardStats();
 }
 
-async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); showToast('Deleted'); loadTutorials(); }
+async function deleteTutorial(id) { await db.from('tutorials').delete().eq('id', id); showToast('Deleted'); loadTutorials(); loadDashboardStats(); }
 
 // ────────── Calendar ──────────
 async function loadCalendar() {
@@ -466,11 +377,13 @@ async function addEvent() {
     if (!currentUser) return;
     const title = document.getElementById('eventTitle').value.trim();
     const date = document.getElementById('eventDate').value;
+    const notes = document.getElementById('eventNotes').value.trim();
     if (!title || !date) return showToast('Title and date required', true);
-    await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes: document.getElementById('eventNotes').value });
+    await db.from('calendar_events').insert({ user_id: currentUser.id, title, event_date: date, notes });
     showToast('Event added!');
-    document.getElementById('eventTitle').value = '';
-    document.getElementById('eventDate').value = '';
+    document.getElementById('eventTitle').value='';
+    document.getElementById('eventDate').value='';
+    document.getElementById('eventNotes').value='';
     loadCalendar();
 }
 
@@ -513,46 +426,38 @@ async function wikiAnswer(question) {
 
 // ────────── Profile ──────────
 async function loadProfile() {
-    if (!currentUser) { 
-        document.getElementById('profileContent').innerHTML = '<p>Please login to see your profile.</p>'; 
-        return; 
-    }
-    
+    if (!currentUser) { document.getElementById('profileContent').innerHTML='<p>Please login to see your profile.</p>'; return; }
     const { data: pd } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-    const displayName = pd?.display_name?.trim() || currentUser.email?.split('@')[0] || 'Farmer';
-    
-    document.getElementById('profileName').textContent = displayName;
-    document.getElementById('profileEmail').textContent = currentUser.email || 'No email';
+    document.getElementById('profileName').textContent = pd?.display_name || currentUser.email;
+    document.getElementById('profileEmail').textContent = currentUser.email;
     document.getElementById('profilePhone').textContent = '📱 Phone: ' + (pd?.phone || 'Not set');
     document.getElementById('profileLocation').textContent = '📍 Location: ' + (pd?.location || 'Not set');
     document.getElementById('profileBio').textContent = '💬 ' + (pd?.bio || 'No bio yet');
     document.getElementById('profileSince').textContent = pd?.created_at ? 'Member since: ' + new Date(pd.created_at).toLocaleDateString() : '';
-    
     document.getElementById('editDisplayName').value = pd?.display_name || '';
     document.getElementById('editPhone').value = pd?.phone || '';
     document.getElementById('editLocation').value = pd?.location || '';
     document.getElementById('editBio').value = pd?.bio || '';
-    
+    document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl;
     const { count: fc } = await db.from('forum_posts').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: rc } = await db.from('farm_records').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: jc } = await db.from('job_listings').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: pc } = await db.from('products').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
     const { count: tc } = await db.from('tutorials').select('*',{count:'exact',head:true}).eq('user_id',currentUser.id);
-    
-    document.getElementById('profileForumCount').textContent = fc || 0;
-    document.getElementById('profileRecordsCount').textContent = rc || 0;
-    document.getElementById('profileJobsCount').textContent = jc || 0;
-    document.getElementById('profileProductsCount').textContent = pc || 0;
-    document.getElementById('profileTutorialsCount').textContent = tc || 0;
-    
+    const { count: mc } = await db.from('messages').select('*',{count:'exact',head:true}).or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`);
+    const { count: fol } = await db.from('follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id);
+    document.getElementById('profileForumCount').textContent=fc||0;
+    document.getElementById('profileRecordsCount').textContent=rc||0;
+    document.getElementById('profileJobsCount').textContent=jc||0;
+    document.getElementById('profileProductsCount').textContent=pc||0;
+    document.getElementById('profileTutorialsCount').textContent=tc||0;
+    document.getElementById('profileMessagesCount').textContent=mc||0;
+    document.getElementById('followerCount').textContent=`${fol||0} followers`;
     document.getElementById('avatarUpload').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const { error } = await db.storage.from('avatars').upload(`${currentUser.id}/profile.jpg`, file, { upsert: true });
-        if (!error) { 
-            document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl; 
-            showToast('Profile picture updated!'); 
-        }
+        if (!error) { document.getElementById('profileAvatar').src = db.storage.from('avatars').getPublicUrl(`${currentUser.id}/profile.jpg`).data.publicUrl; showToast('Profile picture updated!'); }
     };
 }
 
@@ -583,25 +488,46 @@ function analyzeLeafColors(imageData) {
         else if (v < 25 && s < 30) { dark++; if (dark % 3 === 0) darkSpots++; }
         else if (s < 15 && v > 70) white++;
     }
-    return { greenPct: total ? +(green/total*100).toFixed(1) : 0, yellowPct: total ? +(yellow/total*100).toFixed(1) : 0, brownPct: total ? +(brown/total*100).toFixed(1) : 0, darkPct: total ? +(dark/total*100).toFixed(1) : 0, whitePct: total ? +(white/total*100).toFixed(1) : 0, darkSpots };
+    return {
+        greenPct: total ? +(green/total*100).toFixed(1) : 0,
+        yellowPct: total ? +(yellow/total*100).toFixed(1) : 0,
+        brownPct: total ? +(brown/total*100).toFixed(1) : 0,
+        darkPct: total ? +(dark/total*100).toFixed(1) : 0,
+        whitePct: total ? +(white/total*100).toFixed(1) : 0,
+        darkSpots
+    };
 }
 
 function diagnoseFromColors(c) {
     const symptoms = [], issues = [];
     let score = 0, conf = 0;
-    if (c.brownPct > 5 && c.darkSpots > 3) { symptoms.push({ text: 'Brown holes detected', found: true }); issues.push('Possible FAW damage'); score += 3; conf += 25; }
-    else if (c.brownPct > 3) { symptoms.push({ text: 'Minor brown spots', found: true }); score += 1; conf += 10; }
-    else { symptoms.push({ text: 'No brown damage', found: false }); conf += 15; }
-    if (c.yellowPct > 10) { symptoms.push({ text: 'Yellow >10%', found: true }); issues.push('Possible deficiency'); score += 2; conf += 20; }
-    else if (c.yellowPct > 5) { symptoms.push({ text: 'Slight yellowing', found: true }); score += 1; conf += 10; }
-    else { symptoms.push({ text: 'No yellowing', found: false }); conf += 10; }
-    if (c.greenPct < 50) { symptoms.push({ text: 'Low chlorophyll', found: true }); issues.push('Plant stressed'); score += 2; conf += 15; }
-    else { symptoms.push({ text: 'Healthy chlorophyll', found: false }); conf += 20; }
-    if (c.whitePct > 8) { symptoms.push({ text: 'White patches', found: true }); issues.push('Possible mildew'); score += 2; conf += 15; }
-    else { symptoms.push({ text: 'No mildew', found: false }); conf += 5; }
-    let plant = c.greenPct > 60 ? 'Healthy Plant' : c.greenPct > 40 ? 'Stressed Crop' : 'Broadleaf Crop';
+    if (currentSensorLight !== null && currentSensorLight < 100) {
+        return { symptoms: [{ text: 'Too dark for accurate analysis - move to brighter area', found: true }], issues: ['Insufficient light'], plant: 'Unknown', confidence: 0, recommendation: 'Move to better lighting and scan again.', severity: 0, colors: c };
+    }
+    if (c.brownPct > 5 && c.darkSpots > 3) {
+        symptoms.push({ text: 'Brown circular holes 3-8mm detected', found: true, detail: `Brown: ${c.brownPct}%, Dark spots: ${c.darkSpots}` });
+        issues.push('Possible Fall Armyworm damage'); score += 3; conf += 25;
+    } else if (c.brownPct > 3) {
+        symptoms.push({ text: 'Minor brown spots detected', found: true, detail: `Brown: ${c.brownPct}%` }); score += 1; conf += 10;
+    } else { symptoms.push({ text: 'No significant brown damage', found: false }); conf += 15; }
+    if (c.yellowPct > 10) {
+        symptoms.push({ text: 'Yellow discoloration >10% of leaf area', found: true, detail: `Yellow: ${c.yellowPct}%` });
+        issues.push('Possible nutrient deficiency or early blight'); score += 2; conf += 20;
+    } else if (c.yellowPct > 5) {
+        symptoms.push({ text: 'Slight yellowing detected (5-10%)', found: true, detail: `Yellow: ${c.yellowPct}%` }); score += 1; conf += 10;
+    } else { symptoms.push({ text: 'No yellow discoloration', found: false }); conf += 10; }
+    if (c.greenPct < 50) {
+        symptoms.push({ text: 'Low chlorophyll detected (<50% green)', found: true, detail: `Green: ${c.greenPct}%` });
+        issues.push('Plant may be wilting or stressed'); score += 2; conf += 15;
+    } else { symptoms.push({ text: 'Healthy chlorophyll levels', found: false, detail: `Green: ${c.greenPct}%` }); conf += 20; }
+    if (c.whitePct > 8) {
+        symptoms.push({ text: 'White/powdery patches detected', found: true, detail: `White: ${c.whitePct}%` });
+        issues.push('Possible powdery mildew'); score += 2; conf += 15;
+    } else { symptoms.push({ text: 'No powdery mildew signs', found: false }); conf += 5; }
+    let plant = c.greenPct > 60 && c.yellowPct < 5 ? 'Healthy Plant (likely Maize)' : c.greenPct > 40 ? 'Stressed Crop' : 'Broadleaf Crop';
     conf = Math.min(conf, 95);
-    return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: score >= 5 ? 'URGENT: Treat!' : score >= 3 ? 'Monitor closely.' : score >= 1 ? 'Minor issues.' : 'Healthy.', severity: score, colors: c };
+    let rec = score >= 5 ? 'URGENT: Multiple issues detected. Apply treatment immediately!' : score >= 3 ? 'Issues detected. Monitor closely and consider treatment.' : score >= 1 ? 'Minor issues. Continue regular monitoring.' : 'Plant appears healthy. No action needed.';
+    return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: rec, severity: score, colors: c };
 }
 
 // ═══════════════════════════════════════════
@@ -609,11 +535,11 @@ function diagnoseFromColors(c) {
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
-    maize: { name: 'Maize', pests: { fall_armyworm: { name: 'Fall Armyworm', severity: 'high', lossPct: 15, dosage: 200, note: 'Most destructive during vegetative stage.' }, stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 150, note: 'Apply at knee-high stage.' }, aphids: { name: 'Aphids', severity: 'medium', lossPct: 8, dosage: 100, note: 'Check under leaves.' } }, yieldValue: 2533 },
-    tomato: { name: 'Tomato', pests: { late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, note: 'Spreads rapidly in cool wet conditions.' }, aphids: { name: 'Aphids', severity: 'medium', lossPct: 10, dosage: 250, note: 'Also transmits viruses.' } }, yieldValue: 5000 },
-    rice: { name: 'Rice', pests: { blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, note: 'Favored by high nitrogen.' } }, yieldValue: 3200 },
-    beans: { name: 'Beans', pests: { aphids: { name: 'Aphids', severity: 'medium', lossPct: 12, dosage: 120, note: 'Check flowering stage.' } }, yieldValue: 1800 },
-    cabbage: { name: 'Cabbage', pests: { diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, note: 'Rotate chemicals.' } }, yieldValue: 2800 }
+    maize: { name: 'Maize', pests: { fall_armyworm: { name: 'Fall Armyworm', severity: 'high', lossPct: 15, dosage: 200, chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], organic: ['Neem Oil','Bt','Hand picking'], note: 'Most destructive during vegetative stage. Scout early morning or late evening.' }, stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 150, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Attacks stems causing lodging. Apply at knee-high stage.' }, aphids: { name: 'Aphids', severity: 'medium', lossPct: 8, dosage: 100, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Ladybugs','Neem Oil','Soap spray'], note: 'Check under leaves. Ants indicate presence.' } }, yieldValue: 2533 },
+    tomato: { name: 'Tomato', pests: { late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], organic: ['Copper spray','Baking soda'], note: 'Spreads rapidly in cool, wet conditions.' }, aphids: { name: 'Aphids', severity: 'medium', lossPct: 10, dosage: 250, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Garlic spray'], note: 'Also transmits viral diseases.' } }, yieldValue: 5000 },
+    rice: { name: 'Rice', pests: { blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Tricyclazole','Rocket'], organic: ['Silicon fertilizer','Resistant varieties'], note: 'Favored by high nitrogen and frequent rainfall.' } }, yieldValue: 3200 },
+    beans: { name: 'Beans', pests: { aphids: { name: 'Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Companion planting'], note: 'Check flowering stage.' } }, yieldValue: 1800 },
+    cabbage: { name: 'Cabbage', pests: { diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Dudu-Cyber','Emamectin Benzoate'], organic: ['Bt spray','Neem Oil','Row covers'], note: 'Rotate chemicals to prevent resistance.' } }, yieldValue: 2800 }
 };
 
 // ═══════════════════════════════════════════
@@ -627,7 +553,8 @@ let savedChems = JSON.parse(localStorage.getItem('agrimind_chems') || '[]');
 let scoutingActive = false;
 let scoutSteps = 0, scoutScans = 0, scoutInfections = 0, scoutDist = 0;
 let scoutLastStep = Date.now(), scoutLastAccel = { x: 0, y: 0, z: 0 };
-let scoutTimer = null, scoutStepsSinceScan = 0, scoutPendingScan = false;
+let scoutTimer = null, scoutStepsSinceScan = 0;
+let scoutPendingScan = false;
 
 // ═══════════════════════════════════════════
 // NAVIGATION
@@ -655,13 +582,22 @@ function showPage(pageId) {
         case 'profile': loadProfile(); break;
         case 'calendar': loadCalendar(); break;
         case 'dashboard': loadDashboardStats(); break;
+        case 'sensorhub': updateScanMapUI(); break;
     }
 }
 
 function showPhonePage(pageId, btn) {
-    showPage(pageId);
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+    const el = document.getElementById(pageId);
+    if (el) el.classList.add('active-page');
     document.querySelectorAll('.phone-nav-item').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+    document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
+    const nav = document.querySelector(`.nav-links li[data-page="${pageId}"]`);
+    if (nav) nav.classList.add('active');
+    if (pageId === 'sensorhub') updateScanMapUI();
+    if (pageId === 'messages') loadMessages();
+    if (pageId === 'dashboard') loadDashboardStats();
 }
 
 // ═══════════════════════════════════════════
@@ -671,8 +607,9 @@ function showPhonePage(pageId, btn) {
 function populatePests() {
     const crop = document.getElementById('mathCrop').value;
     const pestSelect = document.getElementById('mathPest');
+    const pests = CROP_DB[crop].pests;
     pestSelect.innerHTML = '';
-    Object.entries(CROP_DB[crop].pests).forEach(([key, pest]) => {
+    Object.entries(pests).forEach(([key, pest]) => {
         const opt = document.createElement('option');
         opt.value = key;
         opt.textContent = `${pest.name} (${pest.severity.toUpperCase()})`;
@@ -686,7 +623,10 @@ function updateDosageFromPest() {
     const crop = document.getElementById('mathCrop').value;
     const pest = document.getElementById('mathPest').value;
     const data = CROP_DB[crop].pests[pest];
-    if (data) document.getElementById('mathDosage').value = data.dosage;
+    if (data) {
+        document.getElementById('mathDosage').value = data.dosage;
+        document.getElementById('mathChemName').placeholder = `e.g., ${data.chemicals[0]}, ${data.chemicals[1]}...`;
+    }
 }
 
 function updateCostPerMl() {
@@ -695,16 +635,25 @@ function updateCostPerMl() {
     document.getElementById('mathCostPerMl').textContent = 'K' + (price / size).toFixed(2);
 }
 
-function updateFarmSlider() { document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1); }
+function updateFarmSlider() {
+    document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1);
+}
 
 function saveChemical() {
-    const chem = { name: document.getElementById('mathChemName').value.trim(), size: document.getElementById('mathContSize').value, price: document.getElementById('mathContPrice').value, dosage: document.getElementById('mathDosage').value, unit: document.getElementById('mathDosageUnit').value };
-    if (!chem.name) { showToast('Enter name', true); return; }
+    const chem = {
+        name: document.getElementById('mathChemName').value.trim(),
+        size: document.getElementById('mathContSize').value,
+        price: document.getElementById('mathContPrice').value,
+        dosage: document.getElementById('mathDosage').value,
+        unit: document.getElementById('mathDosageUnit').value
+    };
+    if (!chem.name) { showToast('Enter chemical name first', true); return; }
     const idx = savedChems.findIndex(c => c.name.toLowerCase() === chem.name.toLowerCase());
     if (idx >= 0) savedChems[idx] = chem; else savedChems.push(chem);
     if (savedChems.length > 10) savedChems.shift();
     localStorage.setItem('agrimind_chems', JSON.stringify(savedChems));
-    showToast('Saved!'); renderSavedChems();
+    showToast('Chemical saved!');
+    renderSavedChems();
 }
 
 function loadChem(idx) {
@@ -722,18 +671,21 @@ function deleteChem(idx) { savedChems.splice(idx, 1); localStorage.setItem('agri
 function renderSavedChems() {
     if (savedChems.length === 0) { document.getElementById('savedChems').style.display = 'none'; return; }
     document.getElementById('savedChems').style.display = 'block';
-    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved</label>' + savedChems.map((c, i) => `
-        <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--input-bg);border-radius:10px;margin-bottom:4px;font-size:0.8rem;">
-            <span><strong>${escapeHtml(c.name)}</strong></span>
-            <div><button class="btn-outline" onclick="loadChem(${i})" style="padding:2px 8px;font-size:0.65rem;">Load</button>
-            <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:2px 6px;font-size:0.65rem;margin-left:4px;">X</button></div>
-        </div>`).join('');
+    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved Chemicals</label>' + savedChems.map((c, i) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--input-bg);border-radius:12px;margin-bottom:4px;font-size:0.8rem;">
+            <span><strong>${escapeHtml(c.name)}</strong> | ${c.size}ml @ K${c.price}</span>
+            <div style="display:flex;gap:6px;">
+                <button class="btn-outline" onclick="loadChem(${i})" style="padding:4px 10px;font-size:0.7rem;">Load</button>
+                <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;padding:4px 8px;font-size:0.7rem;">X</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 function calcFarmMath() {
     const crop = document.getElementById('mathCrop').value;
     const pestKey = document.getElementById('mathPest').value;
-    const chemName = document.getElementById('mathChemName').value.trim() || 'Chemical';
+    const chemName = document.getElementById('mathChemName').value.trim() || 'Unspecified Chemical';
     const contSize = parseFloat(document.getElementById('mathContSize').value) || 250;
     const contPrice = parseFloat(document.getElementById('mathContPrice').value) || 150;
     const dosage = parseFloat(document.getElementById('mathDosage').value) || 200;
@@ -741,18 +693,42 @@ function calcFarmMath() {
     const farmSize = parseFloat(document.getElementById('mathFarmSlider').value);
     const pestData = CROP_DB[crop].pests[pestKey];
     const cropData = CROP_DB[crop];
+    const costPerMl = contPrice / contSize;
     let dosagePerHa = dosage;
     if (unit === 'acre') dosagePerHa = dosage * 2.471;
     else if (unit === '20L') dosagePerHa = dosage * 5;
     const totalMl = dosagePerHa * farmSize;
-    const totalCost = totalMl * (contPrice / contSize);
+    const totalCost = totalMl * costPerMl;
     const potentialLoss = cropData.yieldValue * farmSize * (pestData.lossPct / 100);
     const savings = potentialLoss - totalCost;
     const containers = Math.ceil(totalMl / contSize);
     const roi = totalCost > 0 ? (savings / totalCost) * 100 : 0;
-    document.getElementById('mathResult').innerHTML = `<div class="math-result"><h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3><div class="grid-2cols" style="margin:14px 0;"><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div><small>Spray</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div><small>Bottles</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div><small>Cost</small></div><div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div><small>Savings</small></div></div><p>ROI: ${roi.toFixed(0)}% | Loss without spray: K${potentialLoss.toFixed(2)}</p></div>`;
+
+    document.getElementById('mathResult').innerHTML = `
+        <div class="math-result">
+            <h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3>
+            <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
+            <div class="grid-2cols" style="margin:14px 0;">
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div><small>Spray Needed</small></div>
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div><small>Bottles (${contSize}ml)</small></div>
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div><small>Total Cost</small></div>
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;"><div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div><small>Net Savings</small></div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:10px;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;"><span>Potential Loss (no spray):</span><span style="color:var(--danger);">K${potentialLoss.toFixed(2)}</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>ROI:</span><span style="color:var(--accent);">${roi.toFixed(0)}%</span></div>
+            </div>
+            <div style="margin-top:10px;padding:10px;background:${savings>0?'rgba(16,185,129,0.2)':'rgba(239,68,68,0.2)'};border-radius:10px;border-left:3px solid ${savings>0?'var(--accent)':'var(--danger)'};font-weight:600;font-size:0.85rem;">
+                ${savings > totalCost*3 ? 'URGENT: Very high ROI - spray now!' : savings > totalCost ? 'RECOMMENDED: Good return on investment' : 'MONITOR: Only spray if pest pressure increases'}
+            </div>
+            <p style="font-size:0.75rem;margin-top:8px;">${pestData.note}</p>
+            <p style="font-size:0.7rem;color:var(--accent);margin-top:4px;">Organic options: ${pestData.organic.join(', ')}</p>
+        </div>`;
     document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
-    showToast('Done!');
+    showToast('Calculation complete!');
+    if (currentUser) {
+        db.from('farm_records').insert({ user_id: currentUser.id, title: `Spray Calc: ${cropData.name}`, detail: `${chemName} | Farm: ${farmSize}ha | Spray: ${totalMl.toFixed(1)}ml | Cost: K${totalCost.toFixed(2)} | Savings: K${savings.toFixed(2)}`, location: 'Farm Math Tool' }).then(() => {}).catch(() => {});
+    }
 }
 
 // ═══════════════════════════════════════════
@@ -768,56 +744,124 @@ function analyzeLeaf(event) {
         img.onload = function() {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const ratio = Math.min(400 / img.width, 400 / img.height);
+            const maxSize = 400;
+            const ratio = Math.min(maxSize / img.width, maxSize / img.height);
             canvas.width = img.width * ratio;
             canvas.height = img.height * ratio;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const colors = analyzeLeafColors(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const colors = analyzeLeafColors(imageData);
             const diagnosis = diagnoseFromColors(colors);
-            if (navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => { currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude }; });
-            sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, diagnosis });
-            document.getElementById('cameraPreview').innerHTML = `<img src="${e.target.result}" style="max-width:100%;border-radius:20px;"><p><strong>${diagnosis.plant}</strong> (${diagnosis.confidence}%)</p><p>${diagnosis.recommendation}</p>`;
-            showToast(diagnosis.severity > 0 ? 'Issues detected!' : 'Healthy!');
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                    document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
+                });
+            }
+            sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, light: currentSensorLight, diagnosis });
+            displayScanResults(e.target.result, diagnosis);
         };
         img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
 
+function displayScanResults(imageSrc, diagnosis) {
+    const preview = document.getElementById('cameraPreview');
+    const c = diagnosis.colors;
+    preview.innerHTML = `
+        <img src="${imageSrc}" style="max-width:100%;border-radius:20px;margin-bottom:10px;max-height:300px;object-fit:contain;">
+        <div style="margin-bottom:8px;">
+            <small style="color:var(--text-secondary,#aaa);">Color Breakdown (HSV Analysis)</small>
+            <div class="color-bar">
+                <div style="width:${c.greenPct}%;background:#22c55e;"></div>
+                <div style="width:${c.yellowPct}%;background:#eab308;"></div>
+                <div style="width:${c.brownPct}%;background:#92400e;"></div>
+                <div style="width:${c.darkPct}%;background:#1a1a1a;"></div>
+                <div style="width:${c.whitePct}%;background:#e5e5e5;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;">
+                <span>Grn:${c.greenPct}%</span><span>Ylw:${c.yellowPct}%</span><span>Brn:${c.brownPct}%</span><span>Drk:${c.darkPct}%</span><span>Wht:${c.whitePct}%</span>
+            </div>
+        </div>
+        <div style="background:var(--input-bg);border-radius:14px;padding:14px;">
+            <strong>Symptoms:</strong>
+            ${diagnosis.symptoms.map(s => `<div class="symptom-item ${s.found?'symptom-found':'symptom-clear'}">${s.found?'Warning':'OK'} - ${s.text}${s.detail?`<br><small>${s.detail}</small>`:''}</div>`).join('')}
+        </div>
+        <div style="margin-top:10px;padding:14px;background:var(--card-bg);border-radius:14px;">
+            <div style="display:flex;justify-content:space-between;"><span>Plant:</span><strong>${diagnosis.plant}</strong></div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;"><span>Confidence:</span><strong style="color:${diagnosis.confidence>70?'var(--accent)':'#f59e0b'};">${diagnosis.confidence}%</strong></div>
+            ${diagnosis.issues.length ? `<div style="margin-top:8px;padding:8px;background:rgba(245,158,11,0.15);border-radius:8px;"><strong style="color:#f59e0b;">Issues:</strong> ${diagnosis.issues.map(i=>`<div style="font-size:0.8rem;">- ${i}</div>`).join('')}</div>` : ''}
+            <div style="margin-top:8px;font-weight:600;color:var(--accent);">${diagnosis.recommendation}</div>
+        </div>`;
+    updateScanMapUI();
+    showToast(diagnosis.severity > 0 ? 'Issues detected!' : 'Healthy plant!');
+}
+
 function getGPS() {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) { document.getElementById('gpsLabel').textContent = 'Not supported'; return; }
+    document.getElementById('gpsLabel').textContent = 'Locating...';
     navigator.geolocation.getCurrentPosition(pos => {
         currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
         document.getElementById('gpsLabel').textContent = `${currentSensorGPS.lat.toFixed(3)}, ${currentSensorGPS.lon.toFixed(3)}`;
-    });
+    }, () => { document.getElementById('gpsLabel').textContent = 'Denied'; }, { enableHighAccuracy: true });
 }
 
 function checkLight() {
-    document.getElementById('lightLabel').textContent = 'Sensor check done';
+    if ('AmbientLightSensor' in window) {
+        try {
+            const sensor = new AmbientLightSensor();
+            sensor.onreading = () => { currentSensorLight = sensor.illuminance; updateLightLabel(); };
+            sensor.onerror = () => { document.getElementById('lightLabel').textContent = 'Sensor error'; };
+            sensor.start();
+            setTimeout(() => sensor.stop(), 1000);
+        } catch(e) { document.getElementById('lightLabel').textContent = 'Not available'; }
+    } else { document.getElementById('lightLabel').textContent = 'Not supported'; }
+}
+
+function updateLightLabel() {
+    const el = document.getElementById('lightLabel');
+    if (!currentSensorLight) return;
+    if (currentSensorLight < 100) { el.innerHTML = 'Too dark<br><small style="color:var(--danger);">Move to better light</small>'; }
+    else if (currentSensorLight < 500) { el.innerHTML = 'Moderate light'; }
+    else { el.innerHTML = 'Optimal lighting'; }
 }
 
 function toggleScanMap() {
     const map = document.getElementById('scanMapDiv');
     map.style.display = map.style.display === 'none' ? 'block' : 'none';
+    updateScanMapUI();
 }
 
 function updateScanMapUI() {
     const list = document.getElementById('scanMapList');
-    if (!sensorScans.length) { list.innerHTML = '<p>No scans yet.</p>'; return; }
-    list.innerHTML = sensorScans.map(s => `<div style="padding:8px;border-bottom:1px solid var(--border);"><strong>${s.diagnosis.plant}</strong>${s.gps?`<br><small>${s.gps.lat.toFixed(3)}, ${s.gps.lon.toFixed(3)}</small>`:''}</div>`).join('');
+    if (!sensorScans.length) { list.innerHTML = '<p style="color:#aaa;text-align:center;">No scans yet. Upload a leaf photo to start!</p>'; return; }
+    list.innerHTML = sensorScans.map(s => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);">
+            <span>${s.diagnosis.severity>0?'●':'○'}</span>
+            <div style="flex:1;font-size:0.8rem;"><strong>${s.diagnosis.plant}</strong> (${s.diagnosis.confidence}%)${s.gps?`<br><small>${s.gps.lat.toFixed(3)}, ${s.gps.lon.toFixed(3)}</small>`:''}</div>
+            <small>${new Date(s.timestamp).toLocaleTimeString()}</small>
+        </div>`).join('');
 }
 
 // ═══════════════════════════════════════════
-// AUTO-SCOUT
+// AUTO-SCOUT WITH PROMPT SYSTEM
 // ═══════════════════════════════════════════
 
 async function startScout() {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try { await DeviceMotionEvent.requestPermission(); } catch(e) {}
+    }
     scoutingActive = true;
     scoutSteps = 0; scoutScans = 0; scoutInfections = 0; scoutDist = 0; scoutStepsSinceScan = 0; scoutPendingScan = false;
     document.getElementById('startScoutBtn').style.display = 'none';
     document.getElementById('stopScoutBtn').style.display = 'inline-block';
-    document.getElementById('scoutStatusDiv').innerHTML = '<h3 style="color:var(--accent);">Scouting</h3>';
-    if (window.DeviceMotionEvent) window.addEventListener('devicemotion', detectStep);
+    document.getElementById('scoutStatusDiv').innerHTML = '<div style="font-size:4rem;">●</div><h3 style="color:var(--accent);">Scouting Active</h3><p>Walk your field. Tap prompt to scan.</p>';
+    document.getElementById('scoutLog').innerHTML = '';
+    scoutLog('Started. Walk your field...');
+    document.getElementById('scoutPrompt').style.display = 'none';
+    if (window.DeviceMotionEvent) { window.addEventListener('devicemotion', detectStep); scoutLog('Accelerometer active - counting real steps'); }
+    else { scoutLog('Accelerometer not available - using timer mode'); }
     scoutTimer = setInterval(() => { if (scoutingActive) checkForScanPrompt(); }, 2000);
 }
 
@@ -827,8 +871,24 @@ function stopScout() {
     window.removeEventListener('devicemotion', detectStep);
     document.getElementById('startScoutBtn').style.display = 'inline-block';
     document.getElementById('stopScoutBtn').style.display = 'none';
-    document.getElementById('scoutStatusDiv').innerHTML = '<h3>Stopped</h3>';
-    document.getElementById('scoutReport').innerHTML = `<div class="math-result"><h3>Report</h3><p>Photos: ${scoutScans} | Issues: ${scoutInfections} | Steps: ${scoutSteps} | ${scoutDist}m</p></div>`;
+    document.getElementById('scoutStatusDiv').innerHTML = '<div style="font-size:4rem;">■</div><h3>Stopped</h3>';
+    document.getElementById('scoutPrompt').style.display = 'none';
+    scoutPendingScan = false;
+    scoutLog('Scouting complete.');
+    const sprayMl = scoutInfections * 50;
+    const sprayCost = (sprayMl * 0.19).toFixed(2);
+    document.getElementById('scoutReport').innerHTML = `
+        <div class="math-result">
+            <h3 style="color:var(--accent);">Scout Report</h3>
+            <div class="grid-2cols" style="margin:12px 0;">
+                <div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:var(--accent);">${scoutScans}</div><small>Photos Taken</small></div>
+                <div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:var(--danger);">${scoutInfections}</div><small>Issues Found</small></div>
+                <div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:var(--accent);">${scoutSteps}</div><small>Steps</small></div>
+                <div style="text-align:center;"><div style="font-size:1.3rem;font-weight:700;color:var(--accent);">${scoutDist}m</div><small>Distance</small></div>
+            </div>
+            ${scoutInfections>0?`<div style="padding:10px;background:rgba(255,255,255,0.05);border-radius:8px;font-size:0.85rem;"><div style="display:flex;justify-content:space-between;"><span>Recommended Spray:</span><span>${sprayMl}ml</span></div><div style="display:flex;justify-content:space-between;"><span>Est. Cost:</span><span>K${sprayCost}</span></div></div>`:'<p style="color:var(--accent);text-align:center;">No issues detected during scouting.</p>'}
+            <div style="display:flex;gap:6px;margin-top:10px;"><button class="btn-outline" onclick="showPhonePage(\'sensorhub\')" style="font-size:0.8rem;">View Map</button><button class="btn-primary" onclick="showPhonePage(\'farmmath\')" style="font-size:0.8rem;">Calculate Spray</button></div>
+        </div>`;
 }
 
 function detectStep(e) {
@@ -851,25 +911,85 @@ function detectStep(e) {
 
 function checkForScanPrompt() {
     if (!scoutingActive || scoutPendingScan) return;
-    if (scoutStepsSinceScan >= 2) { scoutPendingScan = true; showScanPrompt(); }
+    if (scoutStepsSinceScan >= 2 || (scoutSteps === 0 && scoutScans === 0)) {
+        scoutPendingScan = true;
+        showScanPrompt();
+    }
 }
 
 function showScanPrompt() {
+    const prompt = document.getElementById('scoutPrompt');
     document.getElementById('promptStepNum').textContent = scoutSteps;
-    document.getElementById('scoutPrompt').style.display = 'block';
+    prompt.style.display = 'block';
     if (navigator.vibrate) navigator.vibrate([300, 200, 300]);
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 600;
+        gain.gain.value = 0.15;
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 300);
+    } catch(e) {}
+    scoutLog('Tap prompt to scan now! (Step ' + scoutSteps + ')');
 }
 
-function captureScoutPhoto() { document.getElementById('scoutCamera').click(); }
+function captureScoutPhoto() {
+    document.getElementById('scoutCamera').click();
+}
 
 function handleScoutPhoto(event) {
     const file = event.target.files[0];
     if (!file) { scoutPendingScan = false; document.getElementById('scoutPrompt').style.display = 'none'; return; }
-    scoutScans++; scoutStepsSinceScan = 0;
+    scoutScans++;
+    scoutStepsSinceScan = 0;
     document.getElementById('scoutScans').textContent = scoutScans;
     document.getElementById('scoutPrompt').style.display = 'none';
     scoutPendingScan = false;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const maxSize = 300;
+            const ratio = Math.min(maxSize / img.width, maxSize / img.height);
+            canvas.width = img.width * ratio;
+            canvas.height = img.height * ratio;
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const colors = analyzeLeafColors(imageData);
+            const diagnosis = diagnoseFromColors(colors);
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                    sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: currentSensorGPS, light: currentSensorLight, diagnosis, step: scoutSteps });
+                    if (diagnosis.severity > 2) {
+                        scoutInfections++;
+                        document.getElementById('scoutInfections').textContent = scoutInfections;
+                        scoutLog('Issue detected at step ' + scoutSteps + '! Severity: ' + diagnosis.severity + '/10');
+                        showToast('Issue detected! Location saved.');
+                    } else {
+                        scoutLog('Scan at step ' + scoutSteps + ': ' + diagnosis.plant + ' (' + diagnosis.confidence + '% confidence)');
+                        showToast('Scan saved: ' + diagnosis.plant);
+                    }
+                });
+            } else {
+                sensorScans.push({ id: Date.now(), timestamp: new Date().toISOString(), gps: null, light: currentSensorLight, diagnosis, step: scoutSteps });
+                scoutLog('Scan at step ' + scoutSteps + ': ' + diagnosis.plant);
+            }
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
     event.target.value = '';
+}
+
+function scoutLog(msg) {
+    const log = document.getElementById('scoutLog');
+    log.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+    log.scrollTop = log.scrollHeight;
 }
 
 // ═══════════════════════════════════════════
@@ -884,6 +1004,7 @@ function openModal(mode) {
 
 function closeModal() {
     document.getElementById('authModal').style.display = 'none';
+    ['authEmail','authPass','authDisplayName'].forEach(id => document.getElementById(id).value='');
 }
 
 // ═══════════════════════════════════════════
@@ -899,14 +1020,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sidebar').classList.remove('open');
         document.getElementById('sidebarOverlay').classList.remove('active');
     });
-    document.getElementById('navLinks').addEventListener('click', (e) => {
-        const li = e.target.closest('li');
-        if (li && li.dataset.page) { e.preventDefault(); showPage(li.dataset.page); }
-    });
+    document.querySelectorAll('.nav-links li').forEach(li => li.addEventListener('click', e => { e.preventDefault(); showPage(li.dataset.page); }));
 
     document.getElementById('loginBtn').addEventListener('click', () => openModal('login'));
     document.getElementById('signupBtn').addEventListener('click', () => openModal('signup'));
     document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('authModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 
     let authMode = 'login';
     document.getElementById('loginBtn').addEventListener('click', () => { authMode = 'login'; });
@@ -917,81 +1036,137 @@ document.addEventListener('DOMContentLoaded', () => {
         const displayName = document.getElementById('authDisplayName').value.trim();
         try {
             if (authMode === 'login') await login(email, password);
-            else { if (!displayName) return showToast('Name required', true); await signUp(email, password, displayName); }
+            else { if (!displayName) return showToast('Display name required', true); await signUp(email, password, displayName); }
             closeModal();
         } catch (err) { showToast(err.message, true); }
     });
     document.getElementById('userGreeting').addEventListener('click', logout);
 
-    document.querySelector('.main-content').addEventListener('click', async (e) => {
-        const target = e.target;
-        if (target.closest('#postForumBtn')) { const c = document.getElementById('forumContent').value.trim(); if (c) { addForumPost(c, document.getElementById('forumImage').files[0]); document.getElementById('forumContent').value = ''; } }
-        if (target.closest('#createGroupBtn')) createGroup();
-        if (target.closest('#addRecordBtn')) { const t = document.getElementById('recordTitle').value.trim(); if (t) { addRecord(t, document.getElementById('recordDetail').value, document.getElementById('recordLocation').value); document.getElementById('recordTitle').value = ''; } }
-        if (target.closest('#postJobBtn')) { const t = document.getElementById('jobTitle').value.trim(); if (t) { addJob(t, document.getElementById('jobDesc').value, document.getElementById('jobLocation').value); document.getElementById('jobTitle').value = ''; } }
-        if (target.closest('#sendMsgBtn')) { const to = document.getElementById('msgTo').value.trim(); const tx = document.getElementById('msgText').value.trim(); if (to && tx) { sendMessage(to, tx); } }
-        if (target.closest('#addEventBtn')) addEvent();
-        if (target.closest('#calcYieldBtn')) calculateYield();
-        if (target.closest('#addVideoBtn')) { const t = document.getElementById('videoTitle').value.trim(); const u = document.getElementById('videoUrl').value.trim(); if (t && u) { addTutorial(t, u, document.getElementById('videoDesc').value); } }
-        if (target.closest('#saveProfileBtn')) {
-            if (!currentUser) return;
-            const dn = document.getElementById('editDisplayName').value.trim();
-            await db.from('profiles').update({ display_name: dn, phone: document.getElementById('editPhone').value, location: document.getElementById('editLocation').value, bio: document.getElementById('editBio').value }).eq('id', currentUser.id);
-            currentUser.displayName = dn || currentUser.displayName;
-            updateAuthUI();
-            showToast('Updated!');
-            loadProfile();
-        }
-        if (target.closest('#sendChatBtn')) {
-            const input = document.getElementById('chatInput').value.trim();
-            if (!input) return;
-            const chat = document.getElementById('chatMessages');
-            chat.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
-            document.getElementById('chatInput').value = '';
-            chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(await wikiAnswer(input))}</div>`;
-            chat.scrollTop = chat.scrollHeight;
-        }
-        const deleteBtn = target.closest('.delete-btn');
-        if (deleteBtn) {
-            if (!currentUser) return showToast('Login first', true);
-            if (!confirm('Delete?')) return;
-            const { type, id } = deleteBtn.dataset;
-            if (type==='forum') deleteForumPost(id);
-            else if (type==='record') deleteRecord(id);
-            else if (type==='job') deleteJob(id);
-            else if (type==='product') deleteProduct(id);
-            else if (type==='tutorial') deleteTutorial(id);
-            else if (type==='calendar') deleteCalendarEvent(id);
-        }
-        if (target.closest('.apply-btn')) { e.preventDefault(); applyToJob(target.closest('.apply-btn').dataset.job); }
-        if (target.closest('.accept-app')) updateApplicationStatus(target.closest('.accept-app').dataset.id, 'accepted');
-        if (target.closest('.reject-app')) updateApplicationStatus(target.closest('.reject-app').dataset.id, 'rejected');
-        if (target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn')) {
-            const btn = target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn');
-            document.getElementById('msgTo').value = btn.dataset.email;
-            document.getElementById('msgText').value = `Hello ${btn.dataset.name}, `;
-            showPage('messages');
-        }
+    document.getElementById('postForumBtn').addEventListener('click', () => {
+        const c = document.getElementById('forumContent').value.trim();
+        const img = document.getElementById('forumImage').files[0];
+        if (c) { addForumPost(c, img); document.getElementById('forumContent').value = ''; document.getElementById('forumImage').value = ''; }
     });
-
-    const mathCrop = document.getElementById('mathCrop');
-    if (mathCrop) {
-        mathCrop.addEventListener('change', populatePests);
-        document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
-        document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
-        document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
-        document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
-        document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
-        populatePests();
-        updateCostPerMl();
-        renderSavedChems();
-    }
-
-    document.getElementById('marketCategoryFilter')?.addEventListener('change', loadMarket);
-    document.getElementById('addProductBtn')?.addEventListener('click', () => {
+    document.getElementById('createGroupBtn').addEventListener('click', createGroup);
+    document.getElementById('groupLocationFilter').addEventListener('input', loadGroups);
+    document.getElementById('addRecordBtn').addEventListener('click', () => {
+        const t = document.getElementById('recordTitle').value.trim();
+        const d = document.getElementById('recordDetail').value.trim();
+        const l = document.getElementById('recordLocation').value.trim();
+        if (t) { addRecord(t, d, l); document.getElementById('recordTitle').value = ''; document.getElementById('recordDetail').value = ''; document.getElementById('recordLocation').value = ''; }
+    });
+    document.getElementById('postJobBtn').addEventListener('click', () => {
+        const t = document.getElementById('jobTitle').value.trim();
+        const d = document.getElementById('jobDesc').value.trim();
+        const l = document.getElementById('jobLocation').value.trim();
+        if (t) { addJob(t, d, l); document.getElementById('jobTitle').value = ''; document.getElementById('jobDesc').value = ''; document.getElementById('jobLocation').value = ''; }
+    });
+    document.getElementById('jobLocationFilter').addEventListener('input', loadJobs);
+    document.getElementById('addProductBtn').addEventListener('click', () => {
         const n = document.getElementById('productName').value.trim();
         const p = document.getElementById('productPrice').value.trim();
-        if (n && p) addProduct(n, p, document.getElementById('productCategory').value, document.getElementById('productLocation').value, document.getElementById('productImage').files[0]);
+        const cat = document.getElementById('productCategory').value;
+        const loc = document.getElementById('productLocation').value.trim();
+        const img = document.getElementById('productImage').files[0];
+        if (n && p) { addProduct(n, p, cat, loc, img); document.getElementById('productName').value = ''; document.getElementById('productPrice').value = ''; document.getElementById('productLocation').value = ''; }
+    });
+    document.getElementById('marketCategoryFilter').addEventListener('change', loadMarket);
+    document.getElementById('marketLocationFilter').addEventListener('input', loadMarket);
+    document.getElementById('sendMsgBtn').addEventListener('click', () => {
+        const to = document.getElementById('msgTo').value.trim();
+        const tx = document.getElementById('msgText').value.trim();
+        if (to && tx) { sendMessage(to, tx); document.getElementById('msgTo').value = ''; document.getElementById('msgText').value = ''; }
+    });
+    document.getElementById('doSearchBtn').addEventListener('click', () => {
+        const term = document.getElementById('searchInput').value.trim();
+        const cat = document.getElementById('searchCategory').value;
+        const from = document.getElementById('searchDateFrom').value;
+        const to = document.getElementById('searchDateTo').value;
+        if (term) globalSearch(term, cat, from, to);
+    });
+    document.getElementById('addVideoBtn').addEventListener('click', () => {
+        const t = document.getElementById('videoTitle').value.trim();
+        const u = document.getElementById('videoUrl').value.trim();
+        const d = document.getElementById('videoDesc').value.trim();
+        if (t && u) { addTutorial(t, u, d); document.getElementById('videoTitle').value = ''; document.getElementById('videoUrl').value = ''; document.getElementById('videoDesc').value = ''; }
+    });
+    document.getElementById('addEventBtn').addEventListener('click', addEvent);
+    document.getElementById('calcYieldBtn').addEventListener('click', calculateYield);
+    
+    document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+        if (!currentUser) return;
+        const dn = document.getElementById('editDisplayName').value.trim();
+        const ph = document.getElementById('editPhone').value.trim();
+        const loc = document.getElementById('editLocation').value.trim();
+        const bio = document.getElementById('editBio').value.trim();
+        const { error } = await db.from('profiles').update({ display_name: dn, phone: ph, location: loc, bio: bio }).eq('id', currentUser.id);
+        if (error) showToast('Failed to update', true);
+        else { currentUser.displayName = dn; updateAuthUI(); showToast('Profile updated!'); loadProfile(); }
+    });
+
+    document.getElementById('sendChatBtn').addEventListener('click', async () => {
+        const input = document.getElementById('chatInput').value.trim();
+        if (!input) return;
+        const chat = document.getElementById('chatMessages');
+        chat.innerHTML += `<div class="message-bubble user-msg">${escapeHtml(input)}</div>`;
+        document.getElementById('chatInput').value = '';
+        const reply = await wikiAnswer(input);
+        chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
+        chat.scrollTop = chat.scrollHeight;
+    });
+
+    document.getElementById('mathCrop').addEventListener('change', populatePests);
+    document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
+    document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
+    document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
+    document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
+    document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
+    populatePests();
+    updateCostPerMl();
+    renderSavedChems();
+
+    document.addEventListener('click', async function(e) {
+        const deleteBtn = e.target.closest('.delete-btn');
+        if (deleteBtn) {
+            if (!currentUser) return showToast('Login to delete', true);
+            if (!confirm('Delete this item?')) return;
+            const { type, id } = deleteBtn.dataset;
+            if (type==='forum') await deleteForumPost(id);
+            else if (type==='record') await deleteRecord(id);
+            else if (type==='job') await deleteJob(id);
+            else if (type==='product') await deleteProduct(id);
+            else if (type==='tutorial') await deleteTutorial(id);
+            else if (type==='calendar') await deleteCalendarEvent(id);
+            return;
+        }
+        const likeBtn = e.target.closest('.like-btn');
+        if (likeBtn) { const { type, id } = likeBtn.dataset; await toggleLike(type, id); return; }
+        const replyToggle = e.target.closest('.reply-toggle');
+        if (replyToggle) {
+            const postId = replyToggle.dataset.post;
+            const replyDiv = replyToggle.closest('.forum-post').nextElementSibling;
+            replyDiv.style.display = replyDiv.style.display === 'none' ? 'block' : 'none';
+            loadReplies(postId, replyDiv);
+            return;
+        }
+        const sendReply = e.target.closest('.send-reply');
+        if (sendReply && currentUser) {
+            const postId = sendReply.dataset.post;
+            const input = sendReply.previousElementSibling;
+            const content = input.value.trim();
+            if (content) { await db.from('forum_replies').insert({ post_id: postId, user_id: currentUser.id, content }); const replyDiv = sendReply.closest('.reply-section'); loadReplies(postId, replyDiv); }
+            return;
+        }
+        const applyBtn = e.target.closest('.apply-btn');
+        if (applyBtn) { e.preventDefault(); e.stopPropagation(); await applyToJob(applyBtn.dataset.job); return; }
+        const acceptBtn = e.target.closest('.accept-app');
+        if (acceptBtn) { await updateApplicationStatus(acceptBtn.dataset.id, 'accepted'); return; }
+        const rejectBtn = e.target.closest('.reject-app');
+        if (rejectBtn) { await updateApplicationStatus(rejectBtn.dataset.id, 'rejected'); return; }
+        const contactApplicant = e.target.closest('.contact-applicant-btn');
+        if (contactApplicant) { document.getElementById('msgTo').value = contactApplicant.dataset.email; document.getElementById('msgText').value = `Hello ${contactApplicant.dataset.name}, regarding your application...`; showPage('messages'); return; }
+        const contactPoster = e.target.closest('.contact-poster-btn');
+        if (contactPoster) { document.getElementById('msgTo').value = contactPoster.dataset.email; document.getElementById('msgText').value = `Hello ${contactPoster.dataset.name}, I'm following up on my application...`; showPage('messages'); return; }
     });
 
     checkSession();
