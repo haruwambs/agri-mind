@@ -213,20 +213,99 @@
             </div>
         </div>
 
-        <!-- FARM MATH TOOL -->
+        <!-- FARM MATH TOOL - UPDATED WITH ALL 35+ CROPS -->
         <div id="farmmath" class="page">
             <div class="card">
                 <h2><i class="fas fa-percentage"></i> Farm Math Tool</h2>
                 <p>Real farm economics in 3 taps. Enter your chemical, farm size, get exact costs.</p>
                 <div class="card" style="background:#0a0a0a;margin-top:16px;">
                     <div class="step-row"><span class="step-num">1</span> Select Crop & Pest</div>
-                    <select id="mathCrop"><option value="maize">Maize</option><option value="tomato">Tomato</option><option value="rice">Rice</option><option value="beans">Beans</option><option value="cabbage">Cabbage</option></select>
-                    <select id="mathPest" style="margin-top:8px;"></select>
+                    <select id="mathCrop">
+                        <!-- Cereals -->
+                        <optgroup label="🌾 Cereals">
+                            <option value="maize">Maize (Zambia)</option>
+                            <option value="sorghum">Sorghum (Zambia)</option>
+                            <option value="millet">Millet (Zambia)</option>
+                            <option value="rice">Rice (Zambia)</option>
+                            <option value="wheat">Wheat (Zambia)</option>
+                        </optgroup>
+                        <!-- Legumes -->
+                        <optgroup label="🥜 Legumes">
+                            <option value="groundnut">Groundnuts (Zambia)</option>
+                            <option value="soybean">Soybean (Zambia)</option>
+                            <option value="bambara">Bambara Nut (Zambia)</option>
+                            <option value="beans">Beans (Zambia)</option>
+                            <option value="cowpea">Cowpea (Zambia)</option>
+                            <option value="pigeon_pea">Pigeon Pea (Zambia)</option>
+                        </optgroup>
+                        <!-- Root Crops -->
+                        <optgroup label="🥔 Root Crops">
+                            <option value="cassava">Cassava (Zambia)</option>
+                            <option value="sweet_potato">Sweet Potato (Zambia)</option>
+                            <option value="irish_potato">Irish Potato (Zambia)</option>
+                            <option value="yam">Yam (Zambia)</option>
+                            <option value="carrot">Carrot (Zambia)</option>
+                        </optgroup>
+                        <!-- Cash Crops -->
+                        <optgroup label="💰 Cash Crops">
+                            <option value="cotton">Cotton (Zambia)</option>
+                            <option value="tobacco">Tobacco (Zambia)</option>
+                            <option value="sunflower">Sunflower (Zambia)</option>
+                            <option value="sugarcane">Sugarcane (Zambia)</option>
+                            <option value="tea">Tea (Zambia)</option>
+                            <option value="coffee">Coffee (Zambia)</option>
+                        </optgroup>
+                        <!-- Vegetables -->
+                        <optgroup label="🥬 Vegetables">
+                            <option value="tomato">Tomato (Zambia)</option>
+                            <option value="cabbage">Cabbage (Zambia)</option>
+                            <option value="onion">Onion (Zambia)</option>
+                            <option value="pepper">Pepper (Zambia)</option>
+                            <option value="lettuce">Lettuce (Zambia)</option>
+                            <option value="spinach">Spinach (Zambia)</option>
+                        </optgroup>
+                        <!-- Fruits -->
+                        <optgroup label="🍉 Fruits">
+                            <option value="mango">Mango (Zambia)</option>
+                            <option value="citrus">Citrus (Zambia)</option>
+                            <option value="banana">Banana (Zambia)</option>
+                            <option value="papaya">Papaya (Zambia)</option>
+                            <option value="avocado">Avocado (Zambia)</option>
+                            <option value="pineapple">Pineapple (Zambia)</option>
+                        </optgroup>
+                        <!-- Herbs & Spices -->
+                        <optgroup label="🌿 Herbs & Spices">
+                            <option value="ginger">Ginger (Zambia)</option>
+                            <option value="garlic">Garlic (Zambia)</option>
+                        </optgroup>
+                    </select>
+                    <select id="mathPest" style="margin-top:8px;">
+                        <option value="">Select a crop first</option>
+                    </select>
                 </div>
                 <div class="card" style="background:#0a0a0a;">
                     <div class="step-row"><span class="step-num">2</span> Your Chemical Details</div>
                     <input type="text" id="mathChemName" placeholder="Chemical name (e.g., Ampligo, Dudu-Cyber)" list="chemSuggest">
-                    <datalist id="chemSuggest"><option value="Ampligo (Syngenta)"><option value="Dudu-Cyber"><option value="Rocket (Villa Crop)"><option value="Cypermethrin"><option value="Lambda-Cyhalothrin"><option value="Emamectin Benzoate"><option value="Acetamiprid"><option value="Neem Oil (Organic)"></datalist>
+                    <datalist id="chemSuggest">
+                        <option value="Ampligo (Syngenta)">
+                        <option value="Dudu-Cyber">
+                        <option value="Rocket (Villa Crop)">
+                        <option value="Cypermethrin">
+                        <option value="Lambda-Cyhalothrin">
+                        <option value="Emamectin Benzoate">
+                        <option value="Acetamiprid">
+                        <option value="Neem Oil (Organic)">
+                        <option value="Mancozeb">
+                        <option value="Tebuconazole">
+                        <option value="Chlorothalonil">
+                        <option value="Imidacloprid">
+                        <option value="Metalaxyl">
+                        <option value="Copper spray">
+                        <option value="Propiconazole">
+                        <option value="Azoxystrobin">
+                        <option value="Chlorpyrifos">
+                        <option value="Spinosad">
+                    </datalist>
                     <div class="chem-row">
                         <div><label>Container Size (ml)</label><input type="number" id="mathContSize" value="250" min="1"></div>
                         <div><label>Price You Paid (K)</label><input type="number" id="mathContPrice" value="150" min="0" step="0.01"></div>
@@ -236,7 +315,7 @@
                         <div><label>Recommended Dosage (ml)</label><input type="number" id="mathDosage" value="200" min="1"></div>
                         <div><label>Per</label><select id="mathDosageUnit"><option value="ha">Hectare</option><option value="acre">Acre</option><option value="20L">20L Knapsack</option></select></div>
                     </div>
-                    <button class="btn-outline" onclick="saveChemical()" style="margin-top:8px;font-size:0.85rem;">Save This Chemical</button>
+                    <button class="btn-outline" onclick="saveChemical()" style="margin-top:8px;font-size:0.85rem;">💾 Save This Chemical</button>
                     <div id="savedChems" style="display:none;margin-top:8px;"></div>
                 </div>
                 <div class="card" style="background:#0a0a0a;">
@@ -244,7 +323,7 @@
                     <input type="range" id="mathFarmSlider" min="0.1" max="20" step="0.1" value="0.5" oninput="updateFarmSlider()">
                     <div style="text-align:center;font-size:1.2rem;font-weight:700;color:var(--accent);"><span id="mathFarmDisplay">0.5</span> hectares</div>
                 </div>
-                <button class="btn-primary" onclick="calcFarmMath()" style="width:100%;">Calculate Cost & Savings</button>
+                <button class="btn-primary" onclick="calcFarmMath()" style="width:100%;">🧮 Calculate Cost & Savings</button>
                 <div id="mathResult" style="margin-top:16px;"></div>
             </div>
         </div>
@@ -306,12 +385,12 @@
                     <div class="card" style="background:#0a0a0a;text-align:center;padding:12px;"><div style="font-size:1.4rem;font-weight:700;color:var(--accent);" id="scoutDist">0m</div><small>Distance</small></div>
                 </div>
                 <div style="display:flex;gap:10px;">
-                    <button class="btn-primary" id="startScoutBtn" onclick="startScout()">Start Auto-Scout</button>
-                    <button class="btn-outline" id="stopScoutBtn" onclick="stopScout()" style="display:none;border-color:var(--danger);color:var(--danger);">Stop</button>
+                    <button class="btn-primary" id="startScoutBtn" onclick="startScout()">▶ Start Auto-Scout</button>
+                    <button class="btn-outline" id="stopScoutBtn" onclick="stopScout()" style="display:none;border-color:var(--danger);color:var(--danger);">⏹ Stop</button>
                 </div>
                 <div id="scoutPrompt" class="scout-prompt" style="display:none;" onclick="captureScoutPhoto()">
                     <i class="fas fa-camera" style="font-size:1.5rem;"></i>
-                    <strong>Tap to Scan Leaf Now!</strong>
+                    <strong>📸 Tap to Scan Leaf Now!</strong>
                     <p style="font-size:0.8rem;margin-top:4px;">Step <span id="promptStepNum">0</span> - Take a photo</p>
                 </div>
                 <input type="file" id="scoutCamera" accept="image/*" capture="environment" style="display:none;" onchange="handleScoutPhoto(event)">
@@ -434,7 +513,7 @@
         <h3 id="modalTitle">Log in</h3>
         <input type="email" id="authEmail" placeholder="Email" style="margin-top:16px;">
         <input type="password" id="authPass" placeholder="Password">
-        <input type="text" id="authDisplayName" placeholder="Display Name" style="display:none;margin-top:12px;">
+        <input type="text" id="authDisplayNameInput" placeholder="Display Name" style="display:none;margin-top:12px;">
         <button id="authSubmitBtn" class="btn-primary" style="width:100%;">Continue</button>
         <button id="closeModalBtn" class="btn-outline" style="margin-top:12px;width:100%;">Cancel</button>
     </div>
