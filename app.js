@@ -108,11 +108,14 @@ async function signUp(email, password, displayName) {
         .replace(/\b\w/g, l => l.toUpperCase())
         .trim() || 'Farmer';
     
-    // Save email to profiles
+    // CRITICAL: Save email to profiles
     const { error: upsertError } = await db.from('profiles').upsert({ 
         id: data.user.id, 
         display_name: nameToSave, 
-        email: email 
+        email: email,
+        phone: '',
+        location: '',
+        bio: ''
     });
     
     if (upsertError) console.log('Error saving profile:', upsertError);
@@ -291,10 +294,12 @@ async function loadJobs() {
     container.innerHTML = '';
     for (const j of jobs) {
         let posterName = 'Anonymous';
+        let posterEmail = 'N/A';
         if (j.user_id) {
             const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', j.user_id).single();
             if (pf?.display_name && pf.display_name.trim() !== '') posterName = pf.display_name.trim();
             else if (pf?.email) posterName = pf.email.split('@')[0];
+            posterEmail = pf?.email || 'N/A';
         }
         const { count: ac } = await db.from('job_applications').select('*', { count: 'exact', head: true }).eq('job_id', j.id);
         const isOwner = currentUser && currentUser.id === j.user_id;
@@ -303,6 +308,7 @@ async function loadJobs() {
             <p>${escapeHtml(j.description||'')}</p>
             ${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}
             <small>Posted by: ${escapeHtml(posterName)}</small>
+            ${!isOwner && currentUser ? `<br><small>📧 ${escapeHtml(posterEmail)}</small>` : ''}
             <span>👤 ${ac||0} applicants</span>
             ${isOwner ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
             ${!isOwner && currentUser ? `<button class="btn-outline apply-btn" data-job="${j.id}" style="margin-left:8px;">Apply Now</button>` : ''}
@@ -341,161 +347,273 @@ async function applyToJob(jobId) {
     loadJobs();
 }
 
-// ────────── Applications (FIXED - Fetches applicant details properly) ──────────
+// ────────── Applications (FIXED - fetches applicant details) ──────────
 async function loadApplications() {
-    if (!currentUser) return;
-    const container = document.getElementById('applicationsList');
-    
-    const { data: myJobs } = await db.from('job_listings').select('id,title').eq('user_id', currentUser.id);
-    if (!myJobs || myJobs.length === 0) { 
-        container.innerHTML = '<p>No jobs posted yet.</p>'; 
-        return; 
+    if (!currentUser) {
+        document.getElementById('applicationsList').innerHTML = '<p>Please login to view applications.</p>';
+        return;
     }
     
-    container.innerHTML = '';
+    const container = document.getElementById('applicationsList');
+    container.innerHTML = '<p>Loading applications...</p>';
     
-    for (const job of myJobs) {
-        const { data: apps } = await db.from('job_applications')
-            .select('*')
-            .eq('job_id', job.id)
-            .order('created_at', { ascending: false });
+    try {
+        const { data: myJobs, error: jobsError } = await db.from('job_listings')
+            .select('id, title')
+            .eq('user_id', currentUser.id);
         
-        if (apps && apps.length > 0) {
-            container.innerHTML += `<h4 style="color:var(--accent);margin-bottom:10px;">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
+        if (jobsError) {
+            console.error('Error fetching jobs:', jobsError);
+            container.innerHTML = '<p>Error loading jobs.</p>';
+            return;
+        }
+        
+        if (!myJobs || myJobs.length === 0) {
+            container.innerHTML = '<p>You haven\'t posted any jobs yet.</p>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        for (const job of myJobs) {
+            const { data: apps, error: appsError } = await db.from('job_applications')
+                .select('*')
+                .eq('job_id', job.id)
+                .order('created_at', { ascending: false });
             
-            for (const a of apps) {
+            if (appsError) {
+                console.error('Error fetching applications:', appsError);
+                continue;
+            }
+            
+            if (!apps || apps.length === 0) continue;
+            
+            const jobHeader = document.createElement('h4');
+            jobHeader.style.cssText = 'color:var(--accent);margin-bottom:10px;margin-top:15px;';
+            jobHeader.textContent = `📋 ${job.title} (${apps.length} applicants)`;
+            container.appendChild(jobHeader);
+            
+            for (const app of apps) {
+                const appDiv = document.createElement('div');
+                appDiv.className = 'job-item';
+                
                 let applicantEmail = 'N/A';
                 let applicantName = 'Unknown';
                 let applicantPhone = 'N/A';
                 let applicantLocation = 'N/A';
                 
-                // Fetch the applicant's full profile
-                if (a.applicant_id) {
-                    const { data: pf } = await db.from('profiles')
-                        .select('display_name,email,phone,location')
-                        .eq('id', a.applicant_id)
-                        .single();
-                    
-                    if (pf) {
-                        applicantEmail = pf.email || 'N/A';
-                        applicantName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-                        applicantPhone = pf.phone || 'N/A';
-                        applicantLocation = pf.location || 'N/A';
+                if (app.applicant_id) {
+                    try {
+                        const { data: profile, error: profileError } = await db.from('profiles')
+                            .select('display_name, email, phone, location')
+                            .eq('id', app.applicant_id)
+                            .single();
+                        
+                        if (profileError) {
+                            console.error('Error fetching profile for applicant:', app.applicant_id, profileError);
+                        } else if (profile) {
+                            applicantEmail = profile.email || 'N/A';
+                            applicantName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
+                            applicantPhone = profile.phone || 'N/A';
+                            applicantLocation = profile.location || 'N/A';
+                        }
+                    } catch (err) {
+                        console.error('Exception fetching profile:', err);
                     }
                 }
                 
-                const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
+                const statusColor = app.status === 'accepted' ? '#10B981' : 
+                                   app.status === 'rejected' ? '#dc2626' : '#f59e0b';
                 
-                // Always show email, show phone/location only when accepted
-                container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
+                let html = `<div style="border-left:5px solid ${statusColor};padding-left:12px;">
                     <strong>${escapeHtml(applicantName)}</strong>
-                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
-                    ${a.status === 'accepted' ? `
+                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>`;
+                
+                if (app.status === 'accepted') {
+                    html += `
                         <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
-                        <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>
-                    ` : ''}
-                    <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
-                    <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
-                    <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
-                    ${a.status === 'pending' ? `
+                        <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>`;
+                }
+                
+                html += `
+                    <p><strong>💬 Message:</strong> ${escapeHtml(app.applicant_message || 'No message')}</p>
+                    <small>Applied: ${new Date(app.created_at).toLocaleDateString()}</small>
+                    <br><span style="color:${statusColor};font-weight:600;">Status: ${app.status}</span>`;
+                
+                if (app.status === 'pending') {
+                    html += `
                         <div style="margin-top:8px;display:flex;gap:8px;">
-                            <button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
-                            <button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
-                        </div>
-                    ` : ''}
-                    ${a.status === 'accepted' ? `
+                            <button class="btn-outline accept-app" data-id="${app.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
+                            <button class="btn-outline reject-app" data-id="${app.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
+                        </div>`;
+                }
+                
+                if (app.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A') {
+                    html += `
                         <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                            <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
-                            <div style="margin-top:8px;">
-                                <button class="btn-primary contact-applicant-btn" 
-                                    data-email="${escapeHtml(applicantEmail)}" 
-                                    data-name="${escapeHtml(applicantName)}" 
-                                    data-phone="${escapeHtml(applicantPhone)}"
-                                    style="font-size:12px;padding:6px 14px;">
-                                    <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
-                                </button>
-                            </div>
-                        </div>
-                    ` : ''}
-                </div>`;
+                            <button class="btn-primary contact-applicant-btn" 
+                                data-email="${escapeHtml(applicantEmail)}" 
+                                data-name="${escapeHtml(applicantName)}" 
+                                data-phone="${escapeHtml(applicantPhone)}"
+                                data-applicantid="${app.applicant_id}"
+                                style="font-size:12px;padding:6px 14px;width:100%;">
+                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
+                            </button>
+                        </div>`;
+                }
+                
+                html += '</div>';
+                appDiv.innerHTML = html;
+                container.appendChild(appDiv);
             }
         }
+        
+        if (container.innerHTML === '') {
+            container.innerHTML = '<p>No applications received yet.</p>';
+        }
+    } catch (err) {
+        console.error('Error in loadApplications:', err);
+        container.innerHTML = '<p>Error loading applications. Please try again.</p>';
     }
-    
-    if (container.innerHTML === '') container.innerHTML = '<p>No applications received yet.</p>';
 }
 
-// ────────── My Applications (FIXED - Fetches employer details properly) ──────────
+// ────────── My Applications (FIXED - fetches employer details) ──────────
 async function loadMyApplications() {
-    if (!currentUser) return;
-    const container = document.getElementById('myApplicationsList');
-    
-    const { data: apps } = await db.from('job_applications')
-        .select('*')
-        .eq('applicant_id', currentUser.id)
-        .order('created_at', { ascending: false });
-    
-    if (!apps || apps.length === 0) { 
-        container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; 
-        return; 
+    if (!currentUser) {
+        document.getElementById('myApplicationsList').innerHTML = '<p>Please login to view your applications.</p>';
+        return;
     }
     
-    container.innerHTML = '';
+    const container = document.getElementById('myApplicationsList');
+    container.innerHTML = '<p>Loading your applications...</p>';
     
-    for (const a of apps) {
-        // Fetch the job details
-        const { data: job } = await db.from('job_listings')
-            .select('title,description,location,user_id')
-            .eq('id', a.job_id)
-            .single();
+    try {
+        const { data: apps, error: appsError } = await db.from('job_applications')
+            .select('*')
+            .eq('applicant_id', currentUser.id)
+            .order('created_at', { ascending: false });
         
-        let employerEmail = 'N/A';
-        let employerName = 'Unknown';
-        let employerPhone = 'N/A';
-        
-        // Fetch the employer's profile using the job's user_id
-        if (job?.user_id) {
-            const { data: pf } = await db.from('profiles')
-                .select('display_name,email,phone')
-                .eq('id', job.user_id)
-                .single();
-            
-            if (pf) {
-                employerEmail = pf.email || 'N/A';
-                employerName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-                employerPhone = pf.phone || 'N/A';
-            }
+        if (appsError) {
+            console.error('Error fetching applications:', appsError);
+            container.innerHTML = '<p>Error loading your applications.</p>';
+            return;
         }
         
-        const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
+        if (!apps || apps.length === 0) {
+            container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>';
+            return;
+        }
         
-        container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
-            <strong>${escapeHtml(job?.title || 'Unknown Job')}</strong>
-            ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
-            <p>${escapeHtml(job?.description || '')}</p>
-            <small>Employer: ${escapeHtml(employerName)}</small>
-            ${a.status === 'accepted' ? `
-                <br><small>📧 ${escapeHtml(employerEmail)}</small>
-                <br><small>📱 ${escapeHtml(employerPhone)}</small>
-            ` : ''}
-            <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
-            <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
-            ${a.status === 'accepted' ? `
-                <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
-                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);margin-top:4px;">Contact the employer to discuss next steps.</p>
-                    <button class="btn-primary contact-poster-btn" 
-                        data-email="${escapeHtml(employerEmail)}" 
-                        data-name="${escapeHtml(employerName)}" 
-                        data-phone="${escapeHtml(employerPhone)}"
-                        style="font-size:12px;padding:8px 16px;margin-top:6px;">
-                        <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
-                    </button>
-                </div>
-            ` : ''}
-            ${a.status === 'rejected' ? `<p style="color:#dc2626;margin-top:8px;">❌ Not accepted. Keep applying!</p>` : ''}
-            ${a.status === 'pending' ? `<p style="color:#f59e0b;margin-top:8px;">⏳ Waiting for review...</p>` : ''}
-        </div>`;
+        container.innerHTML = '';
+        
+        for (const app of apps) {
+            const appDiv = document.createElement('div');
+            appDiv.className = 'job-item';
+            
+            let jobTitle = 'Unknown Job';
+            let jobLocation = '';
+            let jobDescription = '';
+            let employerId = null;
+            
+            try {
+                const { data: job, error: jobError } = await db.from('job_listings')
+                    .select('title, description, location, user_id')
+                    .eq('id', app.job_id)
+                    .single();
+                
+                if (jobError) {
+                    console.error('Error fetching job:', jobError);
+                } else if (job) {
+                    jobTitle = job.title || 'Unknown Job';
+                    jobLocation = job.location || '';
+                    jobDescription = job.description || '';
+                    employerId = job.user_id;
+                }
+            } catch (err) {
+                console.error('Exception fetching job:', err);
+            }
+            
+            let employerEmail = 'N/A';
+            let employerName = 'Unknown';
+            let employerPhone = 'N/A';
+            
+            if (employerId) {
+                try {
+                    const { data: profile, error: profileError } = await db.from('profiles')
+                        .select('display_name, email, phone')
+                        .eq('id', employerId)
+                        .single();
+                    
+                    if (profileError) {
+                        console.error('Error fetching employer profile:', profileError);
+                    } else if (profile) {
+                        employerEmail = profile.email || 'N/A';
+                        employerName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
+                        employerPhone = profile.phone || 'N/A';
+                    }
+                } catch (err) {
+                    console.error('Exception fetching employer profile:', err);
+                }
+            }
+            
+            const statusColor = app.status === 'accepted' ? '#10B981' : 
+                               app.status === 'rejected' ? '#dc2626' : '#f59e0b';
+            
+            let html = `<div style="border-left:5px solid ${statusColor};padding-left:12px;">
+                <strong>${escapeHtml(jobTitle)}</strong>`;
+            
+            if (jobLocation) {
+                html += `<p>📍 ${escapeHtml(jobLocation)}</p>`;
+            }
+            
+            if (jobDescription) {
+                html += `<p>${escapeHtml(jobDescription)}</p>`;
+            }
+            
+            html += `
+                <small>Employer: ${escapeHtml(employerName)}</small>`;
+            
+            // Always show employer email if available
+            if (employerEmail && employerEmail !== 'N/A') {
+                html += `<br><small>📧 ${escapeHtml(employerEmail)}</small>`;
+            }
+            
+            if (employerPhone && employerPhone !== 'N/A') {
+                html += `<br><small>📱 ${escapeHtml(employerPhone)}</small>`;
+            }
+            
+            html += `
+                <br><small>Applied: ${new Date(app.created_at).toLocaleDateString()}</small>
+                <br><span style="color:${statusColor};font-weight:600;">Status: ${app.status}</span>`;
+            
+            // Show contact button if employer has email
+            if (employerEmail && employerEmail !== 'N/A') {
+                html += `
+                    <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
+                        <button class="btn-primary contact-poster-btn" 
+                            data-email="${escapeHtml(employerEmail)}" 
+                            data-name="${escapeHtml(employerName)}" 
+                            data-phone="${escapeHtml(employerPhone)}"
+                            data-employerid="${employerId}"
+                            data-jobtitle="${escapeHtml(jobTitle)}"
+                            style="font-size:12px;padding:8px 16px;width:100%;">
+                            <i class="fas fa-envelope"></i> Contact ${escapeHtml(employerName)} about ${escapeHtml(jobTitle)}
+                        </button>
+                    </div>`;
+            } else {
+                html += `
+                    <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px;border:1px solid #f59e0b;">
+                        <p style="color:#f59e0b;font-size:0.85rem;">⚠️ Employer contact information not available.</p>
+                    </div>`;
+            }
+            
+            html += '</div>';
+            appDiv.innerHTML = html;
+            container.appendChild(appDiv);
+        }
+    } catch (err) {
+        console.error('Error in loadMyApplications:', err);
+        container.innerHTML = '<p>Error loading your applications. Please try again.</p>';
     }
 }
 
@@ -635,7 +753,6 @@ async function globalSearch(term, category, dateFrom, dateTo) {
         if (data) data.forEach(r => { if ((!dateFrom||new Date(r.created_at)>=new Date(dateFrom)) && (!dateTo||new Date(r.created_at)<=new Date(dateTo+'T23:59:59'))) results.push({ type: 'Tutorial', text: r.title, date: r.created_at }); });
     }
     
-    // User search
     if (category==='all') {
         const { data: users } = await db.from('profiles').select('display_name,email,phone,location,created_at').ilike('display_name',q).limit(10);
         if (users) users.forEach(u => { results.push({ type: 'User', text: `${u.display_name || 'User'} (${u.email || 'No email'})${u.location ? ' - ' + u.location : ''}${u.phone ? ' - ' + u.phone : ''}`, date: u.created_at }); });
@@ -750,7 +867,6 @@ function diagnoseFromColors(c) {
     const symptoms = [], issues = [];
     let score = 0, conf = 0;
     
-    // Check light condition
     if (currentSensorLight !== null && currentSensorLight < 100) {
         return { 
             symptoms: [{ text: 'Too dark for accurate analysis - move to brighter area', found: true }], 
@@ -979,13 +1095,6 @@ function showPage(pageId) {
         case 'dashboard': loadDashboardStats(); break;
         case 'sensorhub': updateScanMapUI(); break;
     }
-}
-
-function showPhonePage(pageId, btn) {
-    showPage(pageId);
-    document.querySelectorAll('.phone-nav-item').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    if (pageId === 'sensorhub') updateScanMapUI();
 }
 
 // ═══════════════════════════════════════════
@@ -1540,10 +1649,72 @@ function closeModal() {
 }
 
 // ═══════════════════════════════════════════
+// CONTACT HANDLERS (FIXED)
+// ═══════════════════════════════════════════
+
+function setupContactHandlers() {
+    document.addEventListener('click', function(e) {
+        // Contact Applicant Button (for job posters)
+        const contactApplicantBtn = e.target.closest('.contact-applicant-btn');
+        if (contactApplicantBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const email = contactApplicantBtn.dataset.email;
+            const name = contactApplicantBtn.dataset.name;
+            
+            if (email && email !== 'N/A' && email !== 'undefined' && email !== '') {
+                const msgTo = document.getElementById('msgTo');
+                const msgText = document.getElementById('msgText');
+                
+                if (msgTo && msgText) {
+                    msgTo.value = email;
+                    msgText.value = `Hello ${name}, regarding your application to my job posting...`;
+                    showPage('messages');
+                    showToast(`Composing message to ${name}`);
+                }
+            } else {
+                showToast('No email available for this applicant', true);
+            }
+            return;
+        }
+        
+        // Contact Poster Button (for job applicants)
+        const contactPosterBtn = e.target.closest('.contact-poster-btn');
+        if (contactPosterBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const email = contactPosterBtn.dataset.email;
+            const name = contactPosterBtn.dataset.name;
+            const jobTitle = contactPosterBtn.dataset.jobtitle || 'the job';
+            
+            if (email && email !== 'N/A' && email !== 'undefined' && email !== '') {
+                const msgTo = document.getElementById('msgTo');
+                const msgText = document.getElementById('msgText');
+                
+                if (msgTo && msgText) {
+                    msgTo.value = email;
+                    msgText.value = `Hello ${name}, I'm following up on my application for ${jobTitle}...`;
+                    showPage('messages');
+                    showToast(`Composing message to ${name}`);
+                }
+            } else {
+                showToast('No email available for this employer', true);
+            }
+            return;
+        }
+    });
+}
+
+// ═══════════════════════════════════════════
 // DOM READY
 // ═══════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Setup contact handlers
+    setupContactHandlers();
+    
     // Sidebar
     document.getElementById('hamburgerBtn').addEventListener('click', () => {
         document.getElementById('sidebar').classList.toggle('open');
@@ -1732,7 +1903,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCostPerMl();
     renderSavedChems();
 
-    // Event delegation for dynamic elements
+    // Event delegation for dynamic elements (non-contact buttons)
     document.addEventListener('click', async function(e) {
         // Delete buttons
         const deleteBtn = e.target.closest('.delete-btn');
@@ -1800,42 +1971,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const rejectBtn = e.target.closest('.reject-app');
         if (rejectBtn) { 
             await updateApplicationStatus(rejectBtn.dataset.id, 'rejected'); 
-            return; 
-        }
-
-        // FIXED: Contact applicant button (for job posters) - fetches applicant details
-        const contactApplicant = e.target.closest('.contact-applicant-btn');
-        if (contactApplicant) { 
-            const email = contactApplicant.dataset.email;
-            const name = contactApplicant.dataset.name;
-            const phone = contactApplicant.dataset.phone || '';
-            
-            if (email && email !== 'N/A') {
-                document.getElementById('msgTo').value = email;
-                document.getElementById('msgText').value = `Hello ${name}, regarding your application to my job posting...`;
-                showPage('messages');
-                showToast(`Composing message to ${name}`);
-            } else {
-                showToast('No email available for this applicant', true);
-            }
-            return; 
-        }
-
-        // FIXED: Contact poster button (for job applicants) - fetches employer details
-        const contactPoster = e.target.closest('.contact-poster-btn');
-        if (contactPoster) { 
-            const email = contactPoster.dataset.email;
-            const name = contactPoster.dataset.name;
-            const phone = contactPoster.dataset.phone || '';
-            
-            if (email && email !== 'N/A') {
-                document.getElementById('msgTo').value = email;
-                document.getElementById('msgText').value = `Hello ${name}, I'm following up on my application...`;
-                showPage('messages');
-                showToast(`Composing message to ${name}`);
-            } else {
-                showToast('No email available for this employer', true);
-            }
             return; 
         }
     });
