@@ -28,6 +28,28 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// Helper to get user display info
+async function getUserInfo(userId) {
+    if (!userId) return { name: 'Unknown', email: 'N/A', phone: 'N/A', location: 'N/A' };
+    try {
+        const { data: pf } = await db.from('profiles')
+            .select('display_name,email,phone,location')
+            .eq('id', userId)
+            .single();
+        if (pf) {
+            return {
+                name: pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown',
+                email: pf.email || 'N/A',
+                phone: pf.phone || 'N/A',
+                location: pf.location || 'N/A'
+            };
+        }
+    } catch(e) {
+        console.log('Error fetching user info:', e);
+    }
+    return { name: 'Unknown', email: 'N/A', phone: 'N/A', location: 'N/A' };
+}
+
 // ────────── Theme ──────────
 const themeToggle = document.getElementById('themeToggle');
 if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
@@ -40,20 +62,12 @@ themeToggle.addEventListener('click', () => {
 async function checkSession() {
     const { data: { session } } = await db.auth.getSession();
     if (session && session.user) {
-        const { data: profile } = await db.from('profiles').select('*').eq('id', session.user.id).single();
-        
-        let displayName = 'Farmer';
-        if (profile?.display_name && profile.display_name.trim() !== '') {
-            displayName = profile.display_name.trim();
-        } else if (session.user.email) {
-            displayName = session.user.email.split('@')[0];
-        }
-        
+        const userInfo = await getUserInfo(session.user.id);
         currentUser = { 
             id: session.user.id, 
             email: session.user.email, 
-            displayName: displayName,
-            profile: profile || {}
+            displayName: userInfo.name,
+            profile: userInfo
         };
     } else { 
         currentUser = null; 
@@ -68,7 +82,6 @@ function updateAuthUI() {
     if (currentUser) {
         authSection.style.display = 'none';
         userGreeting.style.display = 'block';
-        // Show username, not email
         userGreeting.innerHTML = `<i class="fas fa-user-check"></i> ${escapeHtml(currentUser.displayName)}`;
     } else {
         authSection.style.display = 'flex';
@@ -80,14 +93,21 @@ async function signUp(email, password, displayName) {
     const { data, error } = await db.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
     
-    await db.from('profiles').upsert({ 
+    // Save display_name to profiles - make sure it's not empty
+    const nameToSave = displayName?.trim() || email.split('@')[0];
+    
+    const { error: upsertError } = await db.from('profiles').upsert({ 
         id: data.user.id, 
-        display_name: displayName, 
+        display_name: nameToSave, 
         email: email 
     });
     
+    if (upsertError) {
+        console.log('Error saving profile:', upsertError);
+    }
+    
     await checkSession();
-    showToast(`Welcome, ${displayName}!`);
+    showToast(`Welcome, ${nameToSave}!`);
 }
 
 async function login(email, password) {
@@ -145,15 +165,10 @@ async function loadForum() {
     if (!posts || posts.length === 0) { container.innerHTML = '<div style="text-align:center;padding:20px;">No posts yet.</div>'; return; }
     container.innerHTML = '';
     for (const p of posts) {
-        let dn = 'Anonymous';
-        if (p.user_id) { 
-            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', p.user_id).single(); 
-            if (pf?.display_name && pf.display_name.trim() !== '') dn = pf.display_name.trim();
-            else if (pf?.email) dn = pf.email.split('@')[0];
-        }
+        const userInfo = await getUserInfo(p.user_id);
         const postDiv = document.createElement('div');
         postDiv.className = 'forum-post';
-        postDiv.innerHTML = `<strong>${escapeHtml(dn)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}<button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>`;
+        postDiv.innerHTML = `<strong>${escapeHtml(userInfo.name)}</strong><small>${new Date(p.created_at).toLocaleString()}</small><p>${escapeHtml(p.content)}</p>${p.image_url?`<img src="${p.image_url}" style="max-width:100%;border-radius:12px;margin:8px 0;">`:''}${currentUser&&currentUser.id===p.user_id?`<button class="delete-btn" data-type="forum" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>`:''}<button class="btn-outline reply-toggle" data-post="${p.id}">Reply</button>`;
         container.appendChild(postDiv);
     }
 }
@@ -210,20 +225,14 @@ async function addRecord(title, detail, location) {
 
 async function deleteRecord(id) { await db.from('farm_records').delete().eq('id', id); showToast('Deleted'); loadRecords(); loadDashboardStats(); }
 
-// ────────── Jobs (shows poster username, not email) ──────────
+// ────────── Jobs ──────────
 async function loadJobs() {
     const { data: jobs } = await db.from('job_listings').select('*').order('created_at', { ascending: false });
     const container = document.getElementById('jobsList');
     if (!jobs || jobs.length === 0) { container.innerHTML = '<p>No jobs available.</p>'; return; }
     container.innerHTML = '';
     for (const j of jobs) {
-        let posterName = 'Anonymous';
-        if (j.user_id) {
-            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', j.user_id).single();
-            if (pf?.display_name && pf.display_name.trim() !== '') posterName = pf.display_name.trim();
-            else if (pf?.email) posterName = pf.email.split('@')[0];
-        }
-        
+        const userInfo = await getUserInfo(j.user_id);
         const isOwner = currentUser && currentUser.id === j.user_id;
         const hasApplied = currentUser && !isOwner;
         
@@ -231,7 +240,7 @@ async function loadJobs() {
             <strong>${escapeHtml(j.title)}</strong>
             <p>${escapeHtml(j.description||'')}</p>
             ${j.location?`<p>📍 ${escapeHtml(j.location)}</p>`:''}
-            <small>Posted by: ${escapeHtml(posterName)}</small>
+            <small>Posted by: ${escapeHtml(userInfo.name)}</small>
             ${isOwner ? `<button class="delete-btn" data-type="job" data-id="${j.id}"><i class="fas fa-trash-alt"></i></button>` : ''}
             ${hasApplied ? `<button class="btn-outline apply-btn" data-job="${j.id}" style="margin-left:8px;">Apply Now</button>` : ''}
         </div>`;
@@ -269,14 +278,14 @@ async function applyToJob(jobId) {
     loadJobs();
 }
 
-// ────────── Applications (FIXED - shows applicant email & contact) ──────────
+// ────────── Applications (FIXED - uses getUserInfo helper) ──────────
 async function loadApplications() {
     if (!currentUser) return;
     const container = document.getElementById('applicationsList');
     
     const { data: myJobs } = await db.from('job_listings').select('id,title').eq('user_id', currentUser.id);
     if (!myJobs || myJobs.length === 0) { 
-        container.innerHTML = '<p>No jobs posted yet.</p>'; 
+        container.innerHTML = '<p>No jobs posted yet. Post a job to receive applications.</p>'; 
         return; 
     }
     
@@ -289,47 +298,34 @@ async function loadApplications() {
             .order('created_at', { ascending: false });
         
         if (apps && apps.length > 0) {
-            container.innerHTML += `<h4 style="color:var(--accent);">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
+            container.innerHTML += `<h4 style="color:var(--accent);margin-bottom:10px;">📋 ${escapeHtml(job.title)} (${apps.length} applicants)</h4>`;
             
             for (const a of apps) {
-                let applicantName = 'Unknown';
-                let applicantEmail = 'N/A';
-                let applicantPhone = 'N/A';
-                let applicantLocation = 'N/A';
-                
-                if (a.applicant_id) {
-                    const { data: pf } = await db.from('profiles')
-                        .select('display_name,email,phone,location')
-                        .eq('id', a.applicant_id)
-                        .single();
-                    if (pf) {
-                        applicantName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-                        applicantEmail = pf.email || 'N/A';
-                        applicantPhone = pf.phone || 'N/A';
-                        applicantLocation = pf.location || 'N/A';
-                    }
-                }
+                // Use the helper function to get user info
+                const applicantInfo = await getUserInfo(a.applicant_id);
                 
                 const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
                 
                 container.innerHTML += `<div class="job-item" style="border-left:5px solid ${sc};">
-                    <strong>${escapeHtml(applicantName)}</strong>
-                    <br><small>📧 Email: ${escapeHtml(applicantEmail)}</small>
-                    <br><small>📱 Phone: ${escapeHtml(applicantPhone)}</small>
-                    <br><small>📍 Location: ${escapeHtml(applicantLocation)}</small>
-                    <br><small>Message: ${escapeHtml(a.applicant_message || 'No message')}</small>
-                    <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
+                    <strong>${escapeHtml(applicantInfo.name)}</strong>
+                    <div style="margin-top:6px;font-size:0.9rem;">
+                        <p>📧 <strong>Email:</strong> ${escapeHtml(applicantInfo.email)}</p>
+                        <p>📱 <strong>Phone:</strong> ${escapeHtml(applicantInfo.phone)}</p>
+                        <p>📍 <strong>Location:</strong> ${escapeHtml(applicantInfo.location)}</p>
+                    </div>
+                    <p style="margin-top:6px;"><strong>Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
+                    <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
                     <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
                     ${a.status === 'pending' ? `
-                        <div style="margin-top:8px;">
-                            <button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:4px 12px;margin-right:8px;">✅ Accept</button>
-                            <button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:4px 12px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
+                        <div style="margin-top:10px;display:flex;gap:8px;">
+                            <button class="btn-outline accept-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;">✅ Accept</button>
+                            <button class="btn-outline reject-app" data-id="${a.id}" style="font-size:12px;padding:6px 14px;border-color:#dc2626;color:#dc2626;">❌ Reject</button>
                         </div>
                     ` : ''}
                     ${a.status === 'accepted' ? `
-                        <div style="margin-top:8px;">
-                            <button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantEmail)}" data-name="${escapeHtml(applicantName)}" style="font-size:12px;padding:6px 14px;">
-                                <i class="fas fa-envelope"></i> Send Message
+                        <div style="margin-top:10px;">
+                            <button class="btn-primary contact-applicant-btn" data-email="${escapeHtml(applicantInfo.email)}" data-name="${escapeHtml(applicantInfo.name)}" style="font-size:12px;padding:8px 16px;">
+                                <i class="fas fa-envelope"></i> Send Message to ${escapeHtml(applicantInfo.name)}
                             </button>
                         </div>
                     ` : ''}
@@ -352,33 +348,21 @@ async function loadMyApplications() {
         .order('created_at', { ascending: false });
     
     if (!apps || apps.length === 0) { 
-        container.innerHTML = '<p>You haven\'t applied to any jobs yet.</p>'; 
+        container.innerHTML = '<p>You haven\'t applied to any jobs yet. Browse jobs and apply!</p>'; 
         return; 
     }
     
     container.innerHTML = '';
     
     for (const a of apps) {
+        // Get job details
         const { data: job } = await db.from('job_listings')
             .select('title,description,location,user_id')
             .eq('id', a.job_id)
             .single();
         
-        let posterName = 'Unknown';
-        let posterEmail = 'N/A';
-        let posterPhone = 'N/A';
-        
-        if (job?.user_id) {
-            const { data: pf } = await db.from('profiles')
-                .select('display_name,email,phone')
-                .eq('id', job.user_id)
-                .single();
-            if (pf) {
-                posterName = pf.display_name?.trim() || pf.email?.split('@')[0] || 'Unknown';
-                posterEmail = pf.email || 'N/A';
-                posterPhone = pf.phone || 'N/A';
-            }
-        }
+        // Get poster info using the helper
+        const posterInfo = await getUserInfo(job?.user_id);
         
         const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
         
@@ -386,22 +370,25 @@ async function loadMyApplications() {
             <strong>${escapeHtml(job?.title || 'Unknown Job')}</strong>
             ${job?.location ? `<p>📍 ${escapeHtml(job.location)}</p>` : ''}
             <p>${escapeHtml(job?.description || '')}</p>
-            <small>Posted by: ${escapeHtml(posterName)}</small>
+            <small>Posted by: ${escapeHtml(posterInfo.name)}</small>
             <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
             <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>
             ${a.status === 'accepted' ? `
-                <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
-                    <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Application Accepted!</h4>
-                    <p><strong>📧 Email:</strong> ${escapeHtml(posterEmail)}</p>
-                    <p><strong>📱 Phone:</strong> ${escapeHtml(posterPhone)}</p>
-                    <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer using the information above.</p>
-                    <button class="btn-primary contact-poster-btn" data-email="${escapeHtml(posterEmail)}" data-name="${escapeHtml(posterName)}" style="font-size:12px;padding:8px 16px;margin-top:8px;">
-                        <i class="fas fa-envelope"></i> Contact ${escapeHtml(posterName)}
+                <div style="margin-top:12px;padding:14px;background:rgba(16,185,129,0.1);border-radius:12px;border:1px solid #10B981;">
+                    <h4 style="color:#10B981;margin-bottom:10px;"><i class="fas fa-check-circle"></i> Application Accepted! 🎉</h4>
+                    <p style="margin-bottom:6px;"><strong>📧 Employer Email:</strong> ${escapeHtml(posterInfo.email)}</p>
+                    <p style="margin-bottom:6px;"><strong>📱 Employer Phone:</strong> ${escapeHtml(posterInfo.phone)}</p>
+                    <p style="margin-bottom:10px;font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer using the information above to discuss next steps.</p>
+                    <button class="btn-primary contact-poster-btn" data-email="${escapeHtml(posterInfo.email)}" data-name="${escapeHtml(posterInfo.name)}" style="font-size:13px;padding:8px 18px;">
+                        <i class="fas fa-envelope"></i> Message ${escapeHtml(posterInfo.name)}
                     </button>
                 </div>
             ` : ''}
             ${a.status === 'rejected' ? `
-                <p style="color:#dc2626;margin-top:8px;">This application was not accepted. Keep applying to other jobs!</p>
+                <p style="color:#dc2626;margin-top:8px;font-size:0.9rem;">This application was not accepted. Don't give up - keep applying to other jobs!</p>
+            ` : ''}
+            ${a.status === 'pending' ? `
+                <p style="color:#f59e0b;margin-top:8px;font-size:0.9rem;">⏳ Waiting for employer to review your application.</p>
             ` : ''}
         </div>`;
     }
@@ -436,7 +423,7 @@ async function addProduct(name, price, category, location, imageFile) {
 
 async function deleteProduct(id) { await db.from('products').delete().eq('id', id); showToast('Deleted'); loadMarket(); }
 
-// ────────── Messages (shows usernames) ──────────
+// ────────── Messages ──────────
 async function loadMessages() {
     if (!currentUser) return;
     const { data: msgs } = await db.from('messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
@@ -444,16 +431,9 @@ async function loadMessages() {
     if (!msgs || msgs.length === 0) { container.innerHTML = '<p>No messages yet.</p>'; return; }
     container.innerHTML = '';
     for (const m of msgs) {
-        let fromName = 'Unknown', toName = 'Unknown';
-        if (m.from_user_id) { 
-            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', m.from_user_id).single(); 
-            fromName = pf?.display_name?.trim() || pf?.email?.split('@')[0] || 'Unknown';
-        }
-        if (m.to_user_id) { 
-            const { data: pf } = await db.from('profiles').select('display_name,email').eq('id', m.to_user_id).single(); 
-            toName = pf?.display_name?.trim() || pf?.email?.split('@')[0] || 'Unknown';
-        }
-        container.innerHTML += `<div class="msg-item"><strong>${escapeHtml(fromName)}</strong> → ${escapeHtml(toName)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
+        const fromInfo = await getUserInfo(m.from_user_id);
+        const toInfo = await getUserInfo(m.to_user_id);
+        container.innerHTML += `<div class="msg-item"><strong>${escapeHtml(fromInfo.name)}</strong> → ${escapeHtml(toInfo.name)}: ${escapeHtml(m.text)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`;
     }
 }
 
@@ -539,26 +519,23 @@ async function wikiAnswer(question) {
     } catch { return 'Connection error.'; }
 }
 
-// ────────── Profile (FIXED - shows username AND email) ──────────
+// ────────── Profile ──────────
 async function loadProfile() {
     if (!currentUser) { 
         document.getElementById('profileContent').innerHTML = '<p>Please login to see your profile.</p>'; 
         return; 
     }
     
+    const userInfo = await getUserInfo(currentUser.id);
+    
+    document.getElementById('profileName').textContent = userInfo.name;
+    document.getElementById('profileEmail').textContent = userInfo.email;
+    document.getElementById('profilePhone').textContent = '📱 Phone: ' + userInfo.phone;
+    document.getElementById('profileLocation').textContent = '📍 Location: ' + userInfo.location;
+    
+    // Get full profile for edit fields
     const { data: pd } = await db.from('profiles').select('*').eq('id', currentUser.id).single();
-    
-    const displayName = pd?.display_name?.trim() || currentUser.email?.split('@')[0] || 'Farmer';
-    const userEmail = currentUser.email || 'No email';
-    const userPhone = pd?.phone || 'Not set';
-    const userLocation = pd?.location || 'Not set';
-    const userBio = pd?.bio || 'No bio yet';
-    
-    document.getElementById('profileName').textContent = displayName;
-    document.getElementById('profileEmail').textContent = userEmail;
-    document.getElementById('profilePhone').textContent = '📱 Phone: ' + userPhone;
-    document.getElementById('profileLocation').textContent = '📍 Location: ' + userLocation;
-    document.getElementById('profileBio').textContent = '💬 ' + userBio;
+    document.getElementById('profileBio').textContent = '💬 ' + (pd?.bio || 'No bio yet');
     document.getElementById('profileSince').textContent = pd?.created_at ? 'Member since: ' + new Date(pd.created_at).toLocaleDateString() : '';
     
     document.getElementById('editDisplayName').value = pd?.display_name || '';
