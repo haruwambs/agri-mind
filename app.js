@@ -70,6 +70,21 @@ async function checkSession() {
             displayName: displayName 
         };
         
+        // Update profile with email if missing
+        if (profile && (!profile.email || profile.email === '')) {
+            try {
+                await db.from('profiles')
+                    .update({ 
+                        display_name: displayName,
+                        email: session.user.email 
+                    })
+                    .eq('id', session.user.id);
+                console.log('Updated profile with email for user:', session.user.id);
+            } catch (err) {
+                console.log('Could not update profile:', err);
+            }
+        }
+        
         if (profile && (!profile.display_name || profile.display_name.trim() === '')) {
             try {
                 await db.from('profiles')
@@ -108,7 +123,6 @@ async function signUp(email, password, displayName) {
         .replace(/\b\w/g, l => l.toUpperCase())
         .trim() || 'Farmer';
     
-    // CRITICAL: Save email to profiles
     const { error: upsertError } = await db.from('profiles').upsert({ 
         id: data.user.id, 
         display_name: nameToSave, 
@@ -347,7 +361,7 @@ async function applyToJob(jobId) {
     loadJobs();
 }
 
-// ────────── Applications (FIXED - fetches applicant details) ──────────
+// ────────── Applications ──────────
 async function loadApplications() {
     if (!currentUser) {
         document.getElementById('applicationsList').innerHTML = '<p>Please login to view applications.</p>';
@@ -477,7 +491,7 @@ async function loadApplications() {
     }
 }
 
-// ────────── My Applications (FIXED - fetches employer details) ──────────
+// ────────── My Applications ──────────
 async function loadMyApplications() {
     if (!currentUser) {
         document.getElementById('myApplicationsList').innerHTML = '<p>Please login to view your applications.</p>';
@@ -539,6 +553,7 @@ async function loadMyApplications() {
             
             if (employerId) {
                 try {
+                    // First try to get from profiles
                     const { data: profile, error: profileError } = await db.from('profiles')
                         .select('display_name, email, phone')
                         .eq('id', employerId)
@@ -550,6 +565,23 @@ async function loadMyApplications() {
                         employerEmail = profile.email || 'N/A';
                         employerName = profile.display_name?.trim() || profile.email?.split('@')[0] || 'Unknown';
                         employerPhone = profile.phone || 'N/A';
+                    }
+                    
+                    // If still no email, try to get from auth (if admin)
+                    if (employerEmail === 'N/A') {
+                        try {
+                            const { data: authUser } = await db.auth.admin.getUserById(employerId);
+                            if (authUser && authUser.email) {
+                                employerEmail = authUser.email;
+                                // Update profile with email
+                                await db.from('profiles')
+                                    .update({ email: authUser.email })
+                                    .eq('id', employerId);
+                                console.log('Updated employer profile with email from auth');
+                            }
+                        } catch (authErr) {
+                            console.log('Cannot fetch auth user (admin rights needed)');
+                        }
                     }
                 } catch (err) {
                     console.error('Exception fetching employer profile:', err);
@@ -603,7 +635,7 @@ async function loadMyApplications() {
             } else {
                 html += `
                     <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px;border:1px solid #f59e0b;">
-                        <p style="color:#f59e0b;font-size:0.85rem;">⚠️ Employer contact information not available.</p>
+                        <p style="color:#f59e0b;font-size:0.85rem;">⚠️ Employer contact information not available. Please try again later.</p>
                     </div>`;
             }
             
@@ -617,11 +649,61 @@ async function loadMyApplications() {
     }
 }
 
-async function updateApplicationStatus(appId, status) { 
-    await db.from('job_applications').update({ status }).eq('id', appId); 
-    showToast(`Application ${status}!`); 
-    loadApplications();
-    loadMyApplications();
+// ────────── Fix Missing Emails ──────────
+async function fixMissingEmails() {
+    if (!currentUser) {
+        showToast('Please login first', true);
+        return;
+    }
+    
+    showToast('Checking for missing emails...');
+    
+    try {
+        // Get all profiles without emails
+        const { data: profiles, error } = await db.from('profiles')
+            .select('id, email')
+            .is('email', null);
+        
+        if (error) {
+            console.error('Error fetching profiles:', error);
+            showToast('Error checking profiles', true);
+            return;
+        }
+        
+        if (!profiles || profiles.length === 0) {
+            showToast('✅ All profiles have emails!');
+            return;
+        }
+        
+        console.log(`Found ${profiles.length} profiles without emails`);
+        let fixed = 0;
+        
+        for (const profile of profiles) {
+            try {
+                // Try to get email from auth
+                const { data: authUser } = await db.auth.admin.getUserById(profile.id);
+                if (authUser && authUser.email) {
+                    await db.from('profiles')
+                        .update({ email: authUser.email })
+                        .eq('id', profile.id);
+                    fixed++;
+                    console.log(`Updated email for user ${profile.id}`);
+                }
+            } catch (err) {
+                console.log(`Could not update user ${profile.id}:`, err);
+            }
+        }
+        
+        showToast(`✅ Fixed ${fixed} profiles with missing emails`);
+        
+        // Reload applications
+        loadMyApplications();
+        loadApplications();
+        
+    } catch (err) {
+        console.error('Error in fixMissingEmails:', err);
+        showToast('Error fixing emails. Check console.', true);
+    }
 }
 
 // ────────── Market ──────────
@@ -946,10 +1028,11 @@ function diagnoseFromColors(c) {
 }
 
 // ═══════════════════════════════════════════
-// CROP DATABASE
+// CROP DATABASE (EXPANDED with more crops, pests, and diseases)
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
+    // ── MAIZE ──
     maize: { 
         name: 'Maize', 
         pests: { 
@@ -979,10 +1062,30 @@ const CROP_DB = {
                 chemicals: ['Acetamiprid','Dudu-Cyber'], 
                 organic: ['Ladybugs','Neem Oil','Soap spray'], 
                 note: 'Check under leaves. Ants indicate presence.' 
-            } 
+            },
+            gray_leaf_spot: {
+                name: 'Gray Leaf Spot',
+                severity: 'medium',
+                lossPct: 12,
+                dosage: 180,
+                chemicals: ['Mancozeb','Tebuconazole'],
+                organic: ['Copper spray','Crop rotation'],
+                note: 'Causes rectangular gray lesions. Common in humid weather.'
+            },
+            northern_leaf_blight: {
+                name: 'Northern Leaf Blight',
+                severity: 'medium',
+                lossPct: 10,
+                dosage: 160,
+                chemicals: ['Propiconazole','Azoxystrobin'],
+                organic: ['Resistant varieties','Crop rotation'],
+                note: 'Long cigar-shaped lesions. Favored by cool, wet conditions.'
+            }
         }, 
         yieldValue: 2533 
     },
+    
+    // ── TOMATO ──
     tomato: { 
         name: 'Tomato', 
         pests: { 
@@ -995,6 +1098,15 @@ const CROP_DB = {
                 organic: ['Copper spray','Baking soda'], 
                 note: 'Spreads rapidly in cool, wet conditions.' 
             }, 
+            early_blight: {
+                name: 'Early Blight',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 250,
+                chemicals: ['Chlorothalonil','Mancozeb'],
+                organic: ['Neem Oil','Copper spray'],
+                note: 'Dark concentric rings on leaves. Common in warm weather.'
+            },
             aphids: { 
                 name: 'Aphids', 
                 severity: 'medium', 
@@ -1003,10 +1115,30 @@ const CROP_DB = {
                 chemicals: ['Acetamiprid','Dudu-Cyber'], 
                 organic: ['Neem Oil','Garlic spray'], 
                 note: 'Also transmits viral diseases.' 
-            } 
+            },
+            tomato_yellow_leaf_curl: {
+                name: 'Tomato Yellow Leaf Curl',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 0,
+                chemicals: ['Insecticides for whitefly','Neem Oil'],
+                organic: ['Neem Oil','Yellow sticky traps'],
+                note: 'Caused by whitefly transmitted virus. Prevention is key.'
+            },
+            blossom_end_rot: {
+                name: 'Blossom End Rot',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 0,
+                chemicals: ['Calcium nitrate'],
+                organic: ['Lime','Eggshells','Compost'],
+                note: 'Calcium deficiency. Maintain consistent soil moisture.'
+            }
         }, 
         yieldValue: 5000 
     },
+    
+    // ── RICE ──
     rice: { 
         name: 'Rice', 
         pests: { 
@@ -1018,10 +1150,39 @@ const CROP_DB = {
                 chemicals: ['Tricyclazole','Rocket'], 
                 organic: ['Silicon fertilizer','Resistant varieties'], 
                 note: 'Favored by high nitrogen and frequent rainfall.' 
-            } 
+            },
+            brown_spot: {
+                name: 'Brown Spot',
+                severity: 'medium',
+                lossPct: 15,
+                dosage: 150,
+                chemicals: ['Mancozeb','Copper'],
+                organic: ['Balanced nutrients','Seed treatment'],
+                note: 'Small brown circular lesions. Related to nutrient deficiency.'
+            },
+            sheath_blight: {
+                name: 'Sheath Blight',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 200,
+                chemicals: ['Validamycin','Propiconazole'],
+                organic: ['Avoid dense planting','Remove infected plants'],
+                note: 'Grayish-green lesions on leaf sheaths. Favored by high humidity.'
+            },
+            stem_borer: {
+                name: 'Stem Borer',
+                severity: 'high',
+                lossPct: 22,
+                dosage: 160,
+                chemicals: ['Cartap','Chlorpyrifos'],
+                organic: ['Trap crops','Neem Oil'],
+                note: 'Causes dead hearts in early stages. Monitor moth activity.'
+            }
         }, 
         yieldValue: 3200 
     },
+    
+    // ── BEANS ──
     beans: { 
         name: 'Beans', 
         pests: { 
@@ -1033,10 +1194,39 @@ const CROP_DB = {
                 chemicals: ['Acetamiprid','Dudu-Cyber'], 
                 organic: ['Neem Oil','Companion planting'], 
                 note: 'Check flowering stage.' 
-            } 
+            },
+            bean_rust: {
+                name: 'Bean Rust',
+                severity: 'high',
+                lossPct: 18,
+                dosage: 140,
+                chemicals: ['Tebuconazole','Mancozeb'],
+                organic: ['Sulfur spray','Copper spray'],
+                note: 'Small rust-colored pustules on leaves. Favored by humid weather.'
+            },
+            angular_leaf_spot: {
+                name: 'Angular Leaf Spot',
+                severity: 'medium',
+                lossPct: 14,
+                dosage: 130,
+                chemicals: ['Copper hydroxide','Mancozeb'],
+                organic: ['Baking soda spray','Crop rotation'],
+                note: 'Angular brown lesions with yellow halos.'
+            },
+            bruchids: {
+                name: 'Bruchids (Bean Weevils)',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 0,
+                chemicals: ['Phosphine fumigation','Malathion dust'],
+                organic: ['Sun drying','Neem oil on stored beans'],
+                note: 'Attacks stored beans. Clean storage and early harvest.'
+            }
         }, 
         yieldValue: 1800 
     },
+    
+    // ── CABBAGE ──
     cabbage: { 
         name: 'Cabbage', 
         pests: { 
@@ -1048,9 +1238,168 @@ const CROP_DB = {
                 chemicals: ['Dudu-Cyber','Emamectin Benzoate'], 
                 organic: ['Bt spray','Neem Oil','Row covers'], 
                 note: 'Rotate chemicals to prevent resistance.' 
-            } 
+            },
+            black_rot: {
+                name: 'Black Rot',
+                severity: 'critical',
+                lossPct: 35,
+                dosage: 0,
+                chemicals: ['Copper spray','Streptomycin'],
+                organic: ['Hot water seed treatment','Crop rotation'],
+                note: 'V-shaped yellow lesions on leaf edges. Highly infectious.'
+            },
+            clubroot: {
+                name: 'Clubroot',
+                severity: 'high',
+                lossPct: 30,
+                dosage: 0,
+                chemicals: ['Lime application'],
+                organic: ['Lime','Organic matter','pH management'],
+                note: 'Swollen roots causing wilting. Maintain pH above 6.5.'
+            },
+            aphids: {
+                name: 'Cabbage Aphids',
+                severity: 'medium',
+                lossPct: 12,
+                dosage: 120,
+                chemicals: ['Acetamiprid','Imidacloprid'],
+                organic: ['Neem Oil','Ladybugs','Water spray'],
+                note: 'Check under leaves. Sticky surfaces indicate presence.'
+            }
         }, 
         yieldValue: 2800 
+    },
+    
+    // ── POTATO ──
+    potato: {
+        name: 'Potato',
+        pests: {
+            late_blight: {
+                name: 'Late Blight',
+                severity: 'critical',
+                lossPct: 35,
+                dosage: 300,
+                chemicals: ['Mancozeb','Metalaxyl','Rocket'],
+                organic: ['Copper spray','Bordeaux mixture'],
+                note: 'Devastating disease. Use resistant varieties where possible.'
+            },
+            early_blight: {
+                name: 'Early Blight',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 250,
+                chemicals: ['Chlorothalonil','Azoxystrobin'],
+                organic: ['Copper spray','Crop rotation'],
+                note: 'Causes dark concentric rings on older leaves.'
+            },
+            potato_aphids: {
+                name: 'Potato Aphids',
+                severity: 'medium',
+                lossPct: 10,
+                dosage: 130,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs'],
+                note: 'Transmits potato leaf roll virus. Monitor carefully.'
+            },
+            potato_tuber_moth: {
+                name: 'Potato Tuber Moth',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 180,
+                chemicals: ['Bt spray','Fenitrothion'],
+                organic: ['Bt spray','Covering soil','Pheromone traps'],
+                note: 'Attack leaves and tubers. Keep soil covered.'
+            }
+        },
+        yieldValue: 3500
+    },
+    
+    // ── ONION ──
+    onion: {
+        name: 'Onion',
+        pests: {
+            downy_mildew: {
+                name: 'Downy Mildew',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 200,
+                chemicals: ['Metalaxyl','Mancozeb'],
+                organic: ['Copper spray','Sulfur'],
+                note: 'Purplish-gray mold on leaves. Prefers cool, wet weather.'
+            },
+            thrips: {
+                name: 'Onion Thrips',
+                severity: 'high',
+                lossPct: 22,
+                dosage: 160,
+                chemicals: ['Spinosad','Acetamiprid'],
+                organic: ['Neem Oil','Sticky traps','Beneficial insects'],
+                note: 'Silver-white patches on leaves. Monitor from seedling stage.'
+            },
+            white_rot: {
+                name: 'White Rot',
+                severity: 'critical',
+                lossPct: 40,
+                dosage: 0,
+                chemicals: ['Fungicide bulb dip'],
+                organic: ['Crop rotation (5-7 years)','Compost management'],
+                note: 'White fungal growth at base. Causes premature yellowing.'
+            },
+            purple_blotch: {
+                name: 'Purple Blotch',
+                severity: 'high',
+                lossPct: 18,
+                dosage: 170,
+                chemicals: ['Chlorothalonil','Mancozeb'],
+                organic: ['Copper spray','Avoid overhead irrigation'],
+                note: 'Purple-brown spots on leaves. Common in warm humid weather.'
+            }
+        },
+        yieldValue: 3000
+    },
+    
+    // ── GROUNDNUT ──
+    groundnut: {
+        name: 'Groundnut',
+        pests: {
+            leaf_spot: {
+                name: 'Early Leaf Spot',
+                severity: 'high',
+                lossPct: 20,
+                dosage: 180,
+                chemicals: ['Chlorothalonil','Tebuconazole'],
+                organic: ['Sulfur spray','Crop rotation'],
+                note: 'Dark brown spots on leaves. Defoliation reduces yield.'
+            },
+            rust: {
+                name: 'Groundnut Rust',
+                severity: 'high',
+                lossPct: 25,
+                dosage: 200,
+                chemicals: ['Mancozeb','Tebuconazole'],
+                organic: ['Sulfur spray','Resistant varieties'],
+                note: 'Orange-brown pustules on leaves. Favored by warm weather.'
+            },
+            aphids: {
+                name: 'Groundnut Aphids',
+                severity: 'medium',
+                lossPct: 10,
+                dosage: 120,
+                chemicals: ['Acetamiprid','Dudu-Cyber'],
+                organic: ['Neem Oil','Ladybugs'],
+                note: 'Transmits rosette virus. Monitor early for control.'
+            },
+            jassids: {
+                name: 'Jassids (Leafhoppers)',
+                severity: 'medium',
+                lossPct: 12,
+                dosage: 140,
+                chemicals: ['Imidacloprid','Acetamiprid'],
+                organic: ['Neem Oil','Yellow sticky traps'],
+                note: 'Yellow spots on leaves causing curling. Active in dry weather.'
+            }
+        },
+        yieldValue: 2200
     }
 };
 
@@ -1095,6 +1444,13 @@ function showPage(pageId) {
         case 'dashboard': loadDashboardStats(); break;
         case 'sensorhub': updateScanMapUI(); break;
     }
+}
+
+function showPhonePage(pageId, btn) {
+    showPage(pageId);
+    document.querySelectorAll('.phone-nav-item').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    if (pageId === 'sensorhub') updateScanMapUI();
 }
 
 // ═══════════════════════════════════════════
@@ -1212,7 +1568,7 @@ function calcFarmMath() {
     
     document.getElementById('mathResult').innerHTML = `
         <div class="math-result">
-            <h3 style="color:var(--accent);">${cropData.name} x ${pestData.name}</h3>
+            <h3 style="color:var(--accent);">${cropData.name} × ${pestData.name}</h3>
             <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
             <div class="grid-2cols" style="margin:14px 0;">
                 <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
@@ -1243,12 +1599,13 @@ function calcFarmMath() {
                 </div>
             </div>
             <div style="margin-top:10px;padding:10px;background:${savings>0?'rgba(16,185,129,0.2)':'rgba(239,68,68,0.2)'};border-radius:10px;border-left:3px solid ${savings>0?'var(--accent)':'var(--danger)'};font-weight:600;font-size:0.85rem;">
-                ${savings > totalCost*3 ? 'URGENT: Very high ROI - spray now!' : 
-                  savings > totalCost ? 'RECOMMENDED: Good return on investment' : 
-                  'MONITOR: Only spray if pest pressure increases'}
+                ${savings > totalCost*3 ? '🚨 URGENT: Very high ROI - spray now!' : 
+                  savings > totalCost ? '✅ RECOMMENDED: Good return on investment' : 
+                  '📊 MONITOR: Only spray if pest pressure increases'}
             </div>
             <p style="font-size:0.75rem;margin-top:8px;">${pestData.note}</p>
-            <p style="font-size:0.7rem;color:var(--accent);margin-top:4px;">Organic options: ${pestData.organic.join(', ')}</p>
+            <p style="font-size:0.7rem;color:var(--accent);margin-top:4px;">🌿 Organic options: ${pestData.organic.join(', ')}</p>
+            <p style="font-size:0.7rem;color:var(--text-secondary);">🧪 Chemical options: ${pestData.chemicals.join(', ')}</p>
         </div>`;
     document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
     showToast('Calculation complete!');
@@ -1649,7 +2006,7 @@ function closeModal() {
 }
 
 // ═══════════════════════════════════════════
-// CONTACT HANDLERS (FIXED)
+// CONTACT HANDLERS
 // ═══════════════════════════════════════════
 
 function setupContactHandlers() {
@@ -1714,6 +2071,9 @@ function setupContactHandlers() {
 document.addEventListener('DOMContentLoaded', () => {
     // Setup contact handlers
     setupContactHandlers();
+    
+    // Make fixMissingEmails available globally
+    window.fixMissingEmails = fixMissingEmails;
     
     // Sidebar
     document.getElementById('hamburgerBtn').addEventListener('click', () => {
