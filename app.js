@@ -28,13 +28,23 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// UPDATED: Better cleanDisplayName function with edge case handling
 function cleanDisplayName(email) {
-    if (!email) return 'User';
-    let name = email.split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase())
-        .trim();
-    return name || 'User';
+    if (!email || email === 'N/A' || email === 'undefined' || email === 'null') return 'User';
+    try {
+        let name = email.split('@')[0]
+            .replace(/[._-]/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase())
+            .trim();
+        
+        // If name is too short or looks like an ID (alphanumeric only), use 'User'
+        if (!name || name.length < 2 || name.match(/^[a-f0-9]+$/i)) {
+            return 'User';
+        }
+        return name;
+    } catch (e) {
+        return 'User';
+    }
 }
 
 // ────────── Theme ──────────
@@ -394,7 +404,7 @@ async function loadApplications() {
                 appDiv.className = 'job-item';
                 
                 let applicantEmail = 'N/A';
-                let applicantName = 'Unknown';
+                let applicantName = 'Applicant';
                 let applicantPhone = 'N/A';
                 let applicantLocation = 'N/A';
                 
@@ -406,7 +416,14 @@ async function loadApplications() {
                             .single();
                         if (pf) {
                             applicantEmail = pf.email || 'N/A';
-                            applicantName = pf.display_name?.trim() || cleanDisplayName(pf.email);
+                            // FIXED: Better name handling with fallbacks
+                            if (pf.display_name && pf.display_name.trim() !== '' && pf.display_name !== 'Unknown') {
+                                applicantName = pf.display_name.trim();
+                            } else if (pf.email) {
+                                applicantName = cleanDisplayName(pf.email);
+                            } else {
+                                applicantName = 'Applicant';
+                            }
                             applicantPhone = pf.phone || 'N/A';
                             applicantLocation = pf.location || 'N/A';
                         }
@@ -440,15 +457,17 @@ async function loadApplications() {
                         </div>`;
                 }
                 
+                // FIXED: Contact button with proper name
                 if (a.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A') {
+                    const contactName = (applicantName && applicantName !== 'Unknown') ? applicantName : cleanDisplayName(applicantEmail);
                     html += `
                         <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                             <button class="btn-primary contact-applicant-btn" 
                                 data-email="${escapeHtml(applicantEmail)}" 
-                                data-name="${escapeHtml(applicantName)}" 
+                                data-name="${escapeHtml(contactName)}" 
                                 data-phone="${escapeHtml(applicantPhone)}"
                                 style="font-size:12px;padding:6px 14px;width:100%;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
+                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(contactName)}
                             </button>
                         </div>`;
                 }
@@ -506,7 +525,7 @@ async function loadMyApplications() {
             let jobDescription = '';
             let employerId = null;
             let employerEmail = 'N/A';
-            let employerName = 'Unknown';
+            let employerName = 'Employer';
             
             try {
                 const { data: job, error: jobError } = await db.from('job_listings')
@@ -529,7 +548,14 @@ async function loadMyApplications() {
                             .single();
                         if (pf) {
                             employerEmail = pf.email || 'N/A';
-                            employerName = pf.display_name?.trim() || cleanDisplayName(pf.email);
+                            // FIXED: Better name handling with fallbacks
+                            if (pf.display_name && pf.display_name.trim() !== '' && pf.display_name !== 'Unknown') {
+                                employerName = pf.display_name.trim();
+                            } else if (pf.email) {
+                                employerName = cleanDisplayName(pf.email);
+                            } else {
+                                employerName = 'Employer';
+                            }
                         }
                     }
                 }
@@ -555,7 +581,9 @@ async function loadMyApplications() {
                 <br><small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
                 <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>`;
             
+            // FIXED: Contact button with proper name
             if (a.status === 'accepted' && employerEmail && employerEmail !== 'N/A') {
+                const contactName = (employerName && employerName !== 'Unknown') ? employerName : cleanDisplayName(employerEmail);
                 html += `
                     <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                         <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
@@ -563,10 +591,10 @@ async function loadMyApplications() {
                         <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
                         <button class="btn-primary contact-poster-btn" 
                             data-email="${escapeHtml(employerEmail)}" 
-                            data-name="${escapeHtml(employerName)}" 
+                            data-name="${escapeHtml(contactName)}" 
                             data-jobtitle="${escapeHtml(jobTitle)}"
                             style="font-size:12px;padding:8px 16px;margin-top:6px;width:100%;">
-                            <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
+                            <i class="fas fa-envelope"></i> Message ${escapeHtml(contactName)}
                         </button>
                     </div>`;
             } else if (a.status === 'accepted') {
@@ -927,7 +955,6 @@ function diagnoseFromColors(c) {
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
-    // ═══ CEREALS ═══
     maize: { 
         name: 'Maize (Zambia)', 
         pests: { 
@@ -965,8 +992,6 @@ const CROP_DB = {
             fusarium_head_blight: { name: 'Fusarium Head Blight', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fungicide at flowering'], organic: ['Crop rotation','Resistant varieties'], note: 'Causes pink discoloration of heads. Favored by wet weather.' }
         }, yieldValue: 2500 
     },
-
-    // ═══ LEGUMES ═══
     groundnut: { name: 'Groundnuts (Zambia)', pests: {
             rosette_virus: { name: 'Groundnut Rosette Virus', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Insecticides for aphids'], organic: ['Resistant varieties','Aphid control'], note: 'Devastating in Zambia. Transmitted by aphids.' },
             early_leaf_spot: { name: 'Early Leaf Spot', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Chlorothalonil','Tebuconazole'], organic: ['Sulfur spray','Crop rotation'], note: 'Dark brown spots on leaves. Common in Zambian rainy season.' },
@@ -1009,8 +1034,6 @@ const CROP_DB = {
             wilt: { name: 'Fusarium Wilt', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Resistant varieties','Crop rotation'], note: 'Causes wilting and death. Common in continuous cropping.' }
         }, yieldValue: 1400 
     },
-
-    // ═══ ROOT CROPS ═══
     cassava: { name: 'Cassava (Zambia)', pests: {
             cassava_mosaic: { name: 'Cassava Mosaic Virus', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Plant healthy cuttings'], note: 'Most serious cassava disease in Zambia.' },
             brown_streak: { name: 'Cassava Brown Streak', severity: 'critical', lossPct: 45, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Healthy cuttings'], note: 'Causes root necrosis. Major threat to Zambian cassava.' },
@@ -1045,8 +1068,6 @@ const CROP_DB = {
             aphids: { name: 'Carrot Aphids', severity: 'medium', lossPct: 12, dosage: 130, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor during early growth.' }
         }, yieldValue: 3200 
     },
-
-    // ═══ CASH CROPS ═══
     cotton: { name: 'Cotton (Zambia)', pests: {
             bollworm: { name: 'Cotton Bollworm', severity: 'critical', lossPct: 35, dosage: 280, chemicals: ['Cypermethrin','Dudu-Cyber','Rocket'], organic: ['Bt spray','Neem Oil'], note: 'Most destructive cotton pest in Zambia. Monitor during flowering.' },
             aphids: { name: 'Cotton Aphids', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Cause curling and stunting. Ants indicate presence.' },
@@ -1087,8 +1108,6 @@ const CROP_DB = {
             aphids: { name: 'Coffee Aphids', severity: 'medium', lossPct: 12, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Attack young shoots. Monitor during flushing.' }
         }, yieldValue: 2800 
     },
-
-    // ═══ VEGETABLES ═══
     tomato: { name: 'Tomato (Zambia)', pests: {
             late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], organic: ['Copper spray','Baking soda'], note: 'Spreads rapidly in cool, wet conditions.' },
             early_blight: { name: 'Early Blight', severity: 'high', lossPct: 20, dosage: 250, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Neem Oil','Copper spray'], note: 'Dark concentric rings on leaves. Common in warm weather.' },
@@ -1130,8 +1149,6 @@ const CROP_DB = {
             leaf_miners: { name: 'Leaf Miners', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Sticky traps'], note: 'Create tunnels in leaves. Monitor regularly.' }
         }, yieldValue: 2200 
     },
-
-    // ═══ FRUITS ═══
     mango: { name: 'Mango (Zambia)', pests: {
             anthracnose: { name: 'Mango Anthracnose', severity: 'critical', lossPct: 40, dosage: 250, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Pruning'], note: 'Dark spots on fruit. Major problem in Zambian mangoes.' },
             fruit_fly: { name: 'Fruit Fly', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Malathion','Protein bait spray'], organic: ['Fruit bagging','Pheromone traps'], note: 'Larvae feed inside fruit. Major export constraint.' },
@@ -1172,8 +1189,6 @@ const CROP_DB = {
             fruit_borer: { name: 'Pineapple Fruit Borer', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Hand picking'], note: 'Larvae feed inside fruit. Monitor during fruiting.' }
         }, yieldValue: 3200 
     },
-
-    // ═══ HERBS & SPICES ═══
     ginger: { name: 'Ginger (Zambia)', pests: {
             rhizome_rot: { name: 'Rhizome Rot', severity: 'critical', lossPct: 35, dosage: 0, chemicals: ['Soil fumigation','Fungicide drench'], organic: ['Good drainage','Crop rotation'], note: 'Causes soft rot of rhizomes. Avoid waterlogged soils.' },
             nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause galls on rhizomes. Serious in sandy soils.' },
@@ -1875,7 +1890,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Click handlers for dynamic elements
+    // FIXED: Click handlers for dynamic elements
     document.querySelector('.main-content')?.addEventListener('click', async (e) => {
         const target = e.target;
         
@@ -1892,18 +1907,30 @@ document.addEventListener('DOMContentLoaded', () => {
             updateApplicationStatus(target.closest('.reject-app').dataset.id, 'rejected');
         }
         
+        // FIXED: Contact button handler with proper name validation
         if (target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn')) {
             const btn = target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn');
-            const email = btn.dataset.email;
-            const name = btn.dataset.name;
             
-            if (email && email !== 'N/A' && email !== 'undefined') {
+            // Get the name from data attribute or fallback
+            let name = btn.dataset.name || '';
+            const email = btn.dataset.email || '';
+            
+            // If name is "Unknown", "Applicant", "Employer", or empty, try to clean it from email
+            if (!name || name === 'Unknown' || name === 'Applicant' || name === 'Employer' || name === 'undefined' || name.trim() === '') {
+                if (email && email !== 'N/A' && email !== '') {
+                    name = cleanDisplayName(email);
+                } else {
+                    name = btn.dataset.name || 'User';
+                }
+            }
+            
+            if (email && email !== 'N/A' && email !== '' && email !== 'undefined') {
                 document.getElementById('msgTo').value = email;
                 document.getElementById('msgText').value = `Hello ${name}, `;
                 showPage('messages');
-                showToast(`Composing message to ${name}`);
+                setTimeout(() => showToast(`Ready to message ${name}`), 300);
             } else {
-                showToast('No email available for this contact', true);
+                showToast('No email address available for this contact', true);
             }
         }
 
