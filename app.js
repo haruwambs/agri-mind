@@ -804,7 +804,7 @@ async function loadProfile() {
 }
 
 // ═══════════════════════════════════════════
-// REAL HSV COLOR ANALYSIS - IMPROVED
+// REAL HSV COLOR ANALYSIS
 // ═══════════════════════════════════════════
 
 function analyzeLeafColors(imageData) {
@@ -1033,37 +1033,6 @@ function diagnoseFromColors(c) {
 }
 
 // ═══════════════════════════════════════════
-// ZAMBIAN CROP DATABASE (EXPANDED - 35+ Crops)
-// ═══════════════════════════════════════════
-
-const CROP_DB = {
-    maize: { 
-        name: 'Maize (Zambia)', 
-        pests: { 
-            fall_armyworm: { name: 'Fall Armyworm', severity: 'critical', lossPct: 25, dosage: 250, chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], note: 'Most destructive pest in Zambia. Scout early morning.' },
-            stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Attacks stems causing lodging. Apply at knee-high stage.' }
-        }, yieldValue: 2800 
-    },
-    tomato: { name: 'Tomato (Zambia)', pests: {
-            late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], organic: ['Copper spray','Baking soda'], note: 'Spreads rapidly in cool, wet conditions.' },
-            aphids: { name: 'Tomato Aphids', severity: 'medium', lossPct: 10, dosage: 250, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Garlic spray'], note: 'Also transmits viral diseases.' }
-        }, yieldValue: 5000 
-    },
-    rice: { name: 'Rice (Zambia)', pests: {
-            blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Tricyclazole','Rocket'], organic: ['Silicon fertilizer','Resistant varieties'], note: 'Favored by high nitrogen and frequent rainfall.' }
-        }, yieldValue: 3200 
-    },
-    beans: { name: 'Beans (Zambia)', pests: {
-            aphids: { name: 'Bean Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Companion planting'], note: 'Check flowering stage.' }
-        }, yieldValue: 1800 
-    },
-    cabbage: { name: 'Cabbage (Zambia)', pests: {
-            diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Dudu-Cyber','Emamectin Benzoate'], organic: ['Bt spray','Neem Oil','Row covers'], note: 'Rotate chemicals to prevent resistance.' }
-        }, yieldValue: 2800 
-    }
-};
-
-// ═══════════════════════════════════════════
 // GLOBAL STATE
 // ═══════════════════════════════════════════
 
@@ -1111,196 +1080,6 @@ function showPhonePage(pageId, btn) {
     document.querySelectorAll('.phone-nav-item').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
     if (pageId === 'sensorhub') updateScanMapUI();
-}
-
-// ═══════════════════════════════════════════
-// FARM MATH TOOL
-// ═══════════════════════════════════════════
-
-function populatePests() {
-    const crop = document.getElementById('mathCrop').value;
-    const pestSelect = document.getElementById('mathPest');
-    pestSelect.innerHTML = '';
-    if (!CROP_DB[crop]) {
-        pestSelect.innerHTML = '<option value="">No pests data available</option>';
-        return;
-    }
-    Object.entries(CROP_DB[crop].pests).forEach(([key, pest]) => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = `${pest.name} (${pest.severity.toUpperCase()})`;
-        pestSelect.appendChild(opt);
-    });
-    updateDosageFromPest();
-    updateCostPerMl();
-}
-
-function updateDosageFromPest() {
-    const crop = document.getElementById('mathCrop').value;
-    const pest = document.getElementById('mathPest').value;
-    if (!CROP_DB[crop] || !CROP_DB[crop].pests[pest]) return;
-    const data = CROP_DB[crop].pests[pest];
-    if (data) {
-        document.getElementById('mathDosage').value = data.dosage;
-        document.getElementById('mathChemName').placeholder = `e.g., ${data.chemicals[0]}, ${data.chemicals[1] || ''}`;
-    }
-}
-
-function updateCostPerMl() {
-    const size = parseFloat(document.getElementById('mathContSize').value) || 250;
-    const price = parseFloat(document.getElementById('mathContPrice').value) || 150;
-    document.getElementById('mathCostPerMl').textContent = 'K' + (price / size).toFixed(2);
-}
-
-function updateFarmSlider() { 
-    document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1); 
-}
-
-function saveChemical() {
-    const chem = { 
-        name: document.getElementById('mathChemName').value.trim(), 
-        size: document.getElementById('mathContSize').value, 
-        price: document.getElementById('mathContPrice').value, 
-        dosage: document.getElementById('mathDosage').value, 
-        unit: document.getElementById('mathDosageUnit').value 
-    };
-    if (!chem.name) { showToast('Enter chemical name first', true); return; }
-    const idx = savedChems.findIndex(c => c.name.toLowerCase() === chem.name.toLowerCase());
-    if (idx >= 0) savedChems[idx] = chem; else savedChems.push(chem);
-    if (savedChems.length > 10) savedChems.shift();
-    localStorage.setItem('agrimind_chems', JSON.stringify(savedChems));
-    showToast('Chemical saved!');
-    renderSavedChems();
-}
-
-function loadChem(idx) {
-    const c = savedChems[idx];
-    document.getElementById('mathChemName').value = c.name;
-    document.getElementById('mathContSize').value = c.size;
-    document.getElementById('mathContPrice').value = c.price;
-    document.getElementById('mathDosage').value = c.dosage;
-    document.getElementById('mathDosageUnit').value = c.unit;
-    updateCostPerMl();
-}
-
-function deleteChem(idx) { 
-    savedChems.splice(idx, 1); 
-    localStorage.setItem('agrimind_chems', JSON.stringify(savedChems)); 
-    renderSavedChems(); 
-}
-
-function renderSavedChems() {
-    if (savedChems.length === 0) { 
-        document.getElementById('savedChems').style.display = 'none'; 
-        return; 
-    }
-    document.getElementById('savedChems').style.display = 'block';
-    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved Chemicals</label>' + 
-        savedChems.map((c, i) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--input-bg);border-radius:12px;margin-bottom:4px;font-size:0.8rem;">
-                <span><strong>${escapeHtml(c.name)}</strong> | ${c.size}ml @ K${c.price}</span>
-                <div style="display:flex;gap:6px;">
-                    <button class="btn-outline" onclick="loadChem(${i})" style="padding:4px 10px;font-size:0.7rem;">Load</button>
-                    <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;padding:4px 8px;font-size:0.7rem;">X</button>
-                </div>
-            </div>
-        `).join('');
-}
-
-function calcFarmMath() {
-    const crop = document.getElementById('mathCrop').value;
-    const pestKey = document.getElementById('mathPest').value;
-    const chemName = document.getElementById('mathChemName').value.trim() || 'Chemical';
-    const contSize = parseFloat(document.getElementById('mathContSize').value) || 250;
-    const contPrice = parseFloat(document.getElementById('mathContPrice').value) || 150;
-    const dosage = parseFloat(document.getElementById('mathDosage').value) || 200;
-    const unit = document.getElementById('mathDosageUnit').value;
-    const farmSize = parseFloat(document.getElementById('mathFarmSlider').value);
-    
-    if (!CROP_DB[crop] || !CROP_DB[crop].pests[pestKey]) {
-        showToast('Please select a valid crop and pest', true);
-        return;
-    }
-    
-    const pestData = CROP_DB[crop].pests[pestKey];
-    const cropData = CROP_DB[crop];
-    const costPerMl = contPrice / contSize;
-    
-    let dosagePerHa = dosage;
-    if (unit === 'acre') dosagePerHa = dosage * 2.471;
-    else if (unit === '20L') dosagePerHa = dosage * 5;
-    
-    const totalMl = dosagePerHa * farmSize;
-    const totalCost = totalMl * costPerMl;
-    const potentialLoss = cropData.yieldValue * farmSize * (pestData.lossPct / 100);
-    const savings = potentialLoss - totalCost;
-    const containers = Math.ceil(totalMl / contSize);
-    const roi = totalCost > 0 ? (savings / totalCost) * 100 : 0;
-    
-    document.getElementById('mathResult').innerHTML = `
-        <div class="math-result">
-            <h3 style="color:var(--accent);">🌾 ${cropData.name}</h3>
-            <h4 style="color:var(--danger);">${pestData.name}</h4>
-            <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
-            <div class="grid-2cols" style="margin:14px 0;">
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div>
-                    <small>Spray Needed</small>
-                </div>
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div>
-                    <small>Bottles (${contSize}ml)</small>
-                </div>
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div>
-                    <small>Total Cost</small>
-                </div>
-                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
-                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div>
-                    <small>Net Savings</small>
-                </div>
-            </div>
-            <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:10px;font-size:0.85rem;">
-                <div style="display:flex;justify-content:space-between;">
-                    <span>Potential Loss (no spray):</span>
-                    <span style="color:var(--danger);">K${potentialLoss.toFixed(2)}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;">
-                    <span>ROI:</span>
-                    <span style="color:var(--accent);">${roi.toFixed(0)}%</span>
-                </div>
-            </div>
-            <div style="margin-top:10px;padding:10px;background:${savings>0?'rgba(16,185,129,0.2)':'rgba(239,68,68,0.2)'};border-radius:10px;border-left:3px solid ${savings>0?'var(--accent)':'var(--danger)'};font-weight:600;font-size:0.85rem;">
-                ${savings > totalCost*3 ? '🚨 URGENT: Very high ROI - spray now!' : 
-                  savings > totalCost ? '✅ RECOMMENDED: Good return on investment' : 
-                  '📊 MONITOR: Only spray if pest pressure increases'}
-            </div>
-            <p style="font-size:0.75rem;margin-top:8px;">📝 ${pestData.note}</p>
-            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <div style="padding:8px;background:rgba(16,185,129,0.1);border-radius:8px;">
-                    <strong style="color:var(--accent);">🌿 Organic Options</strong>
-                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.organic.join(', ')}</p>
-                </div>
-                <div style="padding:8px;background:rgba(245,158,11,0.1);border-radius:8px;">
-                    <strong style="color:#f59e0b;">🧪 Chemical Options</strong>
-                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.chemicals.join(', ')}</p>
-                </div>
-            </div>
-            <div style="margin-top:8px;padding:8px;background:rgba(16,185,129,0.05);border-radius:8px;font-size:0.7rem;color:var(--text-secondary);">
-                ⚠️ Severity: ${pestData.severity.toUpperCase()} | ${pestData.lossPct}% potential yield loss
-            </div>
-        </div>`;
-    document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
-    showToast('Calculation complete!');
-    
-    if (currentUser) {
-        db.from('farm_records').insert({ 
-            user_id: currentUser.id, 
-            title: `Spray Calc: ${cropData.name} - ${pestData.name}`, 
-            detail: `${chemName} | Farm: ${farmSize}ha | Spray: ${totalMl.toFixed(1)}ml | Cost: K${totalCost.toFixed(2)} | Savings: K${savings.toFixed(2)}`, 
-            location: 'Farm Math Tool' 
-        }).then(() => {}).catch(() => {});
-    }
 }
 
 // ═══════════════════════════════════════════
@@ -1660,6 +1439,87 @@ function handleScoutPhoto(event) {
             const colors = analyzeLeafColors(imageData);
             const diagnosis = diagnoseFromColors(colors);
             
+            // DISPLAY THE SAME DETAILED RESULTS AS SENSOR HUB
+            const severityColor = diagnosis.severity > 4 ? '#dc2626' : 
+                                  diagnosis.severity > 2 ? '#f59e0b' : 
+                                  diagnosis.severity > 0 ? '#3b82f6' : '#10B981';
+            
+            // Create a detailed results display
+            const scanResult = document.createElement('div');
+            scanResult.className = 'scout-scan-result';
+            scanResult.style.cssText = 'margin-top:12px;padding:12px;background:var(--card-bg);border-radius:12px;border-left:3px solid ' + severityColor + ';';
+            
+            scanResult.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <span style="font-weight:700;font-size:1rem;">${diagnosis.plant}</span>
+                    <span style="font-size:0.8rem;color:${diagnosis.confidence > 70 ? 'var(--accent)' : '#f59e0b'};font-weight:600;">
+                        ${diagnosis.confidence}% confidence
+                    </span>
+                </div>
+                
+                <div style="margin-bottom:6px;">
+                    <small style="color:var(--text-secondary,#aaa);font-size:0.65rem;">Color Breakdown (HSV)</small>
+                    <div style="display:flex;height:16px;border-radius:6px;overflow:hidden;margin:2px 0;border:1px solid var(--border);">
+                        <div style="width:${colors.greenPct}%;background:#22c55e;" title="Green: ${colors.greenPct}%"></div>
+                        <div style="width:${colors.yellowPct}%;background:#eab308;" title="Yellow: ${colors.yellowPct}%"></div>
+                        <div style="width:${colors.brownPct}%;background:#92400e;" title="Brown: ${colors.brownPct}%"></div>
+                        <div style="width:${colors.darkPct}%;background:#374151;" title="Dark: ${colors.darkPct}%"></div>
+                        <div style="width:${colors.whitePct}%;background:#e5e5e5;" title="White: ${colors.whitePct}%"></div>
+                        ${colors.orangePct > 0 ? `<div style="width:${colors.orangePct}%;background:#f97316;" title="Orange: ${colors.orangePct}%"></div>` : ''}
+                        ${colors.purplePct > 0 ? `<div style="width:${colors.purplePct}%;background:#8b5cf6;" title="Purple: ${colors.purplePct}%"></div>` : ''}
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.55rem;color:var(--text-secondary,#aaa);flex-wrap:wrap;">
+                        <span>🌿 ${colors.greenPct}%</span>
+                        <span>🌽 ${colors.yellowPct}%</span>
+                        <span>🟫 ${colors.brownPct}%</span>
+                        <span>⬛ ${colors.darkPct}%</span>
+                        <span>⬜ ${colors.whitePct}%</span>
+                        ${colors.orangePct > 0 ? `<span>🟧 ${colors.orangePct}%</span>` : ''}
+                        ${colors.purplePct > 0 ? `<span>🟣 ${colors.purplePct}%</span>` : ''}
+                    </div>
+                </div>
+                
+                <div style="font-size:0.8rem;margin-top:4px;">
+                    <strong>Symptoms:</strong>
+                    ${diagnosis.symptoms.map(s => `
+                        <div style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:0.75rem;">
+                            <span>${s.found ? '⚠️' : '✅'}</span>
+                            <span>${s.text}</span>
+                            ${s.detail ? `<span style="font-size:0.6rem;color:var(--text-secondary,#aaa);">${s.detail}</span>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+                
+                ${diagnosis.issues.length > 0 ? `
+                    <div style="margin-top:4px;padding:6px;background:rgba(245,158,11,0.1);border-radius:6px;font-size:0.75rem;">
+                        <strong style="color:#f59e0b;">Issues:</strong>
+                        ${diagnosis.issues.map(i => `<div style="font-size:0.7rem;padding:1px 0;">${i}</div>`).join('')}
+                    </div>
+                ` : ''}
+                
+                <div style="margin-top:4px;padding:6px;background:rgba(${diagnosis.severity > 4 ? '220,38,38' : diagnosis.severity > 2 ? '245,158,11' : '16,185,129'},0.1);border-radius:6px;font-size:0.75rem;">
+                    <strong>Recommendation:</strong>
+                    <div style="font-size:0.75rem;margin-top:2px;">${diagnosis.recommendation}</div>
+                </div>
+            `;
+            
+            // Add to scout log
+            const log = document.getElementById('scoutLog');
+            log.appendChild(scanResult);
+            log.scrollTop = log.scrollHeight;
+            
+            // Update scout stats
+            if (diagnosis.severity > 2) {
+                scoutInfections++;
+                document.getElementById('scoutInfections').textContent = scoutInfections;
+                scoutLog('⚠️ Issue detected at step ' + scoutSteps + '! Severity: ' + diagnosis.severity + '/10');
+                showToast('⚠️ Issue detected! Location saved.', true);
+            } else {
+                scoutLog('✓ Scan at step ' + scoutSteps + ': ' + diagnosis.plant + ' (' + diagnosis.confidence + '% confidence)');
+                showToast('✅ Scan saved: ' + diagnosis.plant);
+            }
+            
+            // Save to sensor scans with GPS
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(pos => {
                     currentSensorGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude };
@@ -1671,15 +1531,6 @@ function handleScoutPhoto(event) {
                         diagnosis, 
                         step: scoutSteps 
                     });
-                    if (diagnosis.severity > 2) {
-                        scoutInfections++;
-                        document.getElementById('scoutInfections').textContent = scoutInfections;
-                        scoutLog('⚠️ Issue detected at step ' + scoutSteps + '! Severity: ' + diagnosis.severity + '/10');
-                        showToast('⚠️ Issue detected! Location saved.', true);
-                    } else {
-                        scoutLog('✓ Scan at step ' + scoutSteps + ': ' + diagnosis.plant + ' (' + diagnosis.confidence + '% confidence)');
-                        showToast('✅ Scan saved: ' + diagnosis.plant);
-                    }
                 });
             } else {
                 sensorScans.push({ 
@@ -1690,7 +1541,6 @@ function handleScoutPhoto(event) {
                     diagnosis, 
                     step: scoutSteps 
                 });
-                scoutLog('✓ Scan at step ' + scoutSteps + ': ' + diagnosis.plant);
             }
         };
         img.src = e.target.result;
@@ -1975,17 +1825,6 @@ document.addEventListener('DOMContentLoaded', () => {
         chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
         chat.scrollTop = chat.scrollHeight;
     });
-
-    // Farm Math
-    document.getElementById('mathCrop').addEventListener('change', populatePests);
-    document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
-    document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
-    document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
-    populatePests();
-    updateCostPerMl();
-    renderSavedChems();
 
     checkSession();
     showPage('dashboard');
