@@ -29,12 +29,19 @@ function escapeHtml(str) {
 }
 
 function cleanDisplayName(email) {
-    if (!email) return 'User';
-    let name = email.split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase())
-        .trim();
-    return name || 'User';
+    if (!email || email === 'N/A' || email === 'undefined' || email === 'null' || email === '') return 'User';
+    try {
+        let name = email.split('@')[0]
+            .replace(/[._-]/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase())
+            .trim();
+        if (!name || name.length < 2 || name.match(/^[a-f0-9]+$/i)) {
+            return 'User';
+        }
+        return name;
+    } catch (e) {
+        return 'User';
+    }
 }
 
 // ────────── Theme ──────────
@@ -331,6 +338,7 @@ async function applyToJob(jobId) {
     if (existing && existing.length > 0) { showToast('You already applied', true); return; }
     
     const msg = prompt('Add a message (optional):');
+    if (msg === null) return;
     const { error } = await db.from('job_applications').insert({ 
         job_id: parseInt(jobId), 
         applicant_id: currentUser.id, 
@@ -343,7 +351,7 @@ async function applyToJob(jobId) {
     loadJobs();
 }
 
-// ────────── Applications ──────────
+// ────────── Applications - FIXED ──────────
 async function loadApplications() {
     if (!currentUser) {
         document.getElementById('applicationsList').innerHTML = '<p>Please login to view applications.</p>';
@@ -394,24 +402,38 @@ async function loadApplications() {
                 appDiv.className = 'job-item';
                 
                 let applicantEmail = 'N/A';
-                let applicantName = 'Unknown';
+                let applicantName = 'Unknown Applicant';
                 let applicantPhone = 'N/A';
                 let applicantLocation = 'N/A';
                 
+                // Fetch applicant details from profiles table
                 if (a.applicant_id) {
                     try {
-                        const { data: pf } = await db.from('profiles')
+                        const { data: pf, error: pfError } = await db.from('profiles')
                             .select('display_name, email, phone, location')
                             .eq('id', a.applicant_id)
                             .single();
-                        if (pf) {
-                            applicantEmail = pf.email || 'N/A';
-                            applicantName = pf.display_name?.trim() || cleanDisplayName(pf.email);
-                            applicantPhone = pf.phone || 'N/A';
-                            applicantLocation = pf.location || 'N/A';
+                        
+                        if (pfError) {
+                            console.error('Error fetching profile for applicant:', pfError);
+                        } else if (pf) {
+                            if (pf.email && pf.email !== '') {
+                                applicantEmail = pf.email;
+                            }
+                            if (pf.display_name && pf.display_name.trim() !== '') {
+                                applicantName = pf.display_name.trim();
+                            } else if (pf.email) {
+                                applicantName = cleanDisplayName(pf.email);
+                            }
+                            if (pf.phone && pf.phone !== '') {
+                                applicantPhone = pf.phone;
+                            }
+                            if (pf.location && pf.location !== '') {
+                                applicantLocation = pf.location;
+                            }
                         }
                     } catch (err) {
-                        console.error('Error fetching profile:', err);
+                        console.error('Error in profile fetch:', err);
                     }
                 }
                 
@@ -419,15 +441,9 @@ async function loadApplications() {
                 
                 let html = `<div style="border-left:5px solid ${sc};padding-left:12px;">
                     <strong>${escapeHtml(applicantName)}</strong>
-                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>`;
-                
-                if (a.status === 'accepted') {
-                    html += `
-                        <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
-                        <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>`;
-                }
-                
-                html += `
+                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
+                    <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
+                    <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>
                     <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
                     <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
                     <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>`;
@@ -440,16 +456,27 @@ async function loadApplications() {
                         </div>`;
                 }
                 
-                if (a.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A') {
+                if (a.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A' && applicantEmail !== '') {
+                    const contactName = (applicantName && applicantName !== 'Unknown Applicant') 
+                        ? applicantName 
+                        : cleanDisplayName(applicantEmail) || 'Applicant';
+                    
                     html += `
                         <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                             <button class="btn-primary contact-applicant-btn" 
                                 data-email="${escapeHtml(applicantEmail)}" 
-                                data-name="${escapeHtml(applicantName)}" 
+                                data-name="${escapeHtml(contactName)}" 
                                 data-phone="${escapeHtml(applicantPhone)}"
                                 style="font-size:12px;padding:6px 14px;width:100%;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
+                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(contactName)}
                             </button>
+                        </div>`;
+                } else if (a.status === 'accepted') {
+                    html += `
+                        <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px;border:1px solid #f59e0b;">
+                            <p style="color:#f59e0b;font-size:0.85rem;">
+                                <i class="fas fa-info-circle"></i> No email available to contact this applicant.
+                            </p>
                         </div>`;
                 }
                 
@@ -468,7 +495,7 @@ async function loadApplications() {
     }
 }
 
-// ────────── My Applications ──────────
+// ────────── My Applications - FIXED ──────────
 async function loadMyApplications() {
     if (!currentUser) {
         document.getElementById('myApplicationsList').innerHTML = '<p>Please login to view your applications.</p>';
@@ -506,7 +533,8 @@ async function loadMyApplications() {
             let jobDescription = '';
             let employerId = null;
             let employerEmail = 'N/A';
-            let employerName = 'Unknown';
+            let employerName = 'Unknown Employer';
+            let employerPhone = 'N/A';
             
             try {
                 const { data: job, error: jobError } = await db.from('job_listings')
@@ -523,13 +551,25 @@ async function loadMyApplications() {
                     employerId = job.user_id;
                     
                     if (employerId) {
-                        const { data: pf } = await db.from('profiles')
-                            .select('display_name, email')
+                        const { data: pf, error: pfError } = await db.from('profiles')
+                            .select('display_name, email, phone')
                             .eq('id', employerId)
                             .single();
-                        if (pf) {
-                            employerEmail = pf.email || 'N/A';
-                            employerName = pf.display_name?.trim() || cleanDisplayName(pf.email);
+                        
+                        if (pfError) {
+                            console.error('Error fetching employer profile:', pfError);
+                        } else if (pf) {
+                            if (pf.email && pf.email !== '') {
+                                employerEmail = pf.email;
+                            }
+                            if (pf.display_name && pf.display_name.trim() !== '') {
+                                employerName = pf.display_name.trim();
+                            } else if (pf.email) {
+                                employerName = cleanDisplayName(pf.email);
+                            }
+                            if (pf.phone && pf.phone !== '') {
+                                employerPhone = pf.phone;
+                            }
                         }
                     }
                 }
@@ -556,17 +596,19 @@ async function loadMyApplications() {
                 <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>`;
             
             if (a.status === 'accepted' && employerEmail && employerEmail !== 'N/A') {
+                const contactName = (employerName && employerName !== 'Unknown Employer') ? employerName : cleanDisplayName(employerEmail);
                 html += `
                     <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                         <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
                         <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
+                        <p><strong>📱 Employer Phone:</strong> ${escapeHtml(employerPhone)}</p>
                         <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
                         <button class="btn-primary contact-poster-btn" 
                             data-email="${escapeHtml(employerEmail)}" 
-                            data-name="${escapeHtml(employerName)}" 
+                            data-name="${escapeHtml(contactName)}" 
                             data-jobtitle="${escapeHtml(jobTitle)}"
                             style="font-size:12px;padding:8px 16px;margin-top:6px;width:100%;">
-                            <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
+                            <i class="fas fa-envelope"></i> Message ${escapeHtml(contactName)}
                         </button>
                     </div>`;
             } else if (a.status === 'accepted') {
@@ -927,7 +969,6 @@ function diagnoseFromColors(c) {
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
-    // ═══ CEREALS ═══
     maize: { 
         name: 'Maize (Zambia)', 
         pests: { 
@@ -1892,18 +1933,28 @@ document.addEventListener('DOMContentLoaded', () => {
             updateApplicationStatus(target.closest('.reject-app').dataset.id, 'rejected');
         }
         
+        // FIXED: Contact button handler with proper name validation
         if (target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn')) {
             const btn = target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn');
-            const email = btn.dataset.email;
-            const name = btn.dataset.name;
+            let name = btn.dataset.name || 'User';
+            const email = btn.dataset.email || '';
             
-            if (email && email !== 'N/A' && email !== 'undefined') {
+            // Clean up the name if it's a generic placeholder
+            if (!name || name === 'Unknown' || name === 'Unknown Applicant' || name === 'Unknown Employer' || name === 'Applicant' || name === 'Employer' || name === 'undefined' || name.trim() === '') {
+                if (email && email !== 'N/A' && email !== '') {
+                    name = cleanDisplayName(email);
+                } else {
+                    name = 'User';
+                }
+            }
+            
+            if (email && email !== 'N/A' && email !== '' && email !== 'undefined') {
                 document.getElementById('msgTo').value = email;
                 document.getElementById('msgText').value = `Hello ${name}, `;
                 showPage('messages');
-                showToast(`Composing message to ${name}`);
+                setTimeout(() => showToast(`Ready to message ${name}`), 300);
             } else {
-                showToast('No email available for this contact', true);
+                showToast('No email address available for this contact', true);
             }
         }
 
