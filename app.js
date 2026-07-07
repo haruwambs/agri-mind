@@ -29,19 +29,12 @@ function escapeHtml(str) {
 }
 
 function cleanDisplayName(email) {
-    if (!email || email === 'N/A' || email === 'undefined' || email === 'null' || email === '') return 'User';
-    try {
-        let name = email.split('@')[0]
-            .replace(/[._-]/g, ' ')
-            .replace(/\b\w/g, l => l.toUpperCase())
-            .trim();
-        if (!name || name.length < 2 || name.match(/^[a-f0-9]+$/i)) {
-            return 'User';
-        }
-        return name;
-    } catch (e) {
-        return 'User';
-    }
+    if (!email) return 'User';
+    let name = email.split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase())
+        .trim();
+    return name || 'User';
 }
 
 // ────────── Theme ──────────
@@ -331,7 +324,6 @@ async function deleteJob(id) {
     showToast('Job deleted'); loadJobs(); loadDashboardStats(); 
 }
 
-// ────────── applyToJob - FIXED ──────────
 async function applyToJob(jobId) {
     if (!currentUser) { showToast('Please login first', true); return; }
     
@@ -339,45 +331,19 @@ async function applyToJob(jobId) {
     if (existing && existing.length > 0) { showToast('You already applied', true); return; }
     
     const msg = prompt('Add a message (optional):');
-    if (msg === null) return;
-    
-    // Get the applicant's details from currentUser
-    const applicantEmail = currentUser.email || 'N/A';
-    const applicantName = currentUser.displayName || 'Applicant';
-    
-    try {
-        const { error } = await db.from('job_applications').insert({ 
-            job_id: parseInt(jobId), 
-            applicant_id: currentUser.id,
-            applicant_email: applicantEmail,
-            applicant_name: applicantName,
-            applicant_message: msg || 'I am interested.',
-            message: msg || 'I am interested.',
-            status: 'pending' 
-        });
-        if (error) { 
-            // If columns don't exist, try without them
-            console.log('Error inserting with applicant_email/applicant_name, trying without:', error);
-            const { error: fallbackError } = await db.from('job_applications').insert({ 
-                job_id: parseInt(jobId), 
-                applicant_id: currentUser.id,
-                applicant_message: msg || 'I am interested.',
-                message: msg || 'I am interested.',
-                status: 'pending' 
-            });
-            if (fallbackError) {
-                showToast('Failed to apply: ' + fallbackError.message, true);
-                return;
-            }
-        }
-        showToast('Applied successfully!');
-        loadJobs();
-    } catch (err) {
-        showToast('Failed to apply: ' + err.message, true);
-    }
+    const { error } = await db.from('job_applications').insert({ 
+        job_id: parseInt(jobId), 
+        applicant_id: currentUser.id, 
+        applicant_message: msg || 'I am interested.',
+        message: msg || 'I am interested.',
+        status: 'pending' 
+    });
+    if (error) { showToast('Failed to apply: ' + error.message, true); return; }
+    showToast('Applied!');
+    loadJobs();
 }
 
-// ────────── Applications - FIXED ──────────
+// ────────── Applications ──────────
 async function loadApplications() {
     if (!currentUser) {
         document.getElementById('applicationsList').innerHTML = '<p>Please login to view applications.</p>';
@@ -427,55 +393,41 @@ async function loadApplications() {
                 const appDiv = document.createElement('div');
                 appDiv.className = 'job-item';
                 
-                // First check if the application has stored email and name
-                let applicantEmail = a.applicant_email || 'N/A';
-                let applicantName = a.applicant_name || 'Unknown Applicant';
+                let applicantEmail = 'N/A';
+                let applicantName = 'Unknown';
                 let applicantPhone = 'N/A';
                 let applicantLocation = 'N/A';
                 
-                // If we have an applicant_id and the stored data is N/A, try to fetch from profiles
-                if (a.applicant_id && (applicantEmail === 'N/A' || applicantName === 'Unknown Applicant')) {
+                if (a.applicant_id) {
                     try {
-                        const { data: pf, error: pfError } = await db.from('profiles')
+                        const { data: pf } = await db.from('profiles')
                             .select('display_name, email, phone, location')
                             .eq('id', a.applicant_id)
-                            .maybeSingle();
-                        
-                        if (pfError) {
-                            console.error('Error fetching profile:', pfError);
-                        } else if (pf) {
-                            if (pf.email && pf.email !== '' && pf.email !== 'N/A') {
-                                applicantEmail = pf.email;
-                            }
-                            if (pf.display_name && pf.display_name.trim() !== '') {
-                                applicantName = pf.display_name.trim();
-                            } else if (pf.email) {
-                                applicantName = cleanDisplayName(pf.email);
-                            }
-                            if (pf.phone && pf.phone !== '') {
-                                applicantPhone = pf.phone;
-                            }
-                            if (pf.location && pf.location !== '') {
-                                applicantLocation = pf.location;
-                            }
+                            .single();
+                        if (pf) {
+                            applicantEmail = pf.email || 'N/A';
+                            applicantName = pf.display_name?.trim() || cleanDisplayName(pf.email);
+                            applicantPhone = pf.phone || 'N/A';
+                            applicantLocation = pf.location || 'N/A';
                         }
                     } catch (err) {
                         console.error('Error fetching profile:', err);
                     }
                 }
                 
-                // If still no name and we have email, clean it
-                if (applicantName === 'Unknown Applicant' && applicantEmail && applicantEmail !== 'N/A') {
-                    applicantName = cleanDisplayName(applicantEmail);
-                }
-                
                 const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
                 
                 let html = `<div style="border-left:5px solid ${sc};padding-left:12px;">
                     <strong>${escapeHtml(applicantName)}</strong>
-                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>
-                    <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
-                    <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>
+                    <p style="margin-top:4px;"><strong>📧 Email:</strong> ${escapeHtml(applicantEmail)}</p>`;
+                
+                if (a.status === 'accepted') {
+                    html += `
+                        <p><strong>📱 Phone:</strong> ${escapeHtml(applicantPhone)}</p>
+                        <p><strong>📍 Location:</strong> ${escapeHtml(applicantLocation)}</p>`;
+                }
+                
+                html += `
                     <p><strong>💬 Message:</strong> ${escapeHtml(a.applicant_message || 'No message')}</p>
                     <small>Applied: ${new Date(a.created_at).toLocaleDateString()}</small>
                     <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>`;
@@ -488,28 +440,16 @@ async function loadApplications() {
                         </div>`;
                 }
                 
-                // Only show contact button if we have a valid email
-                if (a.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A' && applicantEmail !== '') {
-                    const contactName = (applicantName && applicantName !== 'Unknown Applicant') 
-                        ? applicantName 
-                        : cleanDisplayName(applicantEmail) || 'Applicant';
-                    
+                if (a.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A') {
                     html += `
                         <div style="margin-top:12px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                             <button class="btn-primary contact-applicant-btn" 
                                 data-email="${escapeHtml(applicantEmail)}" 
-                                data-name="${escapeHtml(contactName)}" 
+                                data-name="${escapeHtml(applicantName)}" 
                                 data-phone="${escapeHtml(applicantPhone)}"
                                 style="font-size:12px;padding:6px 14px;width:100%;">
-                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(contactName)}
+                                <i class="fas fa-envelope"></i> Contact ${escapeHtml(applicantName)}
                             </button>
-                        </div>`;
-                } else if (a.status === 'accepted') {
-                    html += `
-                        <div style="margin-top:12px;padding:12px;background:rgba(245,158,11,0.1);border-radius:10px;border:1px solid #f59e0b;">
-                            <p style="color:#f59e0b;font-size:0.85rem;">
-                                <i class="fas fa-info-circle"></i> No email available to contact this applicant.
-                            </p>
                         </div>`;
                 }
                 
@@ -528,7 +468,7 @@ async function loadApplications() {
     }
 }
 
-// ────────── My Applications - FIXED ──────────
+// ────────── My Applications ──────────
 async function loadMyApplications() {
     if (!currentUser) {
         document.getElementById('myApplicationsList').innerHTML = '<p>Please login to view your applications.</p>';
@@ -566,8 +506,7 @@ async function loadMyApplications() {
             let jobDescription = '';
             let employerId = null;
             let employerEmail = 'N/A';
-            let employerName = 'Unknown Employer';
-            let employerPhone = 'N/A';
+            let employerName = 'Unknown';
             
             try {
                 const { data: job, error: jobError } = await db.from('job_listings')
@@ -584,25 +523,13 @@ async function loadMyApplications() {
                     employerId = job.user_id;
                     
                     if (employerId) {
-                        const { data: pf, error: pfError } = await db.from('profiles')
-                            .select('display_name, email, phone')
+                        const { data: pf } = await db.from('profiles')
+                            .select('display_name, email')
                             .eq('id', employerId)
-                            .maybeSingle();
-                        
-                        if (pfError) {
-                            console.error('Error fetching employer profile:', pfError);
-                        } else if (pf) {
-                            if (pf.email && pf.email !== '') {
-                                employerEmail = pf.email;
-                            }
-                            if (pf.display_name && pf.display_name.trim() !== '') {
-                                employerName = pf.display_name.trim();
-                            } else if (pf.email) {
-                                employerName = cleanDisplayName(pf.email);
-                            }
-                            if (pf.phone && pf.phone !== '') {
-                                employerPhone = pf.phone;
-                            }
+                            .single();
+                        if (pf) {
+                            employerEmail = pf.email || 'N/A';
+                            employerName = pf.display_name?.trim() || cleanDisplayName(pf.email);
                         }
                     }
                 }
@@ -629,19 +556,17 @@ async function loadMyApplications() {
                 <br><span style="color:${sc};font-weight:600;">Status: ${a.status}</span>`;
             
             if (a.status === 'accepted' && employerEmail && employerEmail !== 'N/A') {
-                const contactName = (employerName && employerName !== 'Unknown Employer') ? employerName : cleanDisplayName(employerEmail);
                 html += `
                     <div style="margin-top:10px;padding:12px;background:rgba(16,185,129,0.1);border-radius:10px;border:1px solid #10B981;">
                         <h4 style="color:#10B981;margin-bottom:8px;"><i class="fas fa-check-circle"></i> Accepted!</h4>
                         <p><strong>📧 Employer Email:</strong> ${escapeHtml(employerEmail)}</p>
-                        <p><strong>📱 Employer Phone:</strong> ${escapeHtml(employerPhone)}</p>
                         <p style="font-size:0.85rem;color:var(--text-secondary,#aaa);">Contact the employer to discuss next steps.</p>
                         <button class="btn-primary contact-poster-btn" 
                             data-email="${escapeHtml(employerEmail)}" 
-                            data-name="${escapeHtml(contactName)}" 
+                            data-name="${escapeHtml(employerName)}" 
                             data-jobtitle="${escapeHtml(jobTitle)}"
                             style="font-size:12px;padding:8px 16px;margin-top:6px;width:100%;">
-                            <i class="fas fa-envelope"></i> Message ${escapeHtml(contactName)}
+                            <i class="fas fa-envelope"></i> Message ${escapeHtml(employerName)}
                         </button>
                     </div>`;
             } else if (a.status === 'accepted') {
@@ -879,14 +804,25 @@ async function loadProfile() {
 }
 
 // ═══════════════════════════════════════════
-// REAL HSV COLOR ANALYSIS
+// REAL HSV COLOR ANALYSIS - IMPROVED
 // ═══════════════════════════════════════════
 
 function analyzeLeafColors(imageData) {
     const pixels = imageData.data;
     let total = 0, green = 0, yellow = 0, brown = 0, dark = 0, white = 0, darkSpots = 0;
-    for (let i = 0; i < pixels.length; i += 16) {
+    let red = 0, orange = 0, purple = 0;
+    
+    // Sample every 4th pixel for better accuracy
+    for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+        const a = pixels[i + 3];
+        
+        // Skip transparent pixels
+        if (a < 128) continue;
+        
+        // Skip very dark pixels (background)
+        if (r < 20 && g < 20 && b < 20) continue;
+        
         const max = Math.max(r, g, b), min = Math.min(r, g, b), diff = max - min;
         let h = 0;
         if (diff > 0) {
@@ -899,19 +835,57 @@ function analyzeLeafColors(imageData) {
         const s = max > 0 ? (diff / max) * 100 : 0;
         const v = (max / 255) * 100;
         total++;
-        if (h >= 60 && h <= 170 && s > 15 && v > 20) green++;
-        else if (h >= 35 && h <= 65 && s > 20 && v > 40) yellow++;
-        else if (h >= 10 && h <= 40 && s > 30 && v > 10 && v < 70) brown++;
-        else if (v < 25 && s < 30) { dark++; if (dark % 3 === 0) darkSpots++; }
-        else if (s < 15 && v > 70) white++;
+        
+        // REAL PLANT COLOR DETECTION
+        
+        // Healthy Green: Hue 60-180, Saturation > 20, Value > 30
+        if (h >= 60 && h <= 180 && s > 20 && v > 30) {
+            green++;
+        }
+        // Yellow/Chlorosis: Hue 35-65, Saturation > 20, Value > 40
+        else if (h >= 35 && h <= 65 && s > 20 && v > 40) {
+            yellow++;
+        }
+        // Brown/Damage: Hue 10-40, Saturation > 20, Value 10-70
+        else if (h >= 10 && h <= 40 && s > 20 && v > 10 && v < 70) {
+            brown++;
+        }
+        // Dark/Shadows: Value < 25, Saturation < 30
+        else if (v < 25 && s < 30) {
+            dark++;
+            if (dark % 5 === 0) darkSpots++;
+        }
+        // White/Mildew: Saturation < 20, Value > 70
+        else if (s < 20 && v > 70) {
+            white++;
+        }
+        // Red (anthocyanin): Hue 320-360 or 0-10
+        else if ((h >= 320 && h <= 360) || (h >= 0 && h <= 10)) {
+            if (s > 30 && v > 30) red++;
+        }
+        // Orange (rust): Hue 10-35
+        else if (h >= 10 && h <= 35 && s > 30 && v > 30) {
+            orange++;
+        }
+        // Purple (phosphorus deficiency): Hue 270-320
+        else if (h >= 270 && h <= 320 && s > 30 && v > 30) {
+            purple++;
+        }
     }
+    
+    const totalPixels = total || 1;
+    
     return { 
-        greenPct: total ? +(green/total*100).toFixed(1) : 0, 
-        yellowPct: total ? +(yellow/total*100).toFixed(1) : 0, 
-        brownPct: total ? +(brown/total*100).toFixed(1) : 0, 
-        darkPct: total ? +(dark/total*100).toFixed(1) : 0, 
-        whitePct: total ? +(white/total*100).toFixed(1) : 0, 
-        darkSpots 
+        greenPct: +(green/totalPixels*100).toFixed(1), 
+        yellowPct: +(yellow/totalPixels*100).toFixed(1), 
+        brownPct: +(brown/totalPixels*100).toFixed(1), 
+        darkPct: +(dark/totalPixels*100).toFixed(1), 
+        whitePct: +(white/totalPixels*100).toFixed(1),
+        redPct: +(red/totalPixels*100).toFixed(1),
+        orangePct: +(orange/totalPixels*100).toFixed(1),
+        purplePct: +(purple/totalPixels*100).toFixed(1),
+        darkSpots: darkSpots,
+        totalPixels: totalPixels
     };
 }
 
@@ -919,80 +893,141 @@ function diagnoseFromColors(c) {
     const symptoms = [], issues = [];
     let score = 0, conf = 0;
     
-    if (currentSensorLight !== null && currentSensorLight < 100) {
+    // Check if image has enough data
+    if (c.totalPixels < 50) {
         return { 
-            symptoms: [{ text: 'Too dark for accurate analysis - move to brighter area', found: true }], 
-            issues: ['Insufficient light'], 
-            plant: 'Unknown', 
+            symptoms: [{ text: 'Not enough leaf area detected. Take a closer photo.', found: true }], 
+            issues: ['Insufficient data'], 
+            plant: '❌ Insufficient Data', 
             confidence: 0, 
-            recommendation: 'Move to better lighting and scan again.', 
+            recommendation: 'Take a photo of a single leaf from close range.', 
             severity: 0, 
             colors: c 
         };
     }
     
-    if (c.brownPct > 5 && c.darkSpots > 3) { 
-        symptoms.push({ text: 'Brown circular holes 3-8mm detected', found: true, detail: `Brown: ${c.brownPct}%, Dark spots: ${c.darkSpots}` }); 
-        issues.push('Possible Fall Armyworm damage'); 
-        score += 3; 
-        conf += 25; 
+    // Check lighting
+    if (c.darkPct > 60) {
+        return { 
+            symptoms: [{ text: 'Image is too dark. Move to better lighting.', found: true }], 
+            issues: ['Poor lighting conditions'], 
+            plant: '🌑 Too Dark', 
+            confidence: 0, 
+            recommendation: 'Take the photo in good sunlight or use flash.', 
+            severity: 0, 
+            colors: c 
+        };
     }
-    else if (c.brownPct > 3) { 
-        symptoms.push({ text: 'Minor brown spots detected', found: true, detail: `Brown: ${c.brownPct}%` }); 
-        score += 1; 
-        conf += 10; 
+    
+    // ─── FALL ARMYWORM DETECTION ───
+    if (c.brownPct > 8 && c.darkSpots > 2) { 
+        symptoms.push({ text: 'Brown damage with dark holes detected', found: true, detail: `Brown: ${c.brownPct}%, Dark spots: ${c.darkSpots}` }); 
+        issues.push('🚨 FALL ARMYWORM DAMAGE DETECTED!'); 
+        score += 4; 
+        conf += 30; 
+    }
+    else if (c.brownPct > 5) { 
+        symptoms.push({ text: 'Brown spots detected on leaf', found: true, detail: `Brown: ${c.brownPct}%` }); 
+        issues.push('⚠️ Possible pest damage or disease'); 
+        score += 2; 
+        conf += 15; 
     }
     else { 
         symptoms.push({ text: 'No significant brown damage', found: false }); 
-        conf += 15; 
+        conf += 10; 
     }
     
-    if (c.yellowPct > 10) { 
-        symptoms.push({ text: 'Yellow discoloration >10% of leaf area', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
-        issues.push('Possible nutrient deficiency or early blight'); 
-        score += 2; 
+    // ─── NUTRIENT DEFICIENCY ───
+    if (c.yellowPct > 15) { 
+        symptoms.push({ text: 'Significant yellowing detected', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
+        issues.push('⚠️ NUTRIENT DEFICIENCY (likely Nitrogen)'); 
+        score += 3; 
         conf += 20; 
     }
-    else if (c.yellowPct > 5) { 
-        symptoms.push({ text: 'Slight yellowing detected (5-10%)', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
+    else if (c.yellowPct > 8) { 
+        symptoms.push({ text: 'Slight yellowing detected', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
+        issues.push('Possible early nutrient deficiency'); 
         score += 1; 
         conf += 10; 
     }
     else { 
-        symptoms.push({ text: 'No yellow discoloration', found: false }); 
+        symptoms.push({ text: 'Normal green color', found: false }); 
         conf += 10; 
     }
     
-    if (c.greenPct < 50) { 
-        symptoms.push({ text: 'Low chlorophyll detected (<50% green)', found: true, detail: `Green: ${c.greenPct}%` }); 
-        issues.push('Plant may be wilting or stressed'); 
+    // ─── PLANT STRESS ───
+    if (c.greenPct < 40) { 
+        symptoms.push({ text: 'Low chlorophyll (green color)', found: true, detail: `Green: ${c.greenPct}%` }); 
+        issues.push('Plant may be stressed or wilting'); 
         score += 2; 
         conf += 15; 
     }
     else { 
-        symptoms.push({ text: 'Healthy chlorophyll levels', found: false, detail: `Green: ${c.greenPct}%` }); 
+        symptoms.push({ text: 'Good chlorophyll levels', found: false, detail: `Green: ${c.greenPct}%` }); 
         conf += 20; 
     }
     
-    if (c.whitePct > 8) { 
+    // ─── POWDERY MILDEW ───
+    if (c.whitePct > 12) { 
         symptoms.push({ text: 'White/powdery patches detected', found: true, detail: `White: ${c.whitePct}%` }); 
-        issues.push('Possible powdery mildew'); 
-        score += 2; 
+        issues.push('🚨 POWDERY MILDEW DETECTED'); 
+        score += 3; 
         conf += 15; 
+    }
+    else if (c.whitePct > 5) { 
+        symptoms.push({ text: 'Slight white patches detected', found: true, detail: `White: ${c.whitePct}%` }); 
+        issues.push('Possible early mildew or sun damage'); 
+        score += 1; 
+        conf += 5; 
     }
     else { 
         symptoms.push({ text: 'No powdery mildew signs', found: false }); 
         conf += 5; 
     }
     
-    let plant = c.greenPct > 60 && c.yellowPct < 5 ? 'Healthy Plant (likely Maize)' : 
-                c.greenPct > 40 ? 'Stressed Crop' : 'Broadleaf Crop';
+    // ─── RUST DETECTION ───
+    if (c.orangePct > 8) {
+        symptoms.push({ text: 'Orange/rust-colored spots detected', found: true, detail: `Orange: ${c.orangePct}%` });
+        issues.push('⚠️ RUST DISEASE DETECTED');
+        score += 3;
+        conf += 15;
+    }
+    
+    // ─── PHOSPHORUS DEFICIENCY ───
+    if (c.purplePct > 5) {
+        symptoms.push({ text: 'Purple discoloration detected', found: true, detail: `Purple: ${c.purplePct}%` });
+        issues.push('⚠️ Possible Phosphorus deficiency');
+        score += 2;
+        conf += 10;
+    }
+    
+    // ─── DETERMINE PLANT HEALTH ───
+    let plant = '';
+    let rec = '';
+    
+    if (c.greenPct > 60 && c.yellowPct < 8 && c.brownPct < 5 && c.whitePct < 5) {
+        plant = '🌱 Healthy Plant';
+        rec = '✅ Plant appears healthy. Continue regular monitoring.';
+    } else if (c.greenPct > 40 && c.yellowPct < 15 && c.brownPct < 10) {
+        plant = '🌿 Stressed Plant';
+        rec = '📊 Monitor closely. Check soil moisture and nutrients.';
+    } else if (c.greenPct > 20) {
+        plant = '🌾 Damaged Crop';
+        rec = '⚠️ Issues detected. Consider treatment options.';
+    } else {
+        plant = '☠️ Severely Damaged';
+        rec = '🚨 URGENT: Severe damage detected. Immediate action required!';
+    }
+    
     conf = Math.min(conf, 95);
     
-    let rec = score >= 5 ? 'URGENT: Multiple issues detected. Apply treatment immediately!' : 
-              score >= 3 ? 'Issues detected. Monitor closely and consider treatment.' : 
-              score >= 1 ? 'Minor issues. Continue regular monitoring.' : 
-              'Plant appears healthy. No action needed.';
+    if (score >= 7) {
+        rec = '🚨 URGENT: Multiple severe issues detected. Apply treatment immediately!';
+    } else if (score >= 5) {
+        rec = '⚠️ Issues detected. Monitor closely and consider treatment.';
+    } else if (score >= 3) {
+        rec = '📊 Minor issues detected. Continue monitoring.';
+    }
     
     return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: rec, severity: score, colors: c };
 }
@@ -1006,142 +1041,24 @@ const CROP_DB = {
         name: 'Maize (Zambia)', 
         pests: { 
             fall_armyworm: { name: 'Fall Armyworm', severity: 'critical', lossPct: 25, dosage: 250, chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], note: 'Most destructive pest in Zambia. Scout early morning.' },
-            stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Attacks stems causing lodging. Apply at knee-high stage.' },
-            maize_streak_virus: { name: 'Maize Streak Virus', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Insecticides for leafhoppers'], organic: ['Resistant varieties','Neem Oil'], note: 'Transmitted by leafhoppers. Common in Zambian lowlands.' },
-            gray_leaf_spot: { name: 'Gray Leaf Spot', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Copper spray','Crop rotation'], note: 'Causes rectangular gray lesions. Common in humid Zambian regions.' },
-            northern_leaf_blight: { name: 'Northern Leaf Blight', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Propiconazole','Azoxystrobin'], organic: ['Resistant varieties','Crop rotation'], note: 'Long cigar-shaped lesions. Favored by cool, wet conditions.' }
+            stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Attacks stems causing lodging. Apply at knee-high stage.' }
         }, yieldValue: 2800 
-    },
-    sorghum: { name: 'Sorghum (Zambia)', pests: {
-            shoot_fly: { name: 'Sorghum Shoot Fly', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Early planting'], note: 'Attack young plants. Common in Zambian dryland areas.' },
-            stem_borer: { name: 'Sorghum Stem Borer', severity: 'high', lossPct: 22, dosage: 190, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Causes dead hearts. Important pest in Zambian sorghum.' },
-            anthracnose: { name: 'Anthracnose', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Copper spray','Resistant varieties'], note: 'Dark red lesions. Favored by humid Zambian conditions.' },
-            grain_mold: { name: 'Grain Mold', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['No effective chemical'], organic: ['Early harvesting','Adequate drying'], note: 'Major storage problem in Zambia. Harvest at right time.' }
-        }, yieldValue: 2000 
-    },
-    millet: { name: 'Millet (Zambia)', pests: {
-            head_blast: { name: 'Head Blast', severity: 'critical', lossPct: 35, dosage: 240, chemicals: ['Tricyclazole','Mancozeb'], organic: ['Resistant varieties','Seed treatment'], note: 'Destructive disease in Zambian millet.' },
-            grain_moth: { name: 'Grain Moth', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Pheromone traps','Biological control'], note: 'Major storage pest in Zambia. Proper storage is critical.' },
-            stem_borer: { name: 'Millet Stem Borer', severity: 'high', lossPct: 22, dosage: 190, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Causes dead hearts. Common in Zambian millet fields.' },
-            smut: { name: 'Smut', severity: 'medium', lossPct: 18, dosage: 0, chemicals: ['Seed treatment (fungicides)'], organic: ['Resistant varieties','Crop rotation'], note: 'Black powder in heads. Use clean seed in Zambia.' }
-        }, yieldValue: 1500 
-    },
-    rice: { name: 'Rice (Zambia)', pests: {
-            blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Tricyclazole','Rocket'], organic: ['Silicon fertilizer','Resistant varieties'], note: 'Favored by high nitrogen and frequent rainfall.' },
-            brown_spot: { name: 'Brown Spot', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Mancozeb','Copper'], organic: ['Balanced nutrients','Seed treatment'], note: 'Small brown circular lesions. Related to nutrient deficiency.' },
-            sheath_blight: { name: 'Sheath Blight', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Validamycin','Propiconazole'], organic: ['Avoid dense planting','Remove infected plants'], note: 'Grayish-green lesions on leaf sheaths. Favored by high humidity.' },
-            stem_borer: { name: 'Stem Borer', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Cartap','Chlorpyrifos'], organic: ['Trap crops','Neem Oil'], note: 'Causes dead hearts in early stages. Monitor moth activity.' }
-        }, yieldValue: 3200 
-    },
-    wheat: { name: 'Wheat (Zambia)', pests: {
-            rust: { name: 'Wheat Rust', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Tebuconazole','Propiconazole'], organic: ['Resistant varieties','Sulfur spray'], note: 'Orange-brown pustules. Favored by cool, humid weather.' },
-            aphids: { name: 'Wheat Aphids', severity: 'medium', lossPct: 12, dosage: 140, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit barley yellow dwarf virus.' },
-            fusarium_head_blight: { name: 'Fusarium Head Blight', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fungicide at flowering'], organic: ['Crop rotation','Resistant varieties'], note: 'Causes pink discoloration of heads. Favored by wet weather.' }
-        }, yieldValue: 2500 
-    },
-    groundnut: { name: 'Groundnuts (Zambia)', pests: {
-            rosette_virus: { name: 'Groundnut Rosette Virus', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Insecticides for aphids'], organic: ['Resistant varieties','Aphid control'], note: 'Devastating in Zambia. Transmitted by aphids.' },
-            early_leaf_spot: { name: 'Early Leaf Spot', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Chlorothalonil','Tebuconazole'], organic: ['Sulfur spray','Crop rotation'], note: 'Dark brown spots on leaves. Common in Zambian rainy season.' },
-            rust: { name: 'Groundnut Rust', severity: 'high', lossPct: 25, dosage: 220, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Sulfur spray','Resistant varieties'], note: 'Orange-brown pustules on leaves. Favored by warm Zambian weather.' },
-            aphids: { name: 'Groundnut Aphids', severity: 'high', lossPct: 20, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmits rosette virus. Monitor early in Zambian growing season.' },
-            jassids: { name: 'Jassids (Leafhoppers)', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Yellow sticky traps'], note: 'Yellow spots on leaves. Active in dry Zambian weather.' }
-        }, yieldValue: 2200 
-    },
-    soybean: { name: 'Soybean (Zambia)', pests: {
-            rust: { name: 'Soybean Rust', severity: 'critical', lossPct: 40, dosage: 280, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Resistant varieties','Early planting'], note: 'Most serious soybean disease in Zambia.' },
-            aphids: { name: 'Soybean Aphids', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Can cause significant yield loss in Zambian soybean fields.' },
-            pod_borer: { name: 'Pod Borer', severity: 'high', lossPct: 30, dosage: 220, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Biological control'], note: 'Attacks developing pods. Monitor during podding stage.' },
-            frog_eye_leaf_spot: { name: 'Frog Eye Leaf Spot', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Crop rotation','Copper spray'], note: 'Circular gray spots. Favored by humid Zambian conditions.' }
-        }, yieldValue: 2400 
-    },
-    beans: { name: 'Beans (Zambia)', pests: {
-            aphids: { name: 'Bean Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Companion planting'], note: 'Check flowering stage.' },
-            bean_rust: { name: 'Bean Rust', severity: 'high', lossPct: 18, dosage: 140, chemicals: ['Tebuconazole','Mancozeb'], organic: ['Sulfur spray','Copper spray'], note: 'Small rust-colored pustules on leaves. Favored by humid weather.' },
-            angular_leaf_spot: { name: 'Angular Leaf Spot', severity: 'medium', lossPct: 14, dosage: 130, chemicals: ['Copper hydroxide','Mancozeb'], organic: ['Baking soda spray','Crop rotation'], note: 'Angular brown lesions with yellow halos.' },
-            bruchids: { name: 'Bruchids (Bean Weevils)', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Phosphine fumigation','Malathion dust'], organic: ['Sun drying','Neem oil on stored beans'], note: 'Attacks stored beans. Clean storage and early harvest.' }
-        }, yieldValue: 1800 
     },
     tomato: { name: 'Tomato (Zambia)', pests: {
             late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], organic: ['Copper spray','Baking soda'], note: 'Spreads rapidly in cool, wet conditions.' },
-            early_blight: { name: 'Early Blight', severity: 'high', lossPct: 20, dosage: 250, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Neem Oil','Copper spray'], note: 'Dark concentric rings on leaves. Common in warm weather.' },
-            aphids: { name: 'Tomato Aphids', severity: 'medium', lossPct: 10, dosage: 250, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Garlic spray'], note: 'Also transmits viral diseases.' },
-            tomato_yellow_leaf_curl: { name: 'Tomato Yellow Leaf Curl', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Insecticides for whitefly','Neem Oil'], organic: ['Neem Oil','Yellow sticky traps'], note: 'Caused by whitefly transmitted virus. Prevention is key.' },
-            blossom_end_rot: { name: 'Blossom End Rot', severity: 'medium', lossPct: 15, dosage: 0, chemicals: ['Calcium nitrate'], organic: ['Lime','Eggshells','Compost'], note: 'Calcium deficiency. Maintain consistent soil moisture.' }
+            aphids: { name: 'Tomato Aphids', severity: 'medium', lossPct: 10, dosage: 250, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Garlic spray'], note: 'Also transmits viral diseases.' }
         }, yieldValue: 5000 
     },
-    cabbage: { name: 'Cabbage (Zambia)', pests: {
-            diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Dudu-Cyber','Emamectin Benzoate'], organic: ['Bt spray','Neem Oil','Row covers'], note: 'Rotate chemicals to prevent resistance.' },
-            black_rot: { name: 'Black Rot', severity: 'critical', lossPct: 35, dosage: 0, chemicals: ['Copper spray','Streptomycin'], organic: ['Hot water seed treatment','Crop rotation'], note: 'V-shaped yellow lesions on leaf edges. Highly infectious.' },
-            clubroot: { name: 'Clubroot', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Lime application'], organic: ['Lime','Organic matter','pH management'], note: 'Swollen roots causing wilting. Maintain pH above 6.5.' },
-            aphids: { name: 'Cabbage Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Imidacloprid'], organic: ['Neem Oil','Ladybugs','Water spray'], note: 'Check under leaves. Sticky surfaces indicate presence.' }
-        }, yieldValue: 2800 
-    },
-    onion: { name: 'Onion (Zambia)', pests: {
-            downy_mildew: { name: 'Downy Mildew', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Metalaxyl','Mancozeb'], organic: ['Copper spray','Sulfur'], note: 'Purplish-gray mold on leaves. Prefers cool, wet weather.' },
-            thrips: { name: 'Onion Thrips', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Spinosad','Acetamiprid'], organic: ['Neem Oil','Sticky traps','Beneficial insects'], note: 'Silver-white patches on leaves. Monitor from seedling stage.' },
-            white_rot: { name: 'White Rot', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Fungicide bulb dip'], organic: ['Crop rotation (5-7 years)','Compost management'], note: 'White fungal growth at base. Causes premature yellowing.' },
-            purple_blotch: { name: 'Purple Blotch', severity: 'high', lossPct: 18, dosage: 170, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Copper spray','Avoid overhead irrigation'], note: 'Purple-brown spots on leaves. Common in warm humid weather.' }
-        }, yieldValue: 3000 
-    },
-    pepper: { name: 'Pepper (Zambia)', pests: {
-            anthracnose: { name: 'Pepper Anthracnose', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Crop rotation'], note: 'Dark sunken lesions on fruit. Favored by warm humid weather.' },
-            aphids: { name: 'Pepper Aphids', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit viruses. Monitor during early growth stage.' },
-            blossom_end_rot: { name: 'Blossom End Rot', severity: 'medium', lossPct: 15, dosage: 0, chemicals: ['Calcium nitrate'], organic: ['Lime','Compost'], note: 'Calcium deficiency. Maintain consistent soil moisture.' },
-            bacterial_spot: { name: 'Bacterial Spot', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Copper spray','Streptomycin'], organic: ['Copper spray','Crop rotation'], note: 'Dark spots on leaves and fruit. Favored by wet conditions.' }
-        }, yieldValue: 3800 
-    },
-    cassava: { name: 'Cassava (Zambia)', pests: {
-            cassava_mosaic: { name: 'Cassava Mosaic Virus', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Plant healthy cuttings'], note: 'Most serious cassava disease in Zambia.' },
-            brown_streak: { name: 'Cassava Brown Streak', severity: 'critical', lossPct: 45, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Resistant varieties','Healthy cuttings'], note: 'Causes root necrosis. Major threat to Zambian cassava.' },
-            cassava_mealybug: { name: 'Cassava Mealybug', severity: 'high', lossPct: 30, dosage: 220, chemicals: ['Imidacloprid','Thiamethoxam'], organic: ['Biological control (wasps)','Neem Oil'], note: 'Introduced pest in Zambia. Biological control effective.' },
-            green_mite: { name: 'Cassava Green Mite', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Abamectin','Dicofol'], organic: ['Neem Oil','Predatory mites'], note: 'Causes yellow spots. Thrives in dry Zambian conditions.' }
-        }, yieldValue: 3500 
-    },
-    sweet_potato: { name: 'Sweet Potato (Zambia)', pests: {
-            sweet_potato_virus: { name: 'Sweet Potato Virus Disease', severity: 'critical', lossPct: 45, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Virus-free cuttings','Rogue infected plants'], note: 'Major constraint in Zambia. Use certified disease-free material.' },
-            weevil: { name: 'Sweet Potato Weevil', severity: 'high', lossPct: 35, dosage: 200, chemicals: ['Imidacloprid','Fipronil'], organic: ['Crop rotation','Hilling up soil'], note: 'Most serious pest in Zambia. Attacks both field and storage.' },
-            leaf_beetle: { name: 'Sweet Potato Leaf Beetle', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Hand picking'], note: 'Skeletonizes leaves. Active in Zambian rainy season.' },
-            nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fumigants (pre-plant)'], organic: ['Crop rotation','Resistant varieties'], note: 'Causes galls on roots. Common in Zambian sandy soils.' }
-        }, yieldValue: 3000 
-    },
-    cotton: { name: 'Cotton (Zambia)', pests: {
-            bollworm: { name: 'Cotton Bollworm', severity: 'critical', lossPct: 35, dosage: 280, chemicals: ['Cypermethrin','Dudu-Cyber','Rocket'], organic: ['Bt spray','Neem Oil'], note: 'Most destructive cotton pest in Zambia. Monitor during flowering.' },
-            aphids: { name: 'Cotton Aphids', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Cause curling and stunting. Ants indicate presence.' },
-            whitefly: { name: 'Cotton Whitefly', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Imidacloprid','Pymetrozine'], organic: ['Neem Oil','Yellow traps'], note: 'Causes sticky cotton. Major problem in Zambian cotton fields.' },
-            red_spider_mite: { name: 'Red Spider Mite', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Dicofol','Abamectin'], organic: ['Sulfur spray','Water spray'], note: 'Thrives in hot dry Zambian conditions. Check under leaves.' }
-        }, yieldValue: 1800 
-    },
-    mango: { name: 'Mango (Zambia)', pests: {
-            anthracnose: { name: 'Mango Anthracnose', severity: 'critical', lossPct: 40, dosage: 250, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Pruning'], note: 'Dark spots on fruit. Major problem in Zambian mangoes.' },
-            fruit_fly: { name: 'Fruit Fly', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Malathion','Protein bait spray'], organic: ['Fruit bagging','Pheromone traps'], note: 'Larvae feed inside fruit. Major export constraint.' },
-            powdery_mildew: { name: 'Powdery Mildew', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Sulfur','Tebuconazole'], organic: ['Sulfur spray','Neem Oil'], note: 'White powdery growth on leaves. Favored by dry weather.' },
-            mango_weevil: { name: 'Mango Weevil', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Imidacloprid','Dudu-Cyber'], organic: ['Hot water treatment','Destroy infested fruit'], note: 'Bores into seed. Monitor during flowering and fruiting.' }
-        }, yieldValue: 4500 
-    },
-    banana: { name: 'Banana (Zambia)', pests: {
-            banana_bunchy_top: { name: 'Banana Bunchy Top Virus', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No chemical treatment'], organic: ['Rogue infected plants','Use tissue culture'], note: 'Most serious banana disease in Zambia. Destroy infected plants.' },
-            weevil: { name: 'Banana Weevil', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Imidacloprid','Fipronil'], organic: ['Clean planting material','Pheromone traps'], note: 'Bores into corms. Use healthy suckers.' },
-            nematodes: { name: 'Banana Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause root damage. Common in continuous banana fields.' },
-            black_sigatoka: { name: 'Black Sigatoka', severity: 'high', lossPct: 35, dosage: 240, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Pruning','Copper spray'], note: 'Causes leaf spots. Major disease in humid areas.' }
-        }, yieldValue: 4200 
-    },
-    citrus: { name: 'Citrus (Zambia)', pests: {
-            citrus_greening: { name: 'Citrus Greening (Huanglongbing)', severity: 'critical', lossPct: 50, dosage: 0, chemicals: ['No cure - remove infected trees'], organic: ['Remove infected trees','Psyllid control'], note: 'Most serious citrus disease in Zambia. Fatal to trees.' },
-            psyllids: { name: 'Citrus Psyllids', severity: 'critical', lossPct: 40, dosage: 220, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Biological control'], note: 'Vectors of citrus greening. Monitor regularly.' },
-            aphids: { name: 'Citrus Aphids', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Cause leaf curling. Monitor young shoots.' },
-            scale_insects: { name: 'Scale Insects', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Oil sprays','Imidacloprid'], organic: ['Neem Oil','Biological control'], note: 'Cause sooty mold. Monitor on stems and leaves.' }
-        }, yieldValue: 4000 
-    },
-    pineapple: { name: 'Pineapple (Zambia)', pests: {
-            mealybug_wilt: { name: 'Mealybug Wilt', severity: 'critical', lossPct: 30, dosage: 0, chemicals: ['Imidacloprid'], organic: ['Biological control','Clean planting material'], note: 'Causes wilt and collapse. Major disease in Zambia.' },
-            nematodes: { name: 'Pineapple Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause root damage. Common in continuous cultivation.' },
-            fruit_borer: { name: 'Pineapple Fruit Borer', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Hand picking'], note: 'Larvae feed inside fruit. Monitor during fruiting.' }
+    rice: { name: 'Rice (Zambia)', pests: {
+            blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Tricyclazole','Rocket'], organic: ['Silicon fertilizer','Resistant varieties'], note: 'Favored by high nitrogen and frequent rainfall.' }
         }, yieldValue: 3200 
     },
-    ginger: { name: 'Ginger (Zambia)', pests: {
-            rhizome_rot: { name: 'Rhizome Rot', severity: 'critical', lossPct: 35, dosage: 0, chemicals: ['Soil fumigation','Fungicide drench'], organic: ['Good drainage','Crop rotation'], note: 'Causes soft rot of rhizomes. Avoid waterlogged soils.' },
-            nematodes: { name: 'Root Knot Nematodes', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Soil fumigation'], organic: ['Crop rotation','Organic matter'], note: 'Cause galls on rhizomes. Serious in sandy soils.' },
-            leaf_spot: { name: 'Leaf Spot', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Mancozeb','Copper'], organic: ['Copper spray','Good air circulation'], note: 'Dark spots on leaves. Favored by wet weather.' }
+    beans: { name: 'Beans (Zambia)', pests: {
+            aphids: { name: 'Bean Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Companion planting'], note: 'Check flowering stage.' }
+        }, yieldValue: 1800 
+    },
+    cabbage: { name: 'Cabbage (Zambia)', pests: {
+            diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Dudu-Cyber','Emamectin Benzoate'], organic: ['Bt spray','Neem Oil','Row covers'], note: 'Rotate chemicals to prevent resistance.' }
         }, yieldValue: 2800 
     }
 };
@@ -1425,53 +1342,83 @@ function analyzeLeaf(event) {
 function displayScanResults(imageSrc, diagnosis) {
     const preview = document.getElementById('cameraPreview');
     const c = diagnosis.colors;
+    const severityColor = diagnosis.severity > 4 ? '#dc2626' : 
+                          diagnosis.severity > 2 ? '#f59e0b' : 
+                          diagnosis.severity > 0 ? '#3b82f6' : '#10B981';
+    
     preview.innerHTML = `
         <img src="${imageSrc}" style="max-width:100%;border-radius:20px;margin-bottom:10px;max-height:300px;object-fit:contain;">
-        <div style="margin-bottom:8px;">
-            <small style="color:var(--text-secondary,#aaa);">Color Breakdown (HSV Analysis)</small>
-            <div class="color-bar">
-                <div style="width:${c.greenPct}%;background:#22c55e;"></div>
-                <div style="width:${c.yellowPct}%;background:#eab308;"></div>
-                <div style="width:${c.brownPct}%;background:#92400e;"></div>
-                <div style="width:${c.darkPct}%;background:#1a1a1a;"></div>
-                <div style="width:${c.whitePct}%;background:#e5e5e5;"></div>
+        
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:8px 12px;background:var(--input-bg);border-radius:12px;">
+            <span style="font-weight:700;font-size:1.1rem;">${diagnosis.plant}</span>
+            <span style="font-size:0.85rem;color:${diagnosis.confidence > 70 ? 'var(--accent)' : '#f59e0b'};font-weight:600;">
+                ${diagnosis.confidence}% confidence
+            </span>
+        </div>
+        
+        <div style="margin-bottom:10px;">
+            <small style="color:var(--text-secondary,#aaa);font-size:0.75rem;">Color Breakdown (HSV Analysis)</small>
+            <div style="display:flex;height:20px;border-radius:8px;overflow:hidden;margin:4px 0;border:1px solid var(--border);">
+                <div style="width:${c.greenPct}%;background:#22c55e;transition:width 0.5s;" title="Green: ${c.greenPct}%"></div>
+                <div style="width:${c.yellowPct}%;background:#eab308;transition:width 0.5s;" title="Yellow: ${c.yellowPct}%"></div>
+                <div style="width:${c.brownPct}%;background:#92400e;transition:width 0.5s;" title="Brown: ${c.brownPct}%"></div>
+                <div style="width:${c.darkPct}%;background:#374151;transition:width 0.5s;" title="Dark: ${c.darkPct}%"></div>
+                <div style="width:${c.whitePct}%;background:#e5e5e5;transition:width 0.5s;" title="White: ${c.whitePct}%"></div>
+                ${c.orangePct > 0 ? `<div style="width:${c.orangePct}%;background:#f97316;transition:width 0.5s;" title="Orange: ${c.orangePct}%"></div>` : ''}
+                ${c.purplePct > 0 ? `<div style="width:${c.purplePct}%;background:#8b5cf6;transition:width 0.5s;" title="Purple: ${c.purplePct}%"></div>` : ''}
+                ${c.redPct > 0 ? `<div style="width:${c.redPct}%;background:#ef4444;transition:width 0.5s;" title="Red: ${c.redPct}%"></div>` : ''}
             </div>
-            <div style="display:flex;justify-content:space-between;font-size:0.7rem;">
-                <span>Grn:${c.greenPct}%</span>
-                <span>Ylw:${c.yellowPct}%</span>
-                <span>Brn:${c.brownPct}%</span>
-                <span>Drk:${c.darkPct}%</span>
-                <span>Wht:${c.whitePct}%</span>
+            <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--text-secondary,#aaa);flex-wrap:wrap;">
+                <span>🌿 Grn ${c.greenPct}%</span>
+                <span>🌽 Ylw ${c.yellowPct}%</span>
+                <span>🟫 Brn ${c.brownPct}%</span>
+                <span>⬛ Drk ${c.darkPct}%</span>
+                <span>⬜ Wht ${c.whitePct}%</span>
+                ${c.orangePct > 0 ? `<span>🟧 Orn ${c.orangePct}%</span>` : ''}
+                ${c.purplePct > 0 ? `<span>🟣 Pur ${c.purplePct}%</span>` : ''}
             </div>
         </div>
-        <div style="background:var(--input-bg);border-radius:14px;padding:14px;">
-            <strong>Symptoms:</strong>
+        
+        <div style="background:var(--input-bg);border-radius:12px;padding:12px;margin-bottom:10px;">
+            <strong style="font-size:0.85rem;">Symptoms:</strong>
             ${diagnosis.symptoms.map(s => `
-                <div class="symptom-item ${s.found?'symptom-found':'symptom-clear'}">
-                    ${s.found?'⚠️ Warning':'✅ OK'} - ${s.text}
-                    ${s.detail?`<br><small>${s.detail}</small>`:''}
+                <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:0.8rem;">
+                    <span>${s.found ? '⚠️' : '✅'}</span>
+                    <span>${s.text}</span>
+                    ${s.detail ? `<span style="font-size:0.65rem;color:var(--text-secondary,#aaa);">${s.detail}</span>` : ''}
                 </div>
             `).join('')}
         </div>
-        <div style="margin-top:10px;padding:14px;background:var(--card-bg);border-radius:14px;">
-            <div style="display:flex;justify-content:space-between;">
-                <span>Plant:</span>
-                <strong>${diagnosis.plant}</strong>
+        
+        ${diagnosis.issues.length > 0 ? `
+            <div style="margin-bottom:10px;padding:12px;background:rgba(245,158,11,0.12);border-radius:12px;border-left:3px solid #f59e0b;">
+                <strong style="color:#f59e0b;font-size:0.85rem;">Issues Detected:</strong>
+                ${diagnosis.issues.map(i => `<div style="font-size:0.8rem;padding:2px 0;">${i}</div>`).join('')}
             </div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <span>Confidence:</span>
-                <strong style="color:${diagnosis.confidence>70?'var(--accent)':'#f59e0b'};">${diagnosis.confidence}%</strong>
-            </div>
-            ${diagnosis.issues.length ? `
-                <div style="margin-top:8px;padding:8px;background:rgba(245,158,11,0.15);border-radius:8px;">
-                    <strong style="color:#f59e0b;">Issues:</strong> 
-                    ${diagnosis.issues.map(i=>`<div style="font-size:0.8rem;">- ${i}</div>`).join('')}
-                </div>
+        ` : ''}
+        
+        <div style="padding:12px;background:rgba(${diagnosis.severity > 4 ? '220,38,38' : diagnosis.severity > 2 ? '245,158,11' : '16,185,129'},0.1);border-radius:12px;border-left:3px solid ${severityColor};margin-bottom:10px;">
+            <strong style="font-size:0.85rem;">Recommendation:</strong>
+            <div style="font-size:0.85rem;margin-top:4px;">${diagnosis.recommendation}</div>
+        </div>
+        
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${diagnosis.severity > 2 ? `
+                <button class="btn-outline" onclick="showPhonePage('farmmath')" style="font-size:0.75rem;padding:6px 12px;flex:1;">
+                    🧪 Calculate Spray
+                </button>
+                <button class="btn-outline" onclick="showPhonePage('market')" style="font-size:0.75rem;padding:6px 12px;flex:1;">
+                    🛒 Buy Products
+                </button>
             ` : ''}
-            <div style="margin-top:8px;font-weight:600;color:var(--accent);">${diagnosis.recommendation}</div>
-        </div>`;
-    updateScanMapUI();
-    showToast(diagnosis.severity > 0 ? 'Issues detected!' : 'Healthy plant!');
+            <button class="btn-outline" onclick="document.getElementById('leafUpload').click()" style="font-size:0.75rem;padding:6px 12px;flex:1;">
+                📷 Scan Another
+            </button>
+        </div>
+    `;
+    
+    // Scroll to results
+    preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function getGPS() {
@@ -1708,6 +1655,8 @@ function handleScoutPhoto(event) {
             canvas.height = img.height * ratio;
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // Use the SAME HSV analysis as the sensor hub
             const colors = analyzeLeafColors(imageData);
             const diagnosis = diagnoseFromColors(colors);
             
@@ -1726,7 +1675,7 @@ function handleScoutPhoto(event) {
                         scoutInfections++;
                         document.getElementById('scoutInfections').textContent = scoutInfections;
                         scoutLog('⚠️ Issue detected at step ' + scoutSteps + '! Severity: ' + diagnosis.severity + '/10');
-                        showToast('⚠️ Issue detected! Location saved.');
+                        showToast('⚠️ Issue detected! Location saved.', true);
                     } else {
                         scoutLog('✓ Scan at step ' + scoutSteps + ': ' + diagnosis.plant + ' (' + diagnosis.confidence + '% confidence)');
                         showToast('✅ Scan saved: ' + diagnosis.plant);
@@ -1850,28 +1799,18 @@ document.addEventListener('DOMContentLoaded', () => {
             updateApplicationStatus(target.closest('.reject-app').dataset.id, 'rejected');
         }
         
-        // FIXED: Contact button handler with proper name validation
         if (target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn')) {
             const btn = target.closest('.contact-applicant-btn') || target.closest('.contact-poster-btn');
-            let name = btn.dataset.name || 'User';
-            const email = btn.dataset.email || '';
+            const email = btn.dataset.email;
+            const name = btn.dataset.name;
             
-            // Clean up the name if it's a generic placeholder
-            if (!name || name === 'Unknown' || name === 'Unknown Applicant' || name === 'Unknown Employer' || name === 'Applicant' || name === 'Employer' || name === 'undefined' || name.trim() === '') {
-                if (email && email !== 'N/A' && email !== '') {
-                    name = cleanDisplayName(email);
-                } else {
-                    name = 'User';
-                }
-            }
-            
-            if (email && email !== 'N/A' && email !== '' && email !== 'undefined') {
+            if (email && email !== 'N/A' && email !== 'undefined') {
                 document.getElementById('msgTo').value = email;
                 document.getElementById('msgText').value = `Hello ${name}, `;
                 showPage('messages');
-                setTimeout(() => showToast(`Ready to message ${name}`), 300);
+                showToast(`Composing message to ${name}`);
             } else {
-                showToast('No email address available for this contact', true);
+                showToast('No email available for this contact', true);
             }
         }
 
