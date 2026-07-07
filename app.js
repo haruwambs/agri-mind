@@ -331,7 +331,7 @@ async function deleteJob(id) {
     showToast('Job deleted'); loadJobs(); loadDashboardStats(); 
 }
 
-// ────────── applyToJob - FIXED: Store email and name directly ──────────
+// ────────── applyToJob - FIXED ──────────
 async function applyToJob(jobId) {
     if (!currentUser) { showToast('Please login first', true); return; }
     
@@ -345,21 +345,40 @@ async function applyToJob(jobId) {
     const applicantEmail = currentUser.email || 'N/A';
     const applicantName = currentUser.displayName || 'Applicant';
     
-    const { error } = await db.from('job_applications').insert({ 
-        job_id: parseInt(jobId), 
-        applicant_id: currentUser.id,
-        applicant_email: applicantEmail,  // Store email directly
-        applicant_name: applicantName,    // Store name directly
-        applicant_message: msg || 'I am interested.',
-        message: msg || 'I am interested.',
-        status: 'pending' 
-    });
-    if (error) { showToast('Failed to apply: ' + error.message, true); return; }
-    showToast('Applied successfully!');
-    loadJobs();
+    try {
+        const { error } = await db.from('job_applications').insert({ 
+            job_id: parseInt(jobId), 
+            applicant_id: currentUser.id,
+            applicant_email: applicantEmail,
+            applicant_name: applicantName,
+            applicant_message: msg || 'I am interested.',
+            message: msg || 'I am interested.',
+            status: 'pending' 
+        });
+        
+        if (error) {
+            // If columns don't exist, try without them
+            console.log('Columns might not exist, trying without applicant_email/applicant_name:', error);
+            const { error: fallbackError } = await db.from('job_applications').insert({ 
+                job_id: parseInt(jobId), 
+                applicant_id: currentUser.id,
+                applicant_message: msg || 'I am interested.',
+                message: msg || 'I am interested.',
+                status: 'pending' 
+            });
+            if (fallbackError) {
+                showToast('Failed to apply: ' + fallbackError.message, true);
+                return;
+            }
+        }
+        showToast('Applied successfully!');
+        loadJobs();
+    } catch (err) {
+        showToast('Failed to apply: ' + err.message, true);
+    }
 }
 
-// ────────── Applications - FIXED: Use stored email and name ──────────
+// ────────── Applications - FIXED ──────────
 async function loadApplications() {
     if (!currentUser) {
         document.getElementById('applicationsList').innerHTML = '<p>Please login to view applications.</p>';
@@ -409,29 +428,44 @@ async function loadApplications() {
                 const appDiv = document.createElement('div');
                 appDiv.className = 'job-item';
                 
-                // Use stored email and name from the application
                 let applicantEmail = a.applicant_email || 'N/A';
                 let applicantName = a.applicant_name || 'Unknown Applicant';
-                let applicantPhone = a.applicant_phone || 'N/A';
-                let applicantLocation = a.applicant_location || 'N/A';
+                let applicantPhone = 'N/A';
+                let applicantLocation = 'N/A';
                 
-                // If we have an applicant_id but no stored email, try to fetch from profile
-                if ((applicantEmail === 'N/A' || applicantName === 'Unknown Applicant') && a.applicant_id) {
+                // If we have an applicant_id, try to fetch from profiles
+                if (a.applicant_id) {
                     try {
                         const { data: pf } = await db.from('profiles')
                             .select('display_name, email, phone, location')
                             .eq('id', a.applicant_id)
                             .single();
+                        
                         if (pf) {
-                            if (pf.email && pf.email !== '') applicantEmail = pf.email;
-                            if (pf.display_name && pf.display_name.trim() !== '') applicantName = pf.display_name.trim();
-                            else if (pf.email) applicantName = cleanDisplayName(pf.email);
-                            if (pf.phone && pf.phone !== '') applicantPhone = pf.phone;
-                            if (pf.location && pf.location !== '') applicantLocation = pf.location;
+                            // Use profile data as primary source if available
+                            if (pf.email && pf.email !== '') {
+                                applicantEmail = pf.email;
+                            }
+                            if (pf.display_name && pf.display_name.trim() !== '') {
+                                applicantName = pf.display_name.trim();
+                            } else if (pf.email) {
+                                applicantName = cleanDisplayName(pf.email);
+                            }
+                            if (pf.phone && pf.phone !== '') {
+                                applicantPhone = pf.phone;
+                            }
+                            if (pf.location && pf.location !== '') {
+                                applicantLocation = pf.location;
+                            }
                         }
                     } catch (err) {
                         console.log('Could not fetch profile:', err);
                     }
+                }
+                
+                // If we still have "Unknown Applicant" or "N/A", try to clean up
+                if (applicantName === 'Unknown Applicant' && applicantEmail && applicantEmail !== 'N/A') {
+                    applicantName = cleanDisplayName(applicantEmail);
                 }
                 
                 const sc = a.status === 'accepted' ? '#10B981' : a.status === 'rejected' ? '#dc2626' : '#f59e0b';
@@ -459,7 +493,7 @@ async function loadApplications() {
                         </div>`;
                 }
                 
-                // FIXED: Only show contact button if we have a valid email
+                // Only show contact button if we have a valid email
                 if (a.status === 'accepted' && applicantEmail && applicantEmail !== 'N/A' && applicantEmail !== '') {
                     const contactName = (applicantName && applicantName !== 'Unknown Applicant' && applicantName !== 'Unknown') 
                         ? applicantName 
@@ -955,7 +989,7 @@ function diagnoseFromColors(c) {
 }
 
 // ═══════════════════════════════════════════
-// ZAMBIAN CROP DATABASE
+// ZAMBIAN CROP DATABASE (EXPANDED)
 // ═══════════════════════════════════════════
 
 const CROP_DB = {
