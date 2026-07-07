@@ -812,15 +812,10 @@ function analyzeLeafColors(imageData) {
     let total = 0, green = 0, yellow = 0, brown = 0, dark = 0, white = 0, darkSpots = 0;
     let red = 0, orange = 0, purple = 0;
     
-    // Sample every 4th pixel for better accuracy
     for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
         const a = pixels[i + 3];
-        
-        // Skip transparent pixels
         if (a < 128) continue;
-        
-        // Skip very dark pixels (background)
         if (r < 20 && g < 20 && b < 20) continue;
         
         const max = Math.max(r, g, b), min = Math.min(r, g, b), diff = max - min;
@@ -836,45 +831,17 @@ function analyzeLeafColors(imageData) {
         const v = (max / 255) * 100;
         total++;
         
-        // REAL PLANT COLOR DETECTION
-        
-        // Healthy Green: Hue 60-180, Saturation > 20, Value > 30
-        if (h >= 60 && h <= 180 && s > 20 && v > 30) {
-            green++;
-        }
-        // Yellow/Chlorosis: Hue 35-65, Saturation > 20, Value > 40
-        else if (h >= 35 && h <= 65 && s > 20 && v > 40) {
-            yellow++;
-        }
-        // Brown/Damage: Hue 10-40, Saturation > 20, Value 10-70
-        else if (h >= 10 && h <= 40 && s > 20 && v > 10 && v < 70) {
-            brown++;
-        }
-        // Dark/Shadows: Value < 25, Saturation < 30
-        else if (v < 25 && s < 30) {
-            dark++;
-            if (dark % 5 === 0) darkSpots++;
-        }
-        // White/Mildew: Saturation < 20, Value > 70
-        else if (s < 20 && v > 70) {
-            white++;
-        }
-        // Red (anthocyanin): Hue 320-360 or 0-10
-        else if ((h >= 320 && h <= 360) || (h >= 0 && h <= 10)) {
-            if (s > 30 && v > 30) red++;
-        }
-        // Orange (rust): Hue 10-35
-        else if (h >= 10 && h <= 35 && s > 30 && v > 30) {
-            orange++;
-        }
-        // Purple (phosphorus deficiency): Hue 270-320
-        else if (h >= 270 && h <= 320 && s > 30 && v > 30) {
-            purple++;
-        }
+        if (h >= 60 && h <= 180 && s > 20 && v > 30) green++;
+        else if (h >= 35 && h <= 65 && s > 20 && v > 40) yellow++;
+        else if (h >= 10 && h <= 40 && s > 20 && v > 10 && v < 70) brown++;
+        else if (v < 25 && s < 30) { dark++; if (dark % 5 === 0) darkSpots++; }
+        else if (s < 20 && v > 70) white++;
+        else if ((h >= 320 && h <= 360) || (h >= 0 && h <= 10)) { if (s > 30 && v > 30) red++; }
+        else if (h >= 10 && h <= 35 && s > 30 && v > 30) orange++;
+        else if (h >= 270 && h <= 320 && s > 30 && v > 30) purple++;
     }
     
     const totalPixels = total || 1;
-    
     return { 
         greenPct: +(green/totalPixels*100).toFixed(1), 
         yellowPct: +(yellow/totalPixels*100).toFixed(1), 
@@ -893,7 +860,6 @@ function diagnoseFromColors(c) {
     const symptoms = [], issues = [];
     let score = 0, conf = 0;
     
-    // Check if image has enough data
     if (c.totalPixels < 50) {
         return { 
             symptoms: [{ text: 'Not enough leaf area detected. Take a closer photo.', found: true }], 
@@ -906,7 +872,6 @@ function diagnoseFromColors(c) {
         };
     }
     
-    // Check lighting
     if (c.darkPct > 60) {
         return { 
             symptoms: [{ text: 'Image is too dark. Move to better lighting.', found: true }], 
@@ -919,89 +884,66 @@ function diagnoseFromColors(c) {
         };
     }
     
-    // ─── FALL ARMYWORM DETECTION ───
     if (c.brownPct > 8 && c.darkSpots > 2) { 
         symptoms.push({ text: 'Brown damage with dark holes detected', found: true, detail: `Brown: ${c.brownPct}%, Dark spots: ${c.darkSpots}` }); 
         issues.push('🚨 FALL ARMYWORM DAMAGE DETECTED!'); 
-        score += 4; 
-        conf += 30; 
-    }
-    else if (c.brownPct > 5) { 
+        score += 4; conf += 30; 
+    } else if (c.brownPct > 5) { 
         symptoms.push({ text: 'Brown spots detected on leaf', found: true, detail: `Brown: ${c.brownPct}%` }); 
         issues.push('⚠️ Possible pest damage or disease'); 
-        score += 2; 
-        conf += 15; 
-    }
-    else { 
+        score += 2; conf += 15; 
+    } else { 
         symptoms.push({ text: 'No significant brown damage', found: false }); 
         conf += 10; 
     }
     
-    // ─── NUTRIENT DEFICIENCY ───
     if (c.yellowPct > 15) { 
         symptoms.push({ text: 'Significant yellowing detected', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
         issues.push('⚠️ NUTRIENT DEFICIENCY (likely Nitrogen)'); 
-        score += 3; 
-        conf += 20; 
-    }
-    else if (c.yellowPct > 8) { 
+        score += 3; conf += 20; 
+    } else if (c.yellowPct > 8) { 
         symptoms.push({ text: 'Slight yellowing detected', found: true, detail: `Yellow: ${c.yellowPct}%` }); 
         issues.push('Possible early nutrient deficiency'); 
-        score += 1; 
-        conf += 10; 
-    }
-    else { 
+        score += 1; conf += 10; 
+    } else { 
         symptoms.push({ text: 'Normal green color', found: false }); 
         conf += 10; 
     }
     
-    // ─── PLANT STRESS ───
     if (c.greenPct < 40) { 
         symptoms.push({ text: 'Low chlorophyll (green color)', found: true, detail: `Green: ${c.greenPct}%` }); 
         issues.push('Plant may be stressed or wilting'); 
-        score += 2; 
-        conf += 15; 
-    }
-    else { 
+        score += 2; conf += 15; 
+    } else { 
         symptoms.push({ text: 'Good chlorophyll levels', found: false, detail: `Green: ${c.greenPct}%` }); 
         conf += 20; 
     }
     
-    // ─── POWDERY MILDEW ───
     if (c.whitePct > 12) { 
         symptoms.push({ text: 'White/powdery patches detected', found: true, detail: `White: ${c.whitePct}%` }); 
         issues.push('🚨 POWDERY MILDEW DETECTED'); 
-        score += 3; 
-        conf += 15; 
-    }
-    else if (c.whitePct > 5) { 
+        score += 3; conf += 15; 
+    } else if (c.whitePct > 5) { 
         symptoms.push({ text: 'Slight white patches detected', found: true, detail: `White: ${c.whitePct}%` }); 
         issues.push('Possible early mildew or sun damage'); 
-        score += 1; 
-        conf += 5; 
-    }
-    else { 
+        score += 1; conf += 5; 
+    } else { 
         symptoms.push({ text: 'No powdery mildew signs', found: false }); 
         conf += 5; 
     }
     
-    // ─── RUST DETECTION ───
     if (c.orangePct > 8) {
         symptoms.push({ text: 'Orange/rust-colored spots detected', found: true, detail: `Orange: ${c.orangePct}%` });
         issues.push('⚠️ RUST DISEASE DETECTED');
-        score += 3;
-        conf += 15;
+        score += 3; conf += 15;
     }
     
-    // ─── PHOSPHORUS DEFICIENCY ───
     if (c.purplePct > 5) {
         symptoms.push({ text: 'Purple discoloration detected', found: true, detail: `Purple: ${c.purplePct}%` });
         issues.push('⚠️ Possible Phosphorus deficiency');
-        score += 2;
-        conf += 10;
+        score += 2; conf += 10;
     }
     
-    // ─── DETERMINE PLANT HEALTH ───
     let plant = '';
     let rec = '';
     
@@ -1031,6 +973,84 @@ function diagnoseFromColors(c) {
     
     return { symptoms, issues, plant, confidence: Math.round(conf), recommendation: rec, severity: score, colors: c };
 }
+
+// ═══════════════════════════════════════════
+// ZAMBIAN CROP DATABASE (EXPANDED - 35+ Crops)
+// ═══════════════════════════════════════════
+
+const CROP_DB = {
+    maize: { 
+        name: 'Maize (Zambia)', 
+        pests: { 
+            fall_armyworm: { name: 'Fall Armyworm', severity: 'critical', lossPct: 25, dosage: 250, chemicals: ['Ampligo','Dudu-Cyber','Rocket','Emamectin Benzoate'], organic: ['Neem Oil','Bt','Hand picking','Push-pull technology'], note: 'Most destructive pest in Zambia. Scout early morning.' },
+            stalk_borer: { name: 'Stalk Borer', severity: 'high', lossPct: 20, dosage: 180, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Attacks stems causing lodging. Apply at knee-high stage.' },
+            maize_streak_virus: { name: 'Maize Streak Virus', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['Insecticides for leafhoppers'], organic: ['Resistant varieties','Neem Oil'], note: 'Transmitted by leafhoppers. Common in Zambian lowlands.' },
+            gray_leaf_spot: { name: 'Gray Leaf Spot', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Copper spray','Crop rotation'], note: 'Causes rectangular gray lesions. Common in humid Zambian regions.' },
+            northern_leaf_blight: { name: 'Northern Leaf Blight', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Propiconazole','Azoxystrobin'], organic: ['Resistant varieties','Crop rotation'], note: 'Long cigar-shaped lesions. Favored by cool, wet conditions.' }
+        }, yieldValue: 2800 
+    },
+    sorghum: { name: 'Sorghum (Zambia)', pests: {
+            shoot_fly: { name: 'Sorghum Shoot Fly', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Early planting'], note: 'Attack young plants. Common in Zambian dryland areas.' },
+            stem_borer: { name: 'Sorghum Stem Borer', severity: 'high', lossPct: 22, dosage: 190, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Causes dead hearts. Important pest in Zambian sorghum.' },
+            anthracnose: { name: 'Anthracnose', severity: 'medium', lossPct: 15, dosage: 200, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Copper spray','Resistant varieties'], note: 'Dark red lesions. Favored by humid Zambian conditions.' },
+            grain_mold: { name: 'Grain Mold', severity: 'high', lossPct: 30, dosage: 0, chemicals: ['No effective chemical'], organic: ['Early harvesting','Adequate drying'], note: 'Major storage problem in Zambia. Harvest at right time.' }
+        }, yieldValue: 2000 
+    },
+    millet: { name: 'Millet (Zambia)', pests: {
+            head_blast: { name: 'Head Blast', severity: 'critical', lossPct: 35, dosage: 240, chemicals: ['Tricyclazole','Mancozeb'], organic: ['Resistant varieties','Seed treatment'], note: 'Destructive disease in Zambian millet.' },
+            grain_moth: { name: 'Grain Moth', severity: 'high', lossPct: 30, dosage: 200, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Pheromone traps','Biological control'], note: 'Major storage pest in Zambia. Proper storage is critical.' },
+            stem_borer: { name: 'Millet Stem Borer', severity: 'high', lossPct: 22, dosage: 190, chemicals: ['Dudu-Cyber','Chlorpyrifos'], organic: ['Neem Oil','Push-pull'], note: 'Causes dead hearts. Common in Zambian millet fields.' },
+            smut: { name: 'Smut', severity: 'medium', lossPct: 18, dosage: 0, chemicals: ['Seed treatment (fungicides)'], organic: ['Resistant varieties','Crop rotation'], note: 'Black powder in heads. Use clean seed in Zambia.' }
+        }, yieldValue: 1500 
+    },
+    rice: { name: 'Rice (Zambia)', pests: {
+            blast: { name: 'Rice Blast', severity: 'high', lossPct: 25, dosage: 180, chemicals: ['Tricyclazole','Rocket'], organic: ['Silicon fertilizer','Resistant varieties'], note: 'Favored by high nitrogen and frequent rainfall.' },
+            brown_spot: { name: 'Brown Spot', severity: 'medium', lossPct: 15, dosage: 150, chemicals: ['Mancozeb','Copper'], organic: ['Balanced nutrients','Seed treatment'], note: 'Small brown circular lesions. Related to nutrient deficiency.' },
+            sheath_blight: { name: 'Sheath Blight', severity: 'high', lossPct: 20, dosage: 200, chemicals: ['Validamycin','Propiconazole'], organic: ['Avoid dense planting','Remove infected plants'], note: 'Grayish-green lesions on leaf sheaths. Favored by high humidity.' },
+            stem_borer: { name: 'Stem Borer', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Cartap','Chlorpyrifos'], organic: ['Trap crops','Neem Oil'], note: 'Causes dead hearts in early stages. Monitor moth activity.' }
+        }, yieldValue: 3200 
+    },
+    wheat: { name: 'Wheat (Zambia)', pests: {
+            rust: { name: 'Wheat Rust', severity: 'critical', lossPct: 30, dosage: 220, chemicals: ['Tebuconazole','Propiconazole'], organic: ['Resistant varieties','Sulfur spray'], note: 'Orange-brown pustules. Favored by cool, humid weather.' },
+            aphids: { name: 'Wheat Aphids', severity: 'medium', lossPct: 12, dosage: 140, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmit barley yellow dwarf virus.' },
+            fusarium_head_blight: { name: 'Fusarium Head Blight', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Fungicide at flowering'], organic: ['Crop rotation','Resistant varieties'], note: 'Causes pink discoloration of heads. Favored by wet weather.' }
+        }, yieldValue: 2500 
+    },
+
+    // ═══ LEGUMES ═══
+    groundnut: { name: 'Groundnuts (Zambia)', pests: {
+            rosette_virus: { name: 'Groundnut Rosette Virus', severity: 'critical', lossPct: 40, dosage: 0, chemicals: ['Insecticides for aphids'], organic: ['Resistant varieties','Aphid control'], note: 'Devastating in Zambia. Transmitted by aphids.' },
+            early_leaf_spot: { name: 'Early Leaf Spot', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Chlorothalonil','Tebuconazole'], organic: ['Sulfur spray','Crop rotation'], note: 'Dark brown spots on leaves. Common in Zambian rainy season.' },
+            rust: { name: 'Groundnut Rust', severity: 'high', lossPct: 25, dosage: 220, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Sulfur spray','Resistant varieties'], note: 'Orange-brown pustules on leaves. Favored by warm Zambian weather.' },
+            aphids: { name: 'Groundnut Aphids', severity: 'high', lossPct: 20, dosage: 150, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Transmits rosette virus. Monitor early in Zambian growing season.' },
+            jassids: { name: 'Jassids (Leafhoppers)', severity: 'medium', lossPct: 15, dosage: 160, chemicals: ['Imidacloprid','Acetamiprid'], organic: ['Neem Oil','Yellow sticky traps'], note: 'Yellow spots on leaves. Active in dry Zambian weather.' }
+        }, yieldValue: 2200 
+    },
+    soybean: { name: 'Soybean (Zambia)', pests: {
+            rust: { name: 'Soybean Rust', severity: 'critical', lossPct: 40, dosage: 280, chemicals: ['Mancozeb','Tebuconazole'], organic: ['Resistant varieties','Early planting'], note: 'Most serious soybean disease in Zambia.' },
+            aphids: { name: 'Soybean Aphids', severity: 'high', lossPct: 25, dosage: 200, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Ladybugs'], note: 'Can cause significant yield loss in Zambian soybean fields.' },
+            pod_borer: { name: 'Pod Borer', severity: 'high', lossPct: 30, dosage: 220, chemicals: ['Cypermethrin','Dudu-Cyber'], organic: ['Bt spray','Biological control'], note: 'Attacks developing pods. Monitor during podding stage.' },
+            frog_eye_leaf_spot: { name: 'Frog Eye Leaf Spot', severity: 'medium', lossPct: 15, dosage: 180, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Crop rotation','Copper spray'], note: 'Circular gray spots. Favored by humid Zambian conditions.' }
+        }, yieldValue: 2400 
+    },
+    beans: { name: 'Beans (Zambia)', pests: {
+            aphids: { name: 'Bean Aphids', severity: 'medium', lossPct: 12, dosage: 120, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Companion planting'], note: 'Check flowering stage.' },
+            bean_rust: { name: 'Bean Rust', severity: 'high', lossPct: 18, dosage: 140, chemicals: ['Tebuconazole','Mancozeb'], organic: ['Sulfur spray','Copper spray'], note: 'Small rust-colored pustules on leaves. Favored by humid weather.' },
+            angular_leaf_spot: { name: 'Angular Leaf Spot', severity: 'medium', lossPct: 14, dosage: 130, chemicals: ['Copper hydroxide','Mancozeb'], organic: ['Baking soda spray','Crop rotation'], note: 'Angular brown lesions with yellow halos.' },
+            bruchids: { name: 'Bruchids (Bean Weevils)', severity: 'high', lossPct: 25, dosage: 0, chemicals: ['Phosphine fumigation','Malathion dust'], organic: ['Sun drying','Neem oil on stored beans'], note: 'Attacks stored beans. Clean storage and early harvest.' }
+        }, yieldValue: 1800 
+    },
+    tomato: { name: 'Tomato (Zambia)', pests: {
+            late_blight: { name: 'Late Blight', severity: 'critical', lossPct: 30, dosage: 300, chemicals: ['Rocket','Chlorpyrifos','Mancozeb'], organic: ['Copper spray','Baking soda'], note: 'Spreads rapidly in cool, wet conditions.' },
+            early_blight: { name: 'Early Blight', severity: 'high', lossPct: 20, dosage: 250, chemicals: ['Chlorothalonil','Mancozeb'], organic: ['Neem Oil','Copper spray'], note: 'Dark concentric rings on leaves. Common in warm weather.' },
+            aphids: { name: 'Tomato Aphids', severity: 'medium', lossPct: 10, dosage: 250, chemicals: ['Acetamiprid','Dudu-Cyber'], organic: ['Neem Oil','Garlic spray'], note: 'Also transmits viral diseases.' }
+        }, yieldValue: 5000 
+    },
+    cabbage: { name: 'Cabbage (Zambia)', pests: {
+            diamondback_moth: { name: 'Diamondback Moth', severity: 'high', lossPct: 22, dosage: 160, chemicals: ['Dudu-Cyber','Emamectin Benzoate'], organic: ['Bt spray','Neem Oil','Row covers'], note: 'Rotate chemicals to prevent resistance.' }
+        }, yieldValue: 2800 
+    }
+};
 
 // ═══════════════════════════════════════════
 // GLOBAL STATE
@@ -1080,6 +1100,196 @@ function showPhonePage(pageId, btn) {
     document.querySelectorAll('.phone-nav-item').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
     if (pageId === 'sensorhub') updateScanMapUI();
+}
+
+// ═══════════════════════════════════════════
+// FARM MATH TOOL
+// ═══════════════════════════════════════════
+
+function populatePests() {
+    const crop = document.getElementById('mathCrop').value;
+    const pestSelect = document.getElementById('mathPest');
+    pestSelect.innerHTML = '';
+    if (!CROP_DB[crop]) {
+        pestSelect.innerHTML = '<option value="">No pests data available</option>';
+        return;
+    }
+    Object.entries(CROP_DB[crop].pests).forEach(([key, pest]) => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = `${pest.name} (${pest.severity.toUpperCase()})`;
+        pestSelect.appendChild(opt);
+    });
+    updateDosageFromPest();
+    updateCostPerMl();
+}
+
+function updateDosageFromPest() {
+    const crop = document.getElementById('mathCrop').value;
+    const pest = document.getElementById('mathPest').value;
+    if (!CROP_DB[crop] || !CROP_DB[crop].pests[pest]) return;
+    const data = CROP_DB[crop].pests[pest];
+    if (data) {
+        document.getElementById('mathDosage').value = data.dosage;
+        document.getElementById('mathChemName').placeholder = `e.g., ${data.chemicals[0]}, ${data.chemicals[1] || ''}`;
+    }
+}
+
+function updateCostPerMl() {
+    const size = parseFloat(document.getElementById('mathContSize').value) || 250;
+    const price = parseFloat(document.getElementById('mathContPrice').value) || 150;
+    document.getElementById('mathCostPerMl').textContent = 'K' + (price / size).toFixed(2);
+}
+
+function updateFarmSlider() { 
+    document.getElementById('mathFarmDisplay').textContent = parseFloat(document.getElementById('mathFarmSlider').value).toFixed(1); 
+}
+
+function saveChemical() {
+    const chem = { 
+        name: document.getElementById('mathChemName').value.trim(), 
+        size: document.getElementById('mathContSize').value, 
+        price: document.getElementById('mathContPrice').value, 
+        dosage: document.getElementById('mathDosage').value, 
+        unit: document.getElementById('mathDosageUnit').value 
+    };
+    if (!chem.name) { showToast('Enter chemical name first', true); return; }
+    const idx = savedChems.findIndex(c => c.name.toLowerCase() === chem.name.toLowerCase());
+    if (idx >= 0) savedChems[idx] = chem; else savedChems.push(chem);
+    if (savedChems.length > 10) savedChems.shift();
+    localStorage.setItem('agrimind_chems', JSON.stringify(savedChems));
+    showToast('Chemical saved!');
+    renderSavedChems();
+}
+
+function loadChem(idx) {
+    const c = savedChems[idx];
+    document.getElementById('mathChemName').value = c.name;
+    document.getElementById('mathContSize').value = c.size;
+    document.getElementById('mathContPrice').value = c.price;
+    document.getElementById('mathDosage').value = c.dosage;
+    document.getElementById('mathDosageUnit').value = c.unit;
+    updateCostPerMl();
+}
+
+function deleteChem(idx) { 
+    savedChems.splice(idx, 1); 
+    localStorage.setItem('agrimind_chems', JSON.stringify(savedChems)); 
+    renderSavedChems(); 
+}
+
+function renderSavedChems() {
+    if (savedChems.length === 0) { 
+        document.getElementById('savedChems').style.display = 'none'; 
+        return; 
+    }
+    document.getElementById('savedChems').style.display = 'block';
+    document.getElementById('savedChems').innerHTML = '<label style="color:var(--accent);">Saved Chemicals</label>' + 
+        savedChems.map((c, i) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--input-bg);border-radius:12px;margin-bottom:4px;font-size:0.8rem;">
+                <span><strong>${escapeHtml(c.name)}</strong> | ${c.size}ml @ K${c.price}</span>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn-outline" onclick="loadChem(${i})" style="padding:4px 10px;font-size:0.7rem;">Load</button>
+                    <button onclick="deleteChem(${i})" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;cursor:pointer;padding:4px 8px;font-size:0.7rem;">X</button>
+                </div>
+            </div>
+        `).join('');
+}
+
+function calcFarmMath() {
+    const crop = document.getElementById('mathCrop').value;
+    const pestKey = document.getElementById('mathPest').value;
+    const chemName = document.getElementById('mathChemName').value.trim() || 'Chemical';
+    const contSize = parseFloat(document.getElementById('mathContSize').value) || 250;
+    const contPrice = parseFloat(document.getElementById('mathContPrice').value) || 150;
+    const dosage = parseFloat(document.getElementById('mathDosage').value) || 200;
+    const unit = document.getElementById('mathDosageUnit').value;
+    const farmSize = parseFloat(document.getElementById('mathFarmSlider').value);
+    
+    if (!CROP_DB[crop] || !CROP_DB[crop].pests[pestKey]) {
+        showToast('Please select a valid crop and pest', true);
+        return;
+    }
+    
+    const pestData = CROP_DB[crop].pests[pestKey];
+    const cropData = CROP_DB[crop];
+    const costPerMl = contPrice / contSize;
+    
+    let dosagePerHa = dosage;
+    if (unit === 'acre') dosagePerHa = dosage * 2.471;
+    else if (unit === '20L') dosagePerHa = dosage * 5;
+    
+    const totalMl = dosagePerHa * farmSize;
+    const totalCost = totalMl * costPerMl;
+    const potentialLoss = cropData.yieldValue * farmSize * (pestData.lossPct / 100);
+    const savings = potentialLoss - totalCost;
+    const containers = Math.ceil(totalMl / contSize);
+    const roi = totalCost > 0 ? (savings / totalCost) * 100 : 0;
+    
+    document.getElementById('mathResult').innerHTML = `
+        <div class="math-result">
+            <h3 style="color:var(--accent);">🌾 ${cropData.name}</h3>
+            <h4 style="color:var(--danger);">${pestData.name}</h4>
+            <p style="font-size:0.85rem;">${chemName} | K${contPrice}/${contSize}ml | Cost/ml: K${costPerMl.toFixed(2)}</p>
+            <div class="grid-2cols" style="margin:14px 0;">
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
+                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${totalMl.toFixed(1)}ml</div>
+                    <small>Spray Needed</small>
+                </div>
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
+                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">${containers}</div>
+                    <small>Bottles (${contSize}ml)</small>
+                </div>
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
+                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${totalCost.toFixed(2)}</div>
+                    <small>Total Cost</small>
+                </div>
+                <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:14px;">
+                    <div style="font-size:1.2rem;font-weight:700;color:var(--accent);">K${savings.toFixed(2)}</div>
+                    <small>Net Savings</small>
+                </div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:10px;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;">
+                    <span>Potential Loss (no spray):</span>
+                    <span style="color:var(--danger);">K${potentialLoss.toFixed(2)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;">
+                    <span>ROI:</span>
+                    <span style="color:var(--accent);">${roi.toFixed(0)}%</span>
+                </div>
+            </div>
+            <div style="margin-top:10px;padding:10px;background:${savings>0?'rgba(16,185,129,0.2)':'rgba(239,68,68,0.2)'};border-radius:10px;border-left:3px solid ${savings>0?'var(--accent)':'var(--danger)'};font-weight:600;font-size:0.85rem;">
+                ${savings > totalCost*3 ? '🚨 URGENT: Very high ROI - spray now!' : 
+                  savings > totalCost ? '✅ RECOMMENDED: Good return on investment' : 
+                  '📊 MONITOR: Only spray if pest pressure increases'}
+            </div>
+            <p style="font-size:0.75rem;margin-top:8px;">📝 ${pestData.note}</p>
+            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div style="padding:8px;background:rgba(16,185,129,0.1);border-radius:8px;">
+                    <strong style="color:var(--accent);">🌿 Organic Options</strong>
+                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.organic.join(', ')}</p>
+                </div>
+                <div style="padding:8px;background:rgba(245,158,11,0.1);border-radius:8px;">
+                    <strong style="color:#f59e0b;">🧪 Chemical Options</strong>
+                    <p style="font-size:0.7rem;margin-top:4px;">${pestData.chemicals.join(', ')}</p>
+                </div>
+            </div>
+            <div style="margin-top:8px;padding:8px;background:rgba(16,185,129,0.05);border-radius:8px;font-size:0.7rem;color:var(--text-secondary);">
+                ⚠️ Severity: ${pestData.severity.toUpperCase()} | ${pestData.lossPct}% potential yield loss
+            </div>
+        </div>`;
+    document.getElementById('mathResult').scrollIntoView({ behavior: 'smooth' });
+    showToast('Calculation complete!');
+    
+    if (currentUser) {
+        db.from('farm_records').insert({ 
+            user_id: currentUser.id, 
+            title: `Spray Calc: ${cropData.name} - ${pestData.name}`, 
+            detail: `${chemName} | Farm: ${farmSize}ha | Spray: ${totalMl.toFixed(1)}ml | Cost: K${totalCost.toFixed(2)} | Savings: K${savings.toFixed(2)}`, 
+            location: 'Farm Math Tool' 
+        }).then(() => {}).catch(() => {});
+    }
 }
 
 // ═══════════════════════════════════════════
@@ -1145,7 +1355,6 @@ function displayScanResults(imageSrc, diagnosis) {
                 <div style="width:${c.whitePct}%;background:#e5e5e5;transition:width 0.5s;" title="White: ${c.whitePct}%"></div>
                 ${c.orangePct > 0 ? `<div style="width:${c.orangePct}%;background:#f97316;transition:width 0.5s;" title="Orange: ${c.orangePct}%"></div>` : ''}
                 ${c.purplePct > 0 ? `<div style="width:${c.purplePct}%;background:#8b5cf6;transition:width 0.5s;" title="Purple: ${c.purplePct}%"></div>` : ''}
-                ${c.redPct > 0 ? `<div style="width:${c.redPct}%;background:#ef4444;transition:width 0.5s;" title="Red: ${c.redPct}%"></div>` : ''}
             </div>
             <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--text-secondary,#aaa);flex-wrap:wrap;">
                 <span>🌿 Grn ${c.greenPct}%</span>
@@ -1195,8 +1404,6 @@ function displayScanResults(imageSrc, diagnosis) {
             </button>
         </div>
     `;
-    
-    // Scroll to results
     preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -1825,6 +2032,17 @@ document.addEventListener('DOMContentLoaded', () => {
         chat.innerHTML += `<div class="message-bubble bot-msg">${escapeHtml(reply)}</div>`;
         chat.scrollTop = chat.scrollHeight;
     });
+
+    // Farm Math
+    document.getElementById('mathCrop').addEventListener('change', populatePests);
+    document.getElementById('mathPest').addEventListener('change', updateDosageFromPest);
+    document.getElementById('mathContSize').addEventListener('input', updateCostPerMl);
+    document.getElementById('mathContPrice').addEventListener('input', updateCostPerMl);
+    document.getElementById('mathDosage').addEventListener('input', updateCostPerMl);
+    document.getElementById('mathDosageUnit').addEventListener('change', updateCostPerMl);
+    populatePests();
+    updateCostPerMl();
+    renderSavedChems();
 
     checkSession();
     showPage('dashboard');
